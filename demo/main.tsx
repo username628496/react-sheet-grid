@@ -1,5 +1,6 @@
+import { useState } from 'react';
 import { createRoot } from 'react-dom/client';
-import { DataGrid, type GridController, Spreadsheet, StatusBar, Toolbar } from '../src/index';
+import { DataGrid, FormulaBar, type GridController, Spreadsheet, StatusBar, Toolbar } from '../src/index';
 
 const ROWS = 1_000_000;
 const COLS = 100;
@@ -38,19 +39,26 @@ declare global {
 }
 window.__sheet = sheet;
 
-createRoot(document.getElementById('root')!).render(
-  <div style={{ height: '100%', display: 'flex', flexDirection: 'column' }}>
-    <Toolbar sheet={sheet} onAction={() => window.__grid?.editor.focus()} />
-    <div style={{ flex: 1, minHeight: 0 }}>
-    <DataGrid
-      sheet={sheet}
-      frozenRows={empty ? 0 : 1}
-      frozenCols={empty ? 0 : 1}
-      onReady={(controller) => {
-        window.__grid = controller;
-      }}
-    />
+function App() {
+  const [grid, setGrid] = useState<GridController | null>(null);
+  return (
+    <div style={{ height: '100%', display: 'flex', flexDirection: 'column' }}>
+      <Toolbar sheet={sheet} onAction={() => window.__grid?.editor.focus()} />
+      <FormulaBar sheet={sheet} grid={grid} />
+      <div style={{ flex: 1, minHeight: 0 }}>
+        <DataGrid
+          sheet={sheet}
+          frozenRows={empty ? 0 : 1}
+          frozenCols={empty ? 0 : 1}
+          onReady={(controller) => {
+            window.__grid = controller;
+            setGrid(controller);
+          }}
+        />
+      </div>
+      <StatusBar sheet={sheet} />
     </div>
-    <StatusBar sheet={sheet} />
-  </div>,
-);
+  );
+}
+
+createRoot(document.getElementById('root')!).render(<App />);

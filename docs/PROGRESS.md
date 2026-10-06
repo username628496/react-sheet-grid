@@ -19,6 +19,7 @@ Toàn bộ lộ trình MVP trong CLAUDE.md (tuần 1 và tuần 2) đã xong.
 - Định dạng: đậm, nghiêng, màu chữ, màu nền, căn lề, định dạng số; toolbar phản ánh ô đang chọn.
 - Sort theo cột, filter theo giá trị (hộp thoại có tìm kiếm); ký hiệu ↑ ↓ ▾ trên header.
 - Chèn/xóa dòng và cột, có cập nhật tham chiếu công thức.
+- Thanh công thức `FormulaBar` (ô tên: hiện và nhảy tới `B3`, `A1:C5`, `B:B`, `2:2`; ô nhập nội dung ô đang chọn). Toolbar thêm xóa định dạng, sort A→Z / Z→A.
 - Context menu chuột phải; thanh thống kê (tổng, trung bình, đếm).
 
 **Kiểm thử**: 625 unit test (gồm ~300 test công thức theo bảng, 80 chuỗi fuzz × 120 thao tác, 60 chuỗi fuzz chèn/xóa với oracle độc lập) và 48 e2e test chạy trên Chromium, Firefox và WebKit.
@@ -101,6 +102,8 @@ Chưa có: Mod+; (ngày hiện tại), Mod+K (liên kết), Mod+T (trình duyệ
 - Chữ tràn sang ô trống chỉ tính từ các cột đang hiển thị (chữ dài ở cột đã cuộn khuất không tràn vào cột đang thấy); đường kẻ dọc qua chữ tràn được xóa (trừ khi ô kề có màu nền). Ô gộp, nhiều sheet, xlsx, find & replace... nằm ngoài MVP.
 - Paste từ menu chuột phải dùng `navigator.clipboard.read()` nên trình duyệt có thể hỏi quyền (Firefox chỉ đọc được text).
 
+**Thanh công thức**: `<textarea>` ẩn vẫn là nơi duy nhất commit dữ liệu. Khi focus vào thanh công thức, `EditorController.beginFromBar` bắt đầu edit mà không chuyển focus; textarea chỉ phản chiếu nội dung và vị trí caret của thanh (nên ô hiển thị đúng chữ đang gõ và click ô khác vẫn chèn tham chiếu), còn `KeyboardController.onBlur` không commit trong lúc `fromBar`. Enter/Tab/Esc ở thanh dùng lại `commitAndMove`/`cancel`. Thanh không tô màu tham chiếu (chỉ ô trên lưới có).
+
 ## Kiểm tra thủ công cho bạn (nhất là IME, clipboard, Safari)
 
 Chạy `pnpm dev` rồi mở http://localhost:5173/demo/ (thêm `?mode=empty` để có trang trống nhỏ).
@@ -112,6 +115,7 @@ Chạy `pnpm dev` rồi mở http://localhost:5173/demo/ (thêm `?mode=empty` đ
 5. **Công thức**: gõ `=SUM(A:A)`, `=VLOOKUP(...)`, `=A1/0`, tạo vòng `A1 = B1`, `B1 = A1`; kéo fill handle công thức; chèn/xóa dòng giữa vùng được `SUM` tham chiếu.
 6. **Sort/filter**: chuột phải một cột → sort, filter theo giá trị; xem ký hiệu trên header; Ctrl/Cmd+Z hoàn tác từng bước.
 7. **Kéo chọn vùng ra ngoài mép** để thử tự cuộn; kéo viền header để resize; Shift+click, Ctrl/Cmd+click nhiều vùng.
+8. **Thanh công thức**: gõ tiếng Việt (Telex/VNI) trong ô nhập của thanh; gõ `=` rồi click ô trên lưới; sửa công thức dài rồi Enter/Tab/Esc; gõ `A1:C5`, `B:B` vào ô tên rồi Enter.
 
 ## Việc tiếp theo (ngoài MVP, chỉ làm khi bạn yêu cầu)
 

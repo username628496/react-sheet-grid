@@ -28,6 +28,8 @@ export class EditorController {
   mode: EditMode = 'caret';
   /** References in the formula being edited, with the color used for the text and for the cells on the grid. */
   refs: ColoredRef[] = [];
+  /** True while the formula bar (an <input> outside the grid) is the focused editing surface; the textarea mirrors it. */
+  fromBar = false;
   private original = '';
   private readonly measureCtx: CanvasRenderingContext2D | null;
   // "Pointing": arrows/clicks insert a cell reference at the caret; `pointSpan` is the text of the last one inserted.
@@ -45,6 +47,7 @@ export class EditorController {
   ) {
     this.measureCtx = document.createElement('canvas').getContext('2d');
     textarea.addEventListener('input', this.onInput);
+    textarea.addEventListener('focus', this.onFocus);
     textarea.addEventListener('compositionstart', this.onCompositionStart);
     textarea.addEventListener('compositionend', this.onCompositionEnd);
     this.reposition();
@@ -52,6 +55,7 @@ export class EditorController {
 
   destroy(): void {
     this.textarea.removeEventListener('input', this.onInput);
+    this.textarea.removeEventListener('focus', this.onFocus);
     this.textarea.removeEventListener('compositionstart', this.onCompositionStart);
     this.textarea.removeEventListener('compositionend', this.onCompositionEnd);
     this.backdrop?.remove();
@@ -59,6 +63,11 @@ export class EditorController {
 
   private readonly onInput = (): void => {
     this.pointSpan = null; // the user typed: whatever was being pointed at is now ordinary text
+  };
+
+  // Focus coming back to the grid (e.g. a click to point at a cell) makes the textarea the editing surface again.
+  private readonly onFocus = (): void => {
+    this.fromBar = false;
   };
 
   private readonly onCompositionStart = (): void => {
@@ -165,14 +174,37 @@ export class EditorController {
 
   /** `text` is the initial content: '' for typing mode, the cell's text for F2/double-click. */
   begin(mode: EditMode, text: string): void {
+    this.open(mode, text, false);
+  }
+
+  /**
+   * The formula bar took focus: editing starts without moving focus to the textarea, which only mirrors the bar so
+   * the cell shows the text and clicks on the grid can still insert references.
+   */
+  beginFromBar(text: string): void {
+    this.open('caret', text, true);
+  }
+
+  /** The bar's text or caret changed. */
+  syncFromBar(value: string, selectionStart: number, selectionEnd: number): void {
+    if (!this.editing) return;
+    this.pointSpan = null;
+    this.textarea.value = value;
+    this.textarea.setSelectionRange(selectionStart, selectionEnd);
+    this.reposition();
+    this.sheet.notify();
+  }
+
+  private open(mode: EditMode, text: string, fromBar: boolean): void {
     const { selection } = this.sheet;
     this.surface.scrollCellIntoView(selection.activeRow, selection.activeCol);
     this.editing = true;
+    this.fromBar = fromBar;
     this.pointSpan = null;
     this.mode = mode;
     this.original = this.sheet.getEditText(selection.activeRow, selection.activeCol);
     this.textarea.value = text;
-    this.focus();
+    if (!fromBar) this.focus();
     this.textarea.setSelectionRange(text.length, text.length);
     this.reposition();
     this.sheet.notify();
@@ -284,6 +316,7 @@ export class EditorController {
 
   private end(): void {
     this.editing = false;
+    this.fromBar = false;
     this.pointSpan = null;
     this.composing = false;
     this.textarea.value = '';

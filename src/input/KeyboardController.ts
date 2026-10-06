@@ -90,7 +90,8 @@ export class KeyboardController {
 
   private readonly onBlur = (): void => {
     // Switching windows should not end an edit; clicking elsewhere on the page should.
-    if (this.deps.editor.editing && document.hasFocus()) this.deps.editor.commit();
+    // Focus moving to the formula bar continues the same edit.
+    if (this.deps.editor.editing && !this.deps.editor.fromBar && document.hasFocus()) this.deps.editor.commit();
   };
 
   private run(action: Action): void {
@@ -192,6 +193,14 @@ export class KeyboardController {
     }
     this.deps.surface.scrollCellIntoView(selection.focusRow, selection.focusCol);
     editor.reposition();
+  }
+
+  /** Enter/Tab in the formula bar: same as in the cell editor. */
+  commitAndMove(move: CommitMove): void {
+    this.deps.editor.commit();
+    this.moveAfterCommit(move);
+    this.deps.surface.scrollCellIntoView(this.deps.sheet.selection.activeRow, this.deps.sheet.selection.activeCol);
+    this.deps.sheet.notify();
   }
 
   private moveAfterCommit(move: CommitMove): void {

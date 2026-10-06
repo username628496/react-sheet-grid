@@ -92,6 +92,10 @@ export function Toolbar({ sheet, onAction }: ToolbarProps) {
     <div role="toolbar" aria-label="Formatting" style={barStyle} data-testid="toolbar">
       {button('↶', 'Undo', false, () => sheet.undo(), !canUndo)}
       {button('↷', 'Redo', false, () => sheet.redo(), !canRedo)}
+      {button('⌫', 'Clear formatting', false, () => sheet.clearFormatting())}
+      <Separator />
+      {button('A↓', 'Sort A to Z', false, () => sheet.sortByColumn(sheet.selection.activeCol, true), false, { fontSize: 11 })}
+      {button('Z↓', 'Sort Z to A', false, () => sheet.sortByColumn(sheet.selection.activeCol, false), false, { fontSize: 11 })}
       <Separator />
       {button('B', 'Bold', style.bold === true, () => sheet.toggleStyle('bold'), false, { fontWeight: 'bold' })}
       {button('I', 'Italic', style.italic === true, () => sheet.toggleStyle('italic'), false, { fontStyle: 'italic' })}

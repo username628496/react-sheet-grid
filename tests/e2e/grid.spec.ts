@@ -1090,3 +1090,107 @@ test('grid lines are hidden under spilled text but kept where the spill stops', 
   await page.evaluate(() => window.__sheet!.setCellInput(0, 2, 'x'));
   expect((await pixel(0, 1)).slice(0, 3)).not.toEqual([255, 255, 255]); // the edge before a filled cell stays
 });
+
+test.describe('formula bar', () => {
+  const bar = (page: import('@playwright/test').Page) => page.getByTestId('formula-input');
+  const nameBox = (page: import('@playwright/test').Page) => page.getByTestId('name-box');
+
+  test.beforeEach(async ({ page }) => {
+    await expect(bar(page)).toBeEnabled(); // the bar waits for the grid controller
+  });
+
+  test('name box and bar follow the selection', async ({ page }) => {
+    await page.evaluate(() => window.__sheet!.setCellInput(2, 1, '=1+2'));
+    await clickCell(page, 2, 1);
+    await expect(nameBox(page)).toHaveValue('B3');
+    await expect(bar(page)).toHaveValue('=1+2');
+    const a = await cellCenter(page, 1, 1);
+    const b = await cellCenter(page, 3, 2);
+    await page.mouse.move(a.x, a.y);
+    await page.mouse.down();
+    await page.mouse.move(b.x, b.y, { steps: 4 });
+    await page.mouse.up();
+    await expect(nameBox(page)).toHaveValue('B2:C4');
+  });
+
+  test('typing in the bar edits the cell; Enter commits and moves down', async ({ page }) => {
+    await clickCell(page, 0, 0);
+    await bar(page).click();
+    await page.keyboard.type('=SUM(1,2)');
+    // The cell shows the same text while it is being edited.
+    expect(await page.evaluate(() => window.__grid!.editor.text)).toBe('=SUM(1,2)');
+    await page.keyboard.press('Enter');
+    expect(await cellValue(page, 0, 0)).toBe(3);
+    expect((await selection(page)).active).toEqual([1, 0]);
+    expect(await page.evaluate(() => document.activeElement === window.__grid!.editor.textarea)).toBe(true);
+  });
+
+  test('Escape in the bar abandons the edit', async ({ page }) => {
+    await page.evaluate(() => window.__sheet!.setCellInput(0, 0, 'keep'));
+    await clickCell(page, 0, 0);
+    await bar(page).click();
+    await page.keyboard.press('End');
+    await page.keyboard.type('XYZ');
+    await page.keyboard.press('Escape');
+    expect(await cellValue(page, 0, 0)).toBe('keep');
+    await expect(bar(page)).toHaveValue('keep');
+  });
+
+  test('Tab in the bar commits and moves right', async ({ page }) => {
+    await clickCell(page, 1, 1);
+    await bar(page).click();
+    await page.keyboard.type('hello');
+    await page.keyboard.press('Tab');
+    expect(await cellValue(page, 1, 1)).toBe('hello');
+    expect((await selection(page)).active).toEqual([1, 2]);
+  });
+
+  test('clicking a cell while typing a formula in the bar inserts a reference', async ({ page }) => {
+    await clickCell(page, 0, 0);
+    await bar(page).click();
+    await page.keyboard.type('=');
+    await clickCell(page, 4, 2);
+    expect(await page.evaluate(() => window.__grid!.editor.text)).toBe('=C5');
+    await expect(bar(page)).toHaveValue('=C5');
+    await page.keyboard.press('Enter'); // focus is on the grid editor now; Enter commits there
+    expect(await page.evaluate(() => window.__sheet!.getEditText(0, 0))).toBe('=C5');
+  });
+
+  test('typing in the cell editor shows up in the bar', async ({ page }) => {
+    await clickCell(page, 0, 0);
+    await page.keyboard.type('abc');
+    await expect(bar(page)).toHaveValue('abc');
+    await page.keyboard.press('Enter');
+  });
+
+  test('the name box jumps to a cell, a range and a whole column', async ({ page }) => {
+    await nameBox(page).fill('C5');
+    await nameBox(page).press('Enter');
+    expect((await selection(page)).active).toEqual([4, 2]);
+    await nameBox(page).fill('A1:B3');
+    await nameBox(page).press('Enter');
+    expect((await selection(page)).range).toMatchObject({ startRow: 0, startCol: 0, endRow: 2, endCol: 1 });
+    await nameBox(page).fill('B:B');
+    await nameBox(page).press('Enter');
+    expect((await selection(page)).range).toMatchObject({ startRow: 0, startCol: 1, endRow: 999, endCol: 1 });
+    await nameBox(page).fill('nonsense');
+    await nameBox(page).press('Enter');
+    expect((await selection(page)).range).toMatchObject({ startCol: 1, endCol: 1 }); // unchanged
+    expect(await page.evaluate(() => document.activeElement === document.querySelector('[data-testid=name-box]'))).toBe(true);
+  });
+
+  test('toolbar sort and clear-formatting buttons act on the active cell', async ({ page }) => {
+    await page.evaluate(() => {
+      const s = window.__sheet!;
+      s.setCellInput(0, 0, '3');
+      s.setCellInput(1, 0, '1');
+      s.setCellInput(2, 0, '2');
+    });
+    await clickCell(page, 0, 0);
+    await page.getByRole('button', { name: 'Sort A to Z' }).click();
+    expect([await cellValue(page, 0, 0), await cellValue(page, 1, 0), await cellValue(page, 2, 0)]).toEqual([1, 2, 3]);
+    await page.keyboard.press(`${mod}+b`);
+    await page.getByRole('button', { name: 'Clear formatting' }).click();
+    expect(await page.evaluate(() => window.__sheet!.styles.get(window.__sheet!.getCellByView(0, 0).styleId).bold ?? false)).toBe(false);
+  });
+});

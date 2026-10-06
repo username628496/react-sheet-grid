@@ -6,3 +6,4 @@ export { GridSurface } from './render/GridSurface';
 export { Toolbar } from './react/Toolbar';
 export { StatusBar } from './react/StatusBar';
 export { ContextMenu } from './react/ContextMenu';
+export { FormulaBar } from './react/FormulaBar';
