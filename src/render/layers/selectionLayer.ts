@@ -100,3 +100,31 @@ function drawFillHandle(
   ctx.fillStyle = theme.accent;
   ctx.fillRect(x - half, y - half, FILL_HANDLE_SIZE, FILL_HANDLE_SIZE);
 }
+
+function withAlpha(hex: string, alpha: number): string {
+  const n = parseInt(hex.slice(1), 16);
+  return `rgba(${(n >> 16) & 255}, ${(n >> 8) & 255}, ${n & 255}, ${alpha})`;
+}
+
+/** Colored box around a cell/range referenced by the formula being edited (view coordinates). */
+export function drawFormulaRef(
+  ctx: CanvasRenderingContext2D,
+  sheet: Spreadsheet,
+  ref: { startRow: number; startCol: number; endRow: number; endCol: number },
+  color: string,
+  rowSeg: Segment,
+  colSeg: Segment,
+): void {
+  if (ref.endRow < rowSeg.first || ref.startRow > rowSeg.last) return;
+  if (ref.endCol < colSeg.first || ref.startCol > colSeg.last) return;
+  const { rows, cols } = sheet;
+  const x = colSeg.origin + cols.offsetOf(ref.startCol) - colSeg.base;
+  const y = rowSeg.origin + rows.offsetOf(ref.startRow) - rowSeg.base;
+  const w = cols.offsetOf(ref.endCol + 1) - cols.offsetOf(ref.startCol);
+  const h = rows.offsetOf(ref.endRow + 1) - rows.offsetOf(ref.startRow);
+  ctx.fillStyle = withAlpha(color, 0.1);
+  ctx.fillRect(x, y, w, h);
+  ctx.strokeStyle = color;
+  ctx.lineWidth = 2;
+  ctx.strokeRect(x, y, w, h);
+}

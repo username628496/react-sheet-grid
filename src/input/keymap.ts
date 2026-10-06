@@ -44,11 +44,15 @@ export type Action =
   | { type: 'align'; align: HorizontalAlign }
   | { type: 'numberFormat'; format: string }
   | { type: 'pasteValues' }
-  | { type: 'scrollToActive' };
+  | { type: 'scrollToActive' }
+  | { type: 'pointMove'; dir: Direction; extend: boolean }
+  | { type: 'toggleAbsolute' };
 
 export interface KeyOptions {
   /** In "enter mode" (started by typing) arrows commit and move; after F2/double-click they move the caret. */
   arrowsCommit: boolean;
+  /** A cell reference can be inserted at the caret (right after = ( , or an operator), so arrows point at cells. */
+  canPoint?: boolean;
 }
 
 const ARROWS: Record<string, Direction> = {
@@ -191,7 +195,14 @@ function editingKey(context: KeyContext, k: KeyInput, options: KeyOptions): Acti
       break;
   }
   const arrow = ARROWS[k.key];
-  // While typing a formula the arrows stay with the caret; pointing at cells is not supported yet.
+  if (context === 'editingFormula') {
+    // F4 cycles $ on the reference under the caret; arrows point at cells when a reference may go here,
+    // otherwise they move the caret as usual.
+    if (k.key === 'F4') return { type: 'toggleAbsolute' };
+    if (arrow !== undefined && options.canPoint === true && !k.mod && !k.alt) {
+      return { type: 'pointMove', dir: arrow, extend: k.shift };
+    }
+  }
   if (arrow !== undefined && options.arrowsCommit && context === 'editing' && !k.shift && !k.mod && !k.alt) {
     return { type: 'commit', move: arrow };
   }

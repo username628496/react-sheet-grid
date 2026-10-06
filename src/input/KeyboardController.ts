@@ -64,8 +64,13 @@ export class KeyboardController {
     const { editor } = this.deps;
     const action = resolveKey(this.context, toKeyInput(e, this.isMac), {
       arrowsCommit: editor.mode === 'typing',
+      canPoint: editor.canPointWithKeys(),
     });
-    if (action === null) return;
+    if (action === null) {
+      // A plain arrow in a formula that is not pointing moves the caret: from now on this is edit mode.
+      if (this.context === 'editingFormula' && /^Arrow/.test(e.key) && !e.isComposing) editor.mode = 'caret';
+      return;
+    }
     // startTyping must not be prevented: the browser's default inserts the character into the textarea.
     // pasteValues likewise lets the browser's paste event through; it only marks the next paste as values-only.
     if (action.type !== 'startTyping' && action.type !== 'pasteValues') e.preventDefault();
@@ -167,6 +172,12 @@ export class KeyboardController {
         break;
       case 'pasteValues':
         this.deps.clipboard.armValuesOnly();
+        return;
+      case 'pointMove':
+        editor.pointMove(action.dir, action.extend);
+        return;
+      case 'toggleAbsolute':
+        editor.toggleAbsolute();
         return;
       case 'scrollToActive':
         this.deps.surface.scrollCellIntoView(selection.activeRow, selection.activeCol);

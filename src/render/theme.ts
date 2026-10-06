@@ -18,3 +18,6 @@ export const theme = {
 export function fontFor(bold: boolean | undefined, italic: boolean | undefined): string {
   return `${italic === true ? 'italic ' : ''}${bold === true ? 'bold ' : ''}${theme.fontSize}px ${theme.fontFamily}`;
 }
+
+/** Colors given to the references of a formula being edited, in order of first appearance (as in Sheets). */
+export const REF_COLORS = ['#1a73e8', '#d93025', '#188038', '#e37400', '#a142f4', '#12b5cb', '#c2185b', '#5f6368'] as const;

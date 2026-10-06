@@ -733,3 +733,159 @@ test.describe('Google Sheets shortcuts', () => {
     await expect(page.getByRole('button', { name: 'Underline' })).toHaveAttribute('aria-pressed', 'true');
   });
 });
+
+test.describe('pointing at cells while typing a formula', () => {
+  const editorText = (page: import('@playwright/test').Page): Promise<string> => page.evaluate(() => window.__grid!.editor.text);
+
+  test('arrows insert and move a reference, Shift extends it to a range', async ({ page }) => {
+    await clickCell(page, 0, 2);
+    await page.keyboard.type('=SUM(');
+    await page.keyboard.press('ArrowDown');
+    expect(await editorText(page)).toBe('=SUM(C2');
+    await page.keyboard.press('ArrowDown');
+    expect(await editorText(page)).toBe('=SUM(C3');
+    await page.keyboard.press('Shift+ArrowDown');
+    expect(await editorText(page)).toBe('=SUM(C3:C4');
+    await page.keyboard.press('Shift+ArrowRight');
+    expect(await editorText(page)).toBe('=SUM(C3:D4');
+    await page.keyboard.press('ArrowRight'); // a plain arrow moves from the anchor (C3), not from the dragged corner
+    expect(await editorText(page)).toBe('=SUM(D3');
+    expect(await page.evaluate(() => window.__grid!.editor.editing)).toBe(true);
+  });
+
+  test('the formula computes from pointed cells after Enter', async ({ page }) => {
+    await page.evaluate(() => {
+      window.__sheet!.setCellInput(1, 2, '4');
+      window.__sheet!.setCellInput(2, 2, '6');
+    });
+    await clickCell(page, 0, 2);
+    await page.keyboard.type('=SUM(');
+    await page.keyboard.press('ArrowDown');
+    await page.keyboard.press('Shift+ArrowDown');
+    await page.keyboard.type(')');
+    await page.keyboard.press('Enter');
+    expect(await cellValue(page, 0, 2)).toBe(10);
+    expect(await page.evaluate(() => window.__sheet!.getEditText(0, 2))).toBe('=SUM(C2:C3)');
+  });
+
+  test('typing after a pointed reference continues the formula; arrows then move the caret', async ({ page }) => {
+    await clickCell(page, 0, 0);
+    await page.keyboard.type('=');
+    await page.keyboard.press('ArrowRight');
+    expect(await editorText(page)).toBe('=B1');
+    await page.keyboard.type('+1');
+    await page.keyboard.press('ArrowLeft'); // after "+1" a reference cannot go here: plain caret move
+    expect(await editorText(page)).toBe('=B1+1');
+    // The caret was moved by hand, so this is edit mode now: the next arrow moves the caret even right after '+'.
+    await page.keyboard.press('ArrowLeft'); // caret now between '+' and '1'; one more puts it right after B1
+    await page.keyboard.type('9');
+    expect(await editorText(page)).toBe('=B19+1');
+  });
+
+  test('F2 opens edit mode, where arrows move the caret even right after an operator', async ({ page }) => {
+    await page.evaluate(() => window.__sheet!.setCellInput(0, 0, '=1+'));
+    await clickCell(page, 0, 0);
+    await page.keyboard.press('F2');
+    await page.keyboard.press('ArrowLeft');
+    expect(await editorText(page)).toBe('=1+');
+    await page.keyboard.type('X');
+    expect(await editorText(page)).toBe('=1X+');
+  });
+
+  test('a new arrow press after typing an operator points again', async ({ page }) => {
+    await clickCell(page, 1, 1);
+    await page.keyboard.type('=');
+    await page.keyboard.press('ArrowUp');
+    await page.keyboard.type('+');
+    await page.keyboard.press('ArrowLeft');
+    expect(await editorText(page)).toBe('=B1+A2');
+  });
+
+  test('clicking a cell inserts its reference, clicking another replaces it, dragging makes a range', async ({ page }) => {
+    await clickCell(page, 0, 0);
+    await page.keyboard.type('=');
+    await clickCell(page, 3, 1);
+    expect(await editorText(page)).toBe('=B4');
+    await clickCell(page, 4, 2);
+    expect(await editorText(page)).toBe('=C5');
+    const a = await cellCenter(page, 1, 1);
+    const b = await cellCenter(page, 3, 2);
+    await page.mouse.move(a.x, a.y);
+    await page.mouse.down();
+    await page.mouse.move(b.x, b.y, { steps: 5 });
+    await page.mouse.up();
+    expect(await editorText(page)).toBe('=B2:C4');
+    expect(await page.evaluate(() => window.__grid!.editor.editing)).toBe(true);
+  });
+
+  test('clicking a cell while the caret is after a complete reference ends the edit as usual', async ({ page }) => {
+    await clickCell(page, 0, 0);
+    await page.keyboard.type('=A1');
+    await clickCell(page, 3, 3);
+    expect(await page.evaluate(() => window.__grid!.editor.editing)).toBe(false);
+    expect((await selection(page)).active).toEqual([3, 3]);
+  });
+
+  test('clicking while typing plain text still commits', async ({ page }) => {
+    await clickCell(page, 0, 0);
+    await page.keyboard.type('abc');
+    await clickCell(page, 2, 2);
+    expect(await cellValue(page, 0, 0)).toBe('abc');
+  });
+
+  test('F4 cycles absolute and relative on the reference at the caret', async ({ page }) => {
+    await clickCell(page, 0, 0);
+    await page.keyboard.type('=B2+1');
+    await page.keyboard.press('ArrowLeft');
+    await page.keyboard.press('ArrowLeft');
+    const seen: string[] = [];
+    for (let i = 0; i < 4; i++) {
+      await page.keyboard.press('F4');
+      seen.push(await editorText(page));
+    }
+    expect(seen).toEqual(['=$B$2+1', '=B$2+1', '=$B2+1', '=B2+1']);
+  });
+
+  test('each reference gets a color, the same reference the same color', async ({ page }) => {
+    await clickCell(page, 0, 0);
+    await page.keyboard.type('=SUM(B2:C3)+D4+B2:C3');
+    const refs = await page.evaluate(() => window.__grid!.editor.refs.map((r) => ({ text: r.text, color: r.color })));
+    expect(refs.map((r) => r.text)).toEqual(['B2:C3', 'D4', 'B2:C3']);
+    expect(refs[0]?.color).toBe(refs[2]?.color);
+    expect(refs[0]?.color).not.toBe(refs[1]?.color);
+    // The colored text lives in a backdrop behind the transparent textarea.
+    const spans = await page.evaluate(() => window.__grid!.editor.textarea.previousElementSibling?.querySelectorAll('span').length);
+    expect(spans).toBe(3);
+  });
+
+  test('during IME composition the textarea shows its own text', async ({ page, browserName }) => {
+    test.skip(browserName !== 'chromium', 'composition events are simulated through CDP');
+    await clickCell(page, 0, 0);
+    await page.keyboard.type('="');
+    const cdp = await page.context().newCDPSession(page);
+    await cdp.send('Input.imeSetComposition', { text: 'có', selectionStart: 2, selectionEnd: 2 });
+    const color = await page.evaluate(() => getComputedStyle(window.__grid!.editor.textarea).color);
+    expect(color).not.toBe('rgba(0, 0, 0, 0)');
+    await cdp.send('Input.insertText', { text: 'có' });
+    await page.keyboard.type('"');
+    await page.keyboard.press('Enter');
+    expect(await cellValue(page, 0, 0)).toBe('có');
+  });
+
+  test('Escape after pointing cancels the whole edit and undo stays clean', async ({ page }) => {
+    await clickCell(page, 0, 0);
+    await page.keyboard.type('=');
+    await page.keyboard.press('ArrowDown');
+    await page.keyboard.press('Escape');
+    expect(await cellValue(page, 0, 0)).toBeNull();
+    expect(await page.evaluate(() => window.__sheet!.history.canUndo)).toBe(false);
+  });
+
+  test('pointing scrolls the referenced cell into view', async ({ page }) => {
+    await clickCell(page, 0, 0);
+    await page.keyboard.type('=');
+    for (let i = 0; i < 60; i++) await page.keyboard.press('ArrowDown');
+    expect(await editorText(page)).toBe('=A61');
+    expect(await page.evaluate(() => window.__grid!.surface.viewport.scrollY)).toBeGreaterThan(0);
+  });
+});

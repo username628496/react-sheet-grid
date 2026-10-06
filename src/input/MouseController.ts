@@ -24,6 +24,7 @@ type Drag =
   | { kind: 'cell' }
   | { kind: 'col' }
   | { kind: 'row' }
+  | { kind: 'point' }
   | { kind: 'fill'; source: ViewRange }
   | { kind: 'resize'; axis: 'col' | 'row'; indices: number[]; startPos: number; startSize: number };
 
@@ -136,6 +137,17 @@ export class MouseController {
     const { selection } = sheet;
     // Keep focus on the hidden textarea; also stops native text selection while dragging.
     e.preventDefault();
+    // While typing a formula, clicking a cell inserts a reference to it instead of ending the edit.
+    if (editor.editing && editor.canPoint()) {
+      const pre = this.locate(x, y);
+      if (pre.zone === 'cell') {
+        editor.pointTo(pre.row, pre.col, e.shiftKey);
+        this.lastX = x;
+        this.lastY = y;
+        this.startDrag({ kind: 'point' });
+        return;
+      }
+    }
     editor.commit();
     editor.focus();
     const additive = e.metaKey || e.ctrlKey;
@@ -230,6 +242,8 @@ export class MouseController {
       selection.selectCol(vp.colAtClamped(this.lastX), true);
     } else if (drag.kind === 'row') {
       selection.selectRow(vp.rowAtClamped(this.lastY), true);
+    } else if (drag.kind === 'point') {
+      this.deps.editor.pointTo(vp.rowAtClamped(this.lastY), vp.colAtClamped(this.lastX), true);
     } else if (drag.kind === 'fill') {
       this.planFill(drag.source, vp.rowAtClamped(this.lastY), vp.colAtClamped(this.lastX));
       sheet.notify();

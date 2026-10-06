@@ -1,7 +1,7 @@
 import type { Spreadsheet } from '../core/Spreadsheet';
 import { drawSelection } from '../render/layers/selectionLayer';
 import type { GridSurface } from '../render/GridSurface';
-import { drawCopyMarquee } from '../render/layers/selectionLayer';
+import { drawCopyMarquee, drawFormulaRef } from '../render/layers/selectionLayer';
 import { ClipboardController } from './ClipboardController';
 import { EditorController } from './EditorController';
 import { KeyboardController } from './KeyboardController';
@@ -39,6 +39,14 @@ export class GridController {
       drawSelection(ctx, sheet, sheet.selection, rowSeg, colSeg, !this.editor.editing);
       const marquee = this.clipboard.visibleMarquee;
       if (marquee !== null) drawCopyMarquee(ctx, sheet, marquee, rowSeg, colSeg);
+      for (const ref of this.editor.refs) {
+        // Formulas hold data coordinates; the grid is drawn in view coordinates.
+        const { mapping } = sheet;
+        const startRow = mapping.toViewRow(ref.r1);
+        const endRow = mapping.toViewRow(ref.r2);
+        if (startRow < 0 || endRow < 0) continue;
+        drawFormulaRef(ctx, sheet, { startRow, endRow, startCol: mapping.toViewCol(ref.c1), endCol: mapping.toViewCol(ref.c2) }, ref.color, rowSeg, colSeg);
+      }
       const fill = this.mouse.fillPreview;
       if (fill !== null) drawCopyMarquee(ctx, sheet, fill, rowSeg, colSeg);
     };
@@ -51,6 +59,7 @@ export class GridController {
   destroy(): void {
     for (const off of this.unsubscribe) off();
     this.mouse.destroy();
+    this.editor.destroy();
     this.keyboard.destroy();
     this.clipboard.destroy();
     this.surface.renderer.overlay = null;

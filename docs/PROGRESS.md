@@ -57,6 +57,8 @@ Toàn bộ lộ trình MVP trong CLAUDE.md (tuần 1 và tuần 2) đã xong.
 - Chèn/xóa dòng/cột đổi số dòng/cột, di chuyển dữ liệu, kích thước và viết lại tham chiếu (`remapFormula`): tham chiếu vào ô bị xóa thành `#REF!`, range co lại hoặc giãn ra, `A:A` giữ nguyên. Undo bằng snapshot. Chỉ cho phép khi chưa sort/filter.
 - Định dạng lên vùng quá lớn (> 50.000 ô, ví dụ cả cột) chỉ áp dụng cho ô đã có dữ liệu để không sinh hàng triệu ô.
 
+**Soạn công thức**: khi gõ `=SUM(` rồi nhấn mũi tên hoặc click/kéo ô, tham chiếu được chèn vào công thức (mũi tên chỉ trỏ ô ở "enter mode", tức là text đã gõ; sau khi tự dời con trỏ hoặc mở bằng F2 là "edit mode" và mũi tên dịch con trỏ). Mỗi tham chiếu một màu, vừa trong chữ (textarea trong suốt đè lên một div nền vẽ chữ màu, tắt khi đang gõ IME để thấy gạch chân của IME) vừa viền màu trên lưới.
+
 ## Phím tắt (Mod = Cmd trên Mac, Ctrl trên Windows/Linux)
 
 | Phím | Tác dụng |
@@ -78,8 +80,10 @@ Toàn bộ lộ trình MVP trong CLAUDE.md (tuần 1 và tuần 2) đã xong.
 | Mod+Shift+1 / 4 / 5 | Định dạng số `#,##0.00` / tiền tệ / phần trăm |
 | Mod+\ | Xóa định dạng |
 | Mod+Backspace | Cuộn tới ô đang chọn |
+| Mũi tên, Shift+mũi tên, click, kéo (khi gõ công thức sau `=`, `(`, `,` hoặc toán tử) | Chèn/di chuyển tham chiếu ô, Shift hoặc kéo để thành range |
+| F4 (khi gõ công thức) | Đổi tham chiếu dưới con trỏ: `A1` → `$A$1` → `A$1` → `$A1` |
 
-Chưa có: Mod+; (ngày hiện tại), Mod+K (liên kết), F4 / Mod+T (đổi tuyệt đối/tương đối khi gõ công thức), Mod+Alt+V (dán chỉ định dạng), Mod+/ (danh sách phím tắt), Mod+Alt+= và Mod+Alt+- (chèn/xóa), Mod+Shift+L bật bộ lọc.
+Chưa có: Mod+; (ngày hiện tại), Mod+K (liên kết), Mod+T (trình duyệt giữ phím này nên chỉ dùng F4), Mod+Alt+V (dán chỉ định dạng), Mod+/ (danh sách phím tắt), Mod+Alt+= và Mod+Alt+- (chèn/xóa), Mod+Shift+L bật bộ lọc.
 
 ## Lỗi đã biết / giới hạn
 
@@ -88,7 +92,6 @@ Chưa có: Mod+; (ngày hiện tại), Mod+K (liên kết), F4 / Mod+T (đổi t
 - Tham chiếu từ ô khác tới vùng bị cut chưa được cập nhật (Sheets cập nhật).
 - Công thức tham chiếu theo tọa độ dữ liệu: khi đang sort, nhãn A1 trong công thức là vị trí dữ liệu gốc, không phải vị trí đang hiển thị.
 - Chiều cao dòng gắn với vị trí hiển thị, không đi theo dữ liệu khi sort.
-- Khi gõ công thức, phím mũi tên chưa chèn tham chiếu ô (chỉ di chuyển con trỏ).
 - Double-click viền resize chưa tự fit độ rộng; double-click fill handle chưa tự điền; ngày tháng chưa có chuỗi.
 - Một số đơn lẻ khi fill được copy (không tăng) như Sheets.
 - Chữ chưa tràn sang ô trống bên cạnh; ô gộp, nhiều sheet, xlsx, find & replace... nằm ngoài MVP.
@@ -109,7 +112,6 @@ Chạy `pnpm dev` rồi mở http://localhost:5173/demo/ (thêm `?mode=empty` đ
 ## Việc tiếp theo (ngoài MVP, chỉ làm khi bạn yêu cầu)
 
 - Chạy e2e trên Firefox/WebKit và sửa nếu có khác biệt.
-- Chèn tham chiếu ô bằng phím mũi tên/click khi đang gõ công thức; tô màu tham chiếu.
 - Chữ tràn sang ô trống, tự fit độ rộng cột, fill ngày tháng, cập nhật tham chiếu khi cut.
 - Sort/filter không chặn chèn/xóa dòng; công thức theo vị trí hiển thị khi sort.
 - Tính toán trong Web Worker cho bảng rất lớn.

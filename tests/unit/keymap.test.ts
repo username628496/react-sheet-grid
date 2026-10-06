@@ -133,3 +133,38 @@ describe('keymap: Google Sheets shortcuts', () => {
     expect(resolveKey('navigating', key('d', { mod: true, isComposing: true }))).toBeNull();
   });
 });
+
+describe('keymap: pointing at cells while typing a formula', () => {
+  it('arrows point only when a reference can be inserted', () => {
+    expect(resolveKey('editingFormula', key('ArrowDown'), { arrowsCommit: false, canPoint: true })).toEqual({
+      type: 'pointMove',
+      dir: 'down',
+      extend: false,
+    });
+    expect(resolveKey('editingFormula', key('ArrowRight', { shift: true }), { arrowsCommit: false, canPoint: true })).toEqual({
+      type: 'pointMove',
+      dir: 'right',
+      extend: true,
+    });
+    expect(resolveKey('editingFormula', key('ArrowLeft'), { arrowsCommit: false, canPoint: false })).toBeNull();
+    expect(resolveKey('editingFormula', key('ArrowLeft'), { arrowsCommit: true })).toBeNull();
+  });
+
+  it('ordinary editing never points', () => {
+    expect(resolveKey('editing', key('ArrowDown'), { arrowsCommit: false, canPoint: true })).toBeNull();
+  });
+
+  it('Mod+arrow and Alt+arrow are left to the caret', () => {
+    expect(resolveKey('editingFormula', key('ArrowLeft', { mod: true }), { arrowsCommit: false, canPoint: true })).toBeNull();
+    expect(resolveKey('editingFormula', key('ArrowLeft', { alt: true }), { arrowsCommit: false, canPoint: true })).toBeNull();
+  });
+
+  it('F4 toggles absolute references in formulas only', () => {
+    expect(resolveKey('editingFormula', key('F4'))).toEqual({ type: 'toggleAbsolute' });
+    expect(resolveKey('editing', key('F4'))).toBeNull();
+  });
+
+  it('does nothing during IME composition', () => {
+    expect(resolveKey('editingFormula', key('ArrowDown', { isComposing: true }), { arrowsCommit: false, canPoint: true })).toBeNull();
+  });
+});
