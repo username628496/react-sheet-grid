@@ -20,6 +20,7 @@ Toàn bộ lộ trình MVP trong CLAUDE.md (tuần 1 và tuần 2) đã xong.
 - Sort theo cột, filter theo giá trị (hộp thoại có tìm kiếm); ký hiệu ↑ ↓ ▾ trên header.
 - Chèn/xóa dòng và cột, có cập nhật tham chiếu công thức.
 - Thanh công thức `FormulaBar` (ô tên: hiện và nhảy tới `B3`, `A1:C5`, `B:B`, `2:2`; ô nhập nội dung ô đang chọn). Toolbar thêm xóa định dạng, sort A→Z / Z→A. Giao diện chrome (toolbar, thanh công thức, thanh trạng thái) dùng icon SVG nội bộ (`icons.tsx`), style chung trong `chrome.tsx` (inject một thẻ `<style>`, biến CSS `--rdg-*` ghi đè được), tooltip kèm phím tắt theo nền tảng, điều hướng mũi tên/Home/End giữa các nút, Esc về lưới.
+- **i18n và theme**: `GridProvider` (`locale`: `en`/`vi`, `messages` ghi đè từng chuỗi, `theme`: `light`/`dark`/`auto`) bọc quanh DataGrid, Toolbar, FormulaBar, StatusBar; menu và hộp thoại dùng cùng bộ biến CSS `--rdg-*`. Mọi chuỗi UI nằm trong `messages.ts` (có test hai ngôn ngữ cùng bộ khóa). Màu canvas đổi bằng `applyCanvasTheme` trên đối tượng `theme` dùng chung nên theme canvas là theo trang, không theo từng lưới; màu chữ/nền do người dùng đặt cho ô không bị đảo theo chế độ tối.
 - Context menu chuột phải; thanh thống kê (tổng, trung bình, đếm).
 
 **Kiểm thử**: 625 unit test (gồm ~300 test công thức theo bảng, 80 chuỗi fuzz × 120 thao tác, 60 chuỗi fuzz chèn/xóa với oracle độc lập) và 48 e2e test chạy trên Chromium, Firefox và WebKit.

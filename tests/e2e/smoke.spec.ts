@@ -89,3 +89,48 @@ test.describe('the default demo keeps your work across reloads', () => {
     expect(await page.evaluate(() => window.__sheet!.model.cellCount)).toBe(0);
   });
 });
+
+test.describe('language and theme', () => {
+  test('switching to Vietnamese relabels the toolbar and the choice survives a reload', async ({ page }) => {
+    await page.goto('/demo/');
+    await page.waitForFunction(() => window.__grid !== undefined);
+    await expect(page.getByRole('button', { name: 'Undo' })).toBeVisible();
+    await page.getByLabel('Language').selectOption('vi');
+    await expect(page.getByRole('button', { name: 'Hoàn tác' })).toBeVisible();
+    await expect(page.getByLabel('Số dòng')).toHaveValue('50');
+    await page.reload();
+    await page.waitForFunction(() => window.__grid !== undefined);
+    await expect(page.getByRole('button', { name: 'Đậm' })).toBeVisible();
+  });
+
+  test('the dark theme repaints the canvas', async ({ page }) => {
+    await page.goto('/demo/');
+    await page.waitForFunction(() => window.__grid !== undefined);
+    const background = (): Promise<number[]> =>
+      page.evaluate(async () => {
+        await new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)));
+        const g = window.__grid!;
+        const canvas = document.querySelector('[data-testid=grid] canvas') as HTMLCanvasElement;
+        const dpr = window.devicePixelRatio || 1;
+        const vp = g.surface.viewport;
+        const x = Math.round((vp.colLeft(3) + 20) * dpr);
+        const y = Math.round((vp.rowTop(6) + 8) * dpr);
+        return Array.from(canvas.getContext('2d')!.getImageData(x, y, 1, 1).data).slice(0, 3);
+      });
+    expect(await background()).toEqual([255, 255, 255]);
+    await page.getByLabel('Theme').selectOption('dark');
+    await expect.poll(background).toEqual([0x1b, 0x1d, 0x21]);
+    await expect(page.getByTestId('toolbar')).toHaveCSS('background-color', 'rgb(35, 38, 43)');
+    await page.getByLabel('Theme').selectOption('light');
+    await expect.poll(background).toEqual([255, 255, 255]);
+  });
+
+  test('"auto" follows the operating system setting', async ({ browser }) => {
+    const context = await browser.newContext({ colorScheme: 'dark' });
+    const page = await context.newPage();
+    await page.goto('/demo/');
+    await page.waitForFunction(() => window.__grid !== undefined);
+    await expect(page.getByTestId('toolbar')).toHaveCSS('background-color', 'rgb(35, 38, 43)');
+    await context.close();
+  });
+});

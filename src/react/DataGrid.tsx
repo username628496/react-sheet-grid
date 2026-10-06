@@ -2,8 +2,10 @@ import { type CSSProperties, useCallback, useEffect, useRef, useState } from 're
 import type { Spreadsheet } from '../core/Spreadsheet';
 import { GridController } from '../input/GridController';
 import { GridSurface } from '../render/GridSurface';
+import { applyCanvasTheme } from '../render/theme';
 import { CellEditor } from './CellEditor';
 import { ChromeStyles } from './chrome';
+import { useTheme } from './GridProvider';
 import { ContextMenu } from './ContextMenu';
 import { FilterDialog } from './FilterDialog';
 import { ShortcutsDialog } from './ShortcutsDialog';
@@ -25,6 +27,7 @@ export interface DataGridProps {
 export function DataGrid({ sheet, frozenRows = 0, frozenCols = 0, className, style, onReady }: DataGridProps) {
   const mountRef = useRef<HTMLDivElement>(null);
   const editorRef = useRef<HTMLTextAreaElement>(null);
+  const colorTheme = useTheme();
   const [controller, setController] = useState<GridController | null>(null);
   const [menu, setMenu] = useState<{ x: number; y: number } | null>(null);
   const [filter, setFilter] = useState<{ col: number; x: number; y: number } | null>(null);
@@ -38,6 +41,13 @@ export function DataGrid({ sheet, frozenRows = 0, frozenCols = 0, className, sty
     setFilter(null);
     editorRef.current?.focus({ preventScroll: true });
   }, []);
+
+  // The canvas reads its colors from a shared palette; switching it needs a repaint and a restyled editor box.
+  useEffect(() => {
+    applyCanvasTheme(colorTheme);
+    controller?.surface.invalidate();
+    controller?.editor.reposition();
+  }, [colorTheme, controller]);
 
   // Frozen rows act as the header: sort and filter leave them alone.
   useEffect(() => {

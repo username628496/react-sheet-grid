@@ -1,6 +1,18 @@
 import { type CSSProperties, useEffect, useState } from 'react';
 import { createRoot } from 'react-dom/client';
-import { DataGrid, deserializeSheet, FormulaBar, type GridController, SnapshotError, Spreadsheet, StatusBar, Toolbar } from '../src/index';
+import {
+  DataGrid,
+  deserializeSheet,
+  FormulaBar,
+  GridProvider,
+  type GridController,
+  type Locale,
+  SnapshotError,
+  Spreadsheet,
+  StatusBar,
+  type ThemeSetting,
+  Toolbar,
+} from '../src/index';
 import { autoSave, clearSnapshot, loadSnapshot, type SaveStatus } from './storage';
 
 const ROWS = 1_000_000;
@@ -62,27 +74,100 @@ async function createSheet(): Promise<{ sheet: Spreadsheet; notice: string | nul
   return { sheet: new Spreadsheet({ rowCount: 50, colCount: 26 }), notice: null };
 }
 
-const linkStyle: CSSProperties = {
+function readPref<T extends string>(key: string, allowed: readonly T[], fallback: T): T {
+  try {
+    const value = localStorage.getItem(key);
+    return allowed.includes(value as T) ? (value as T) : fallback;
+  } catch {
+    return fallback;
+  }
+}
+
+function writePref(key: string, value: string): void {
+  try {
+    localStorage.setItem(key, value);
+  } catch {
+    /* storage blocked: the choice just lasts until reload */
+  }
+}
+
+const LOCALES: readonly Locale[] = ['en', 'vi'];
+const THEMES: readonly ThemeSetting[] = ['auto', 'light', 'dark'];
+const defaultLocale: Locale = navigator.language.toLowerCase().startsWith('vi') ? 'vi' : 'en';
+
+const footerButton: CSSProperties = {
   font: '12px system-ui, sans-serif',
-  padding: '6px 14px',
-  color: '#1a73e8',
+  padding: '6px 12px',
+  color: 'var(--rdg-accent)',
   background: 'transparent',
   border: 0,
   cursor: 'pointer',
   textDecoration: 'none',
 };
 
+const footerSelect: CSSProperties = {
+  font: '12px system-ui, sans-serif',
+  color: 'var(--rdg-text)',
+  background: 'var(--rdg-field)',
+  border: '1px solid var(--rdg-border)',
+  borderRadius: 6,
+  padding: '2px 4px',
+  margin: '0 4px',
+};
+
 function App({ sheet, notice }: { sheet: Spreadsheet; notice: string | null }) {
   const [grid, setGrid] = useState<GridController | null>(null);
   const [saveStatus, setSaveStatus] = useState<SaveStatus | null>(null);
+  const [locale, setLocale] = useState<Locale>(() => readPref('rdg-locale', LOCALES, defaultLocale));
+  const [theme, setTheme] = useState<ThemeSetting>(() => readPref('rdg-theme', THEMES, 'auto'));
   useEffect(() => (persistent ? autoSave(sheet, setSaveStatus) : undefined), [sheet]);
+  return (
+    <GridProvider locale={locale} theme={theme}>
+      <Page
+        sheet={sheet}
+        grid={grid}
+        notice={notice}
+        saveStatus={saveStatus}
+        locale={locale}
+        theme={theme}
+        onGrid={setGrid}
+        onLocale={(l) => {
+          setLocale(l);
+          writePref('rdg-locale', l);
+        }}
+        onTheme={(t) => {
+          setTheme(t);
+          writePref('rdg-theme', t);
+        }}
+      />
+    </GridProvider>
+  );
+}
+
+interface PageProps {
+  sheet: Spreadsheet;
+  grid: GridController | null;
+  notice: string | null;
+  saveStatus: SaveStatus | null;
+  locale: Locale;
+  theme: ThemeSetting;
+  onGrid(g: GridController): void;
+  onLocale(l: Locale): void;
+  onTheme(t: ThemeSetting): void;
+}
+
+function Page({ sheet, grid, notice, saveStatus, locale, theme, onGrid, onLocale, onTheme }: PageProps) {
+  const resolved = useResolvedTheme(theme);
   const reset = async (): Promise<void> => {
-    if (!window.confirm('Discard the saved sheet and start a blank one?')) return;
+    if (!window.confirm(locale === 'vi' ? 'Xóa bảng đã lưu và bắt đầu bảng trống?' : 'Discard the saved sheet and start a blank one?')) return;
     await clearSnapshot();
     location.reload();
   };
+  const t = locale === 'vi'
+    ? { saving: 'Đang lưu…', saved: 'Đã lưu', error: 'Không lưu được', reset: 'Đặt lại', sample: 'Nạp mẫu 1M × 100', language: 'Ngôn ngữ', theme: 'Giao diện', auto: 'Tự động', light: 'Sáng', dark: 'Tối' }
+    : { saving: 'Saving…', saved: 'Saved', error: 'Could not save', reset: 'Reset', sample: 'Load 1M × 100 sample', language: 'Language', theme: 'Theme', auto: 'Auto', light: 'Light', dark: 'Dark' };
   return (
-    <div style={{ height: '100%', display: 'flex', flexDirection: 'column' }}>
+    <div style={{ height: '100%', display: 'flex', flexDirection: 'column', background: resolved === 'dark' ? '#1b1d21' : '#fff' }}>
       <Toolbar sheet={sheet} onAction={() => window.__grid?.editor.focus()} />
       <FormulaBar sheet={sheet} grid={grid} />
       <div style={{ flex: 1, minHeight: 0 }}>
@@ -92,30 +177,57 @@ function App({ sheet, notice }: { sheet: Spreadsheet; notice: string | null }) {
           frozenCols={sample ? 1 : 0}
           onReady={(controller) => {
             window.__grid = controller;
-            setGrid(controller);
+            onGrid(controller);
           }}
         />
       </div>
-      <div style={{ display: 'flex', alignItems: 'stretch', background: '#f8f9fb', borderTop: '1px solid #e1e4e8' }}>
+      <div className="rdg-chrome" data-rdg-theme={resolved} style={{ display: 'flex', alignItems: 'stretch', borderTop: '1px solid var(--rdg-border)' }}>
         <div style={{ flex: 1, minWidth: 0 }}>
           <StatusBar sheet={sheet} />
         </div>
-        <span data-testid="save-status" style={{ ...linkStyle, color: saveStatus === 'error' ? '#d93025' : '#656d76', alignSelf: 'center' }}>
-          {notice ?? (saveStatus === 'saving' ? 'Saving…' : saveStatus === 'saved' ? 'Saved' : saveStatus === 'error' ? 'Could not save' : '')}
+        <span data-testid="save-status" style={{ ...footerButton, color: saveStatus === 'error' ? '#d93025' : 'var(--rdg-muted)', alignSelf: 'center' }}>
+          {notice ?? (saveStatus === 'saving' ? t.saving : saveStatus === 'saved' ? t.saved : saveStatus === 'error' ? t.error : '')}
         </span>
+        <label style={{ alignSelf: 'center', font: '12px system-ui, sans-serif', color: 'var(--rdg-muted)' }}>
+          {t.language}
+          <select aria-label="Language" style={footerSelect} value={locale} onChange={(e) => onLocale(e.target.value as Locale)}>
+            <option value="en">English</option>
+            <option value="vi">Tiếng Việt</option>
+          </select>
+        </label>
+        <label style={{ alignSelf: 'center', font: '12px system-ui, sans-serif', color: 'var(--rdg-muted)' }}>
+          {t.theme}
+          <select aria-label="Theme" style={footerSelect} value={theme} onChange={(e) => onTheme(e.target.value as ThemeSetting)}>
+            <option value="auto">{t.auto}</option>
+            <option value="light">{t.light}</option>
+            <option value="dark">{t.dark}</option>
+          </select>
+        </label>
         {persistent && (
-          <button type="button" style={linkStyle} onClick={() => void reset()}>
-            Reset
+          <button type="button" style={footerButton} onClick={() => void reset()}>
+            {t.reset}
           </button>
         )}
         {!sample && (
-          <a href="?mode=sample" style={linkStyle}>
-            Load 1M × 100 sample
+          <a href="?mode=sample" style={footerButton}>
+            {t.sample}
           </a>
         )}
       </div>
     </div>
   );
+}
+
+/** The demo page needs to know the effective theme (to color its own background), including "auto". */
+function useResolvedTheme(setting: ThemeSetting): 'light' | 'dark' {
+  const [dark, setDark] = useState(() => window.matchMedia('(prefers-color-scheme: dark)').matches);
+  useEffect(() => {
+    const query = window.matchMedia('(prefers-color-scheme: dark)');
+    const update = (): void => setDark(query.matches);
+    query.addEventListener('change', update);
+    return () => query.removeEventListener('change', update);
+  }, []);
+  return setting === 'auto' ? (dark ? 'dark' : 'light') : setting;
 }
 
 void createSheet().then(({ sheet, notice }) => {
