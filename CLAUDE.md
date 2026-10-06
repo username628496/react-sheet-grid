@@ -130,8 +130,8 @@ docs/
 ### Tuần 2: Tính năng spreadsheet
 - [x] Copy/cut/paste trong grid và với Excel/Google Sheets
 - [ ] Fill handle: copy giá trị và chuỗi số đơn giản
-- [ ] Formula engine: tokenizer, parser, evaluator, dependency graph
-- [ ] Hàm: `SUM`, `AVERAGE`, `COUNT`, `MIN`, `MAX`, `IF`, `ROUND`, `CONCAT`, `SUMIF`, `COUNTIF`, `VLOOKUP`
+- [x] Formula engine: tokenizer, parser, evaluator, dependency graph
+- [x] Hàm: `SUM`, `AVERAGE`, `COUNT`, `MIN`, `MAX`, `IF`, `ROUND`, `CONCAT`, `SUMIF`, `COUNTIF`, `VLOOKUP`
 - [ ] Copy/fill công thức với tham chiếu tương đối và `$` tuyệt đối
 - [ ] Định dạng: đậm, nghiêng, màu chữ, màu nền, căn lề, định dạng số cơ bản
 - [ ] Sort theo cột, filter đơn giản theo giá trị

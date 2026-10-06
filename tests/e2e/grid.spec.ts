@@ -323,3 +323,35 @@ test.describe('clipboard', () => {
     expect(await cellValue(page, 1, 0)).toBeNull();
   });
 });
+
+test.describe('formulas', () => {
+  test('typing a formula computes it, shows the formula when editing and updates dependents', async ({ page }) => {
+    await clickCell(page, 0, 0);
+    await page.keyboard.type('2');
+    await page.keyboard.press('Enter');
+    await page.keyboard.type('3');
+    await page.keyboard.press('Enter');
+    await page.keyboard.type('=SUM(A1:A2)*2');
+    await page.keyboard.press('Enter');
+    expect(await cellValue(page, 2, 0)).toBe(10);
+    await clickCell(page, 0, 0);
+    await page.keyboard.type('10');
+    await page.keyboard.press('Enter');
+    expect(await cellValue(page, 2, 0)).toBe(26);
+    await clickCell(page, 2, 0);
+    await page.keyboard.press('F2');
+    expect(await page.evaluate(() => window.__grid!.editor.text)).toBe('=SUM(A1:A2)*2');
+    await page.keyboard.press('Escape');
+    await page.keyboard.press(`${mod}+z`); // undoes A1 = 10, so the formula goes back to 10
+    expect(await cellValue(page, 2, 0)).toBe(10);
+    await page.keyboard.press(`${mod}+z`); // undoes entering the formula itself
+    expect(await cellValue(page, 2, 0)).toBeNull();
+  });
+
+  test('a formula typed with the Vietnamese ; separator works', async ({ page }) => {
+    await clickCell(page, 0, 0);
+    await page.keyboard.type('=IF(1>0;"có";"không")');
+    await page.keyboard.press('Enter');
+    expect(await cellValue(page, 0, 0)).toBe('có');
+  });
+});

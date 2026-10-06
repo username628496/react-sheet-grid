@@ -1,5 +1,6 @@
 import type { Cell } from '../core/model/Cell';
 import { formatValue } from '../core/model/format';
+import { rebaseFormula } from '../formula/transform';
 import type { ViewRange } from '../core/selection/SelectionModel';
 import type { Spreadsheet } from '../core/Spreadsheet';
 import { parseHtmlTable, parseTsv, toHtmlTable, toTsv } from './clipboard';
@@ -121,7 +122,19 @@ export class ClipboardController {
     const clip = this.clip;
     if (clip !== null && text !== '' && text === clip.text) {
       // Our own copy: keep formulas and formatting instead of round-tripping through text.
-      sheet.pasteMatrix(clip.rows, clip.cols, (i, j) => (clip.cells[i]?.[j] as Cell), clip.cut ? clip.source : null);
+      sheet.pasteMatrix(
+        clip.rows,
+        clip.cols,
+        (i, j, _existing, dataRow, dataCol) => {
+          const cell = clip.cells[i]?.[j] as Cell;
+          if (!clip.cut || cell.formula === undefined) return cell; // a copied formula adapts to its new place via relative refs
+          // A moved formula keeps pointing at the same cells, so it is rebased rather than shifted.
+          const fromRow = sheet.mapping.toDataRow(clip.source.startRow + i);
+          const fromCol = sheet.mapping.toDataCol(clip.source.startCol + j);
+          return { ...cell, formula: rebaseFormula(cell.formula, fromRow, fromCol, dataRow, dataCol) };
+        },
+        clip.cut ? clip.source : null,
+      );
       if (clip.cut) {
         this.clip = null;
         this.marquee = null;

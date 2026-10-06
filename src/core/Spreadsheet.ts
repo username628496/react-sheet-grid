@@ -1,12 +1,15 @@
 import type { Command } from './commands/Command';
 import { type CellChange, SetCellsCommand } from './commands/SetCellsCommand';
+import { FormulaEngine } from '../formula/engine';
+import { parseFormulaSafe } from '../formula/parser';
+import { printFormula } from '../formula/print';
 import { History } from './history/History';
 import { AxisLayout } from './layout/AxisLayout';
 import { ViewMapping } from './mapping/ViewMapping';
 import type { Cell } from './model/Cell';
 import { formatValue } from './model/format';
 import { parseInput } from './model/parseInput';
-import { SheetModel } from './model/SheetModel';
+import { cellKey, SheetModel } from './model/SheetModel';
 import { type Style, StyleTable } from './model/StyleTable';
 import { SelectionModel, type ViewRange } from './selection/SelectionModel';
 
@@ -34,9 +37,12 @@ export class Spreadsheet {
   readonly mapping: ViewMapping;
   readonly rows: AxisLayout;
   readonly cols: AxisLayout;
+  readonly engine: FormulaEngine;
   readonly history = new History();
   readonly selection: SelectionModel;
   private readonly listeners = new Set<Listener>();
+  /** Data keys written since the last recalculation. Only tracked while formulas exist (or one is being added). */
+  private readonly dirty = new Set<number>();
 
   constructor(options: SpreadsheetOptions = {}) {
     const rowCount = options.rowCount ?? 1000;
@@ -45,6 +51,24 @@ export class Spreadsheet {
     this.rows = new AxisLayout(rowCount, options.defaultRowHeight ?? 21);
     this.cols = new AxisLayout(colCount, options.defaultColWidth ?? 100);
     this.selection = new SelectionModel(this, () => this.notify());
+    this.engine = new FormulaEngine(this.model);
+    this.model.onCellChange = (dataRow, dataCol, cell) => {
+      if (cell.formula !== undefined || this.engine.hasFormulas) this.dirty.add(cellKey(dataRow, dataCol));
+    };
+  }
+
+  /** Recomputes formulas affected by writes since the last call. Commands run this after apply and invert. */
+  private flushFormulas(): void {
+    if (this.dirty.size === 0) return;
+    this.engine.recalc(this.dirty);
+    this.dirty.clear();
+  }
+
+  /** Recomputes every formula; call after loading data straight into the model. */
+  recalculateAll(): void {
+    this.dirty.clear();
+    this.engine.rebuildAll();
+    this.notify();
   }
 
   get rowCount(): number {
@@ -75,7 +99,11 @@ export class Spreadsheet {
 
   /** What the editor should show when editing starts. */
   getEditText(viewRow: number, viewCol: number): string {
-    const { value } = this.getCellByView(viewRow, viewCol);
+    const cell = this.getCellByView(viewRow, viewCol);
+    if (cell.formula !== undefined) {
+      return printFormula(cell.formula, this.mapping.toDataRow(viewRow), this.mapping.toDataCol(viewCol));
+    }
+    const { value } = cell;
     if (value === null) return '';
     if (typeof value === 'string') {
       // Text that would parse as something else needs the apostrophe to survive a round trip.
@@ -86,19 +114,34 @@ export class Spreadsheet {
 
   execute(command: Command): void {
     this.history.execute(command, this);
+    this.flushFormulas();
     this.notify();
   }
 
   undo(): boolean {
     const done = this.history.undo(this);
-    if (done) this.notify();
+    if (done) {
+      this.flushFormulas();
+      this.notify();
+    }
     return done;
   }
 
   redo(): boolean {
     const done = this.history.redo(this);
-    if (done) this.notify();
+    if (done) {
+      this.flushFormulas();
+      this.notify();
+    }
     return done;
+  }
+
+  /** Turns what the user typed into a cell: `=...` becomes a formula (stored relative to its position), anything else a value. */
+  cellFromInput(text: string, dataRow: number, dataCol: number, styleId: number): Cell {
+    if (text.length > 1 && text.startsWith('=')) {
+      return { value: null, styleId, formula: parseFormulaSafe(text, dataRow, dataCol) };
+    }
+    return { value: parseInput(text), styleId };
   }
 
   /** Visits stored cells inside a view range, giving data coordinates. Cost scales with stored cells, never with range area. */
@@ -127,7 +170,7 @@ export class Spreadsheet {
     const dataRow = this.mapping.toDataRow(viewRow);
     const dataCol = this.mapping.toDataCol(viewCol);
     const old = this.model.getCell(dataRow, dataCol);
-    const change: CellChange = { dataRow, dataCol, cell: { value: parseInput(text), styleId: old.styleId } };
+    const change: CellChange = { dataRow, dataCol, cell: this.cellFromInput(text, dataRow, dataCol, old.styleId) };
     this.execute(new SetCellsCommand('Edit cell', [change]));
   }
 
@@ -176,7 +219,7 @@ export class Spreadsheet {
     const changes: CellChange[] = targets.map((t) => ({
       dataRow: t.dataRow,
       dataCol: t.dataCol,
-      cell: { value: t.cell.value, styleId: this.styles.derive(t.cell.styleId, patch) },
+      cell: { ...t.cell, styleId: this.styles.derive(t.cell.styleId, patch) },
     }));
     this.execute(new SetCellsCommand(label, changes));
   }
@@ -225,7 +268,7 @@ export class Spreadsheet {
   pasteMatrix(
     rows: number,
     cols: number,
-    make: (i: number, j: number, existing: Cell) => Cell,
+    make: (i: number, j: number, existing: Cell, dataRow: number, dataCol: number) => Cell,
     cutFrom: ViewRange | null = null,
   ): ViewRange | null {
     if (rows === 0 || cols === 0) return null;
@@ -251,7 +294,7 @@ export class Spreadsheet {
       const dataRow = this.mapping.toDataRow(r);
       for (let c = startCol; c <= endCol; c++) {
         const dataCol = this.mapping.toDataCol(c);
-        const cell = make((r - startRow) % rows, (c - startCol) % cols, this.model.getCell(dataRow, dataCol));
+        const cell = make((r - startRow) % rows, (c - startCol) % cols, this.model.getCell(dataRow, dataCol), dataRow, dataCol);
         changes.push({ dataRow, dataCol, cell });
       }
     }
@@ -265,10 +308,9 @@ export class Spreadsheet {
   pasteText(matrix: readonly (readonly string[])[]): ViewRange | null {
     const rows = matrix.length;
     const cols = matrix.reduce((w, r) => Math.max(w, r.length), 0);
-    return this.pasteMatrix(rows, cols, (i, j, existing) => ({
-      value: parseInput(matrix[i]?.[j] ?? ''),
-      styleId: existing.styleId,
-    }));
+    return this.pasteMatrix(rows, cols, (i, j, existing, dataRow, dataCol) =>
+      this.cellFromInput(matrix[i]?.[j] ?? '', dataRow, dataCol, existing.styleId),
+    );
   }
 
   /** Delete key: removes contents of every selected range but keeps formatting. */
@@ -276,7 +318,9 @@ export class Spreadsheet {
     const changes: CellChange[] = [];
     for (const range of this.selection.allRanges) {
       this.forEachStoredCellInViewRange(range, (dataRow, dataCol, cell) => {
-        if (cell.value !== null) changes.push({ dataRow, dataCol, cell: { value: null, styleId: cell.styleId } });
+        if (cell.value !== null || cell.formula !== undefined) {
+          changes.push({ dataRow, dataCol, cell: { value: null, styleId: cell.styleId } });
+        }
       });
     }
     if (changes.length > 0) this.execute(new SetCellsCommand('Clear', changes));

@@ -15,9 +15,19 @@ const EMPTY_CELL: Cell = Object.freeze({ value: null, styleId: DEFAULT_STYLE_ID 
 
 // Row * MAX_COLS + col stays below 2^34, exactly representable as a double,
 // and a numeric Map key avoids allocating a string per lookup.
-function keyOf(dataRow: number, dataCol: number): number {
+export function cellKey(dataRow: number, dataCol: number): number {
   return dataRow * MAX_COLS + dataCol;
 }
+
+export function keyRow(key: number): number {
+  return Math.floor(key / MAX_COLS);
+}
+
+export function keyCol(key: number): number {
+  return key - keyRow(key) * MAX_COLS;
+}
+
+const keyOf = cellKey;
 
 function assertInBounds(dataRow: number, dataCol: number): void {
   if (
@@ -39,6 +49,9 @@ function assertInBounds(dataRow: number, dataCol: number): void {
 export class SheetModel {
   private readonly cells = new Map<number, Cell>();
 
+  /** Fired after every write so the formula engine can learn what to recompute. */
+  onCellChange: ((dataRow: number, dataCol: number, cell: Cell) => void) | null = null;
+
   get cellCount(): number {
     return this.cells.size;
   }
@@ -56,11 +69,26 @@ export class SheetModel {
     assertInBounds(dataRow, dataCol);
     const key = keyOf(dataRow, dataCol);
     if (isEmptyCell(cell)) this.cells.delete(key);
-    else this.cells.set(key, { value: cell.value, styleId: cell.styleId });
+    else {
+      this.cells.set(
+        key,
+        cell.formula === undefined
+          ? { value: cell.value, styleId: cell.styleId }
+          : { value: cell.value, styleId: cell.styleId, formula: cell.formula },
+      );
+    }
+    this.onCellChange?.(dataRow, dataCol, cell);
   }
 
   deleteCell(dataRow: number, dataCol: number): void {
-    this.cells.delete(keyOf(dataRow, dataCol));
+    if (this.cells.delete(keyOf(dataRow, dataCol))) this.onCellChange?.(dataRow, dataCol, EMPTY_CELL);
+  }
+
+  /** Stores a formula's result without signalling a change (the engine is the one writing it). */
+  setComputedValue(dataRow: number, dataCol: number, value: Cell['value']): void {
+    const key = keyOf(dataRow, dataCol);
+    const cell = this.cells.get(key);
+    if (cell !== undefined) this.cells.set(key, { ...cell, value });
   }
 
   /** Visits every stored cell in no particular order. */

@@ -12,6 +12,8 @@
 - Resize cột/dòng bằng kéo chuột (resize nhiều cột khi đang chọn cả cột).
 - 20 e2e test (Chromium) và 92 unit test.
 - Copy/cut/paste: ghi `text/plain` (TSV có quote) và `text/html` (`<table>` kèm style), paste ưu tiên `text/html` rồi `text/plain`. Dán lặp ô khi vùng chọn là bội số của vùng copy. Cut chỉ xóa nguồn khi paste (như Sheets), cả hai trong một bước undo. Viền đứt quanh vùng đã copy.
+- Formula engine: tokenizer, parser (A1 → AST tương đối), printer (AST → A1), evaluator, dependency graph, tính lại theo thứ tự topo, phát hiện vòng. Hàm: `SUM`, `AVERAGE`, `COUNT`, `MIN`, `MAX`, `IF`, `ROUND`, `CONCAT`, `SUMIF`, `COUNTIF`, `VLOOKUP`. Có tham chiếu `A:A`, `1:1`, `$`, dấu `;` làm phân cách tham số (locale tiếng Việt).
+- 401 unit test (trong đó ~300 test công thức theo bảng) và 28 e2e (Chromium).
 
 ## Quyết định kỹ thuật
 - Một `<textarea>` ẩn giữ focus mọi lúc và đồng thời là editor ô (`CellEditor.tsx` render, `EditorController` điều khiển). Gõ ký tự khi đang chọn ô chỉ đổi style textarea rồi để trình duyệt chèn ký tự mặc định, nên không mất ký tự đầu. IME vào edit qua `compositionstart`. Textarea luôn nằm đè lên ô active để cửa sổ gợi ý IME hiện đúng chỗ.
@@ -35,6 +37,13 @@
 - `visibleRange` ghi vào object do caller truyền để vòng vẽ không cấp phát.
 - Copy nội bộ giữ nguyên `Cell` (công thức + style) nhận biết qua so sánh `text/plain` với bản đã ghi; dữ liệu từ app khác đi qua parse HTML/TSV. Parse HTML bằng regex (không cần DOM) để chạy được trong Node; ô gộp (`colspan`) chưa được mở rộng.
 - `readCells` cắt theo vùng dữ liệu khi vùng chọn > 100.000 ô, để copy cả cột không tạo ma trận 1M dòng.
+- Công thức lưu là cây AST bất biến với tham chiếu tương đối (offset), nên copy/fill chỉ chia sẻ cây; `$` lưu chỉ số tuyệt đối. Tham chiếu theo tọa độ dữ liệu (`dataRow`/`dataCol`) nên sort chỉ đổi mapping không làm công thức trỏ sai.
+- Kết quả công thức cache trong `Cell.value`; `SheetModel.onCellChange` ghi nhận ô bị đổi (chỉ khi đang có công thức), `Spreadsheet` tính lại sau mỗi `execute`/`undo`/`redo`. Nạp dữ liệu thẳng vào model thì gọi `recalculateAll()`.
+- Tính lại: BFS tìm mọi ô phụ thuộc rồi sắp xếp Kahn; ô còn sót (nằm trên hoặc sau một vòng) nhận `#REF!` như Sheets.
+- Tham chiếu một ô khi làm đối số hàm được truyền như range 1×1 để `SUM(A1)` bỏ qua chữ giống Sheets; `IF` đánh giá lười.
+- Công thức sai cú pháp lưu thành `#ERROR!` kèm nguyên văn để sửa lại được.
+- Cut-paste công thức dùng `rebaseFormula` (giữ nguyên ô được trỏ tới) còn copy dùng tham chiếu tương đối. Tham chiếu từ ô khác tới vùng bị cut chưa được cập nhật.
+- `toNumber("")` = 0 (theo Sheets); `COUNTIF(range,"<>x")` đếm cả ô trống.
 
 ## Lỗi đã biết
 - Firefox và WebKit chưa chạy được e2e trong môi trường này (không tải được binary Playwright). Cần chạy `pnpm exec playwright install` rồi `pnpm test:e2e` trên máy bạn.
@@ -42,4 +51,4 @@
 - `setSize` đánh dấu prefix sum bẩn, mỗi lần truy vấn sau đó tốn O(k) (k = số override). Cần chú ý khi kéo resize với rất nhiều override.
 
 ## Việc tiếp theo
-- Formula engine: tokenizer, parser, evaluator, dependency graph.
+- Copy/fill công thức (fill handle) và định dạng, sort/filter, chèn/xóa dòng/cột, context menu, thanh thống kê.
