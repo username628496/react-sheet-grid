@@ -3,6 +3,7 @@ import type { Spreadsheet } from '../core/Spreadsheet';
 import { GridController } from '../input/GridController';
 import { GridSurface } from '../render/GridSurface';
 import { CellEditor } from './CellEditor';
+import { ChromeStyles } from './chrome';
 import { ContextMenu } from './ContextMenu';
 import { FilterDialog } from './FilterDialog';
 import { ShortcutsDialog } from './ShortcutsDialog';
@@ -64,6 +65,7 @@ export function DataGrid({ sheet, frozenRows = 0, frozenCols = 0, className, sty
 
   return (
     <>
+      <ChromeStyles />
       <div ref={mountRef} className={className} style={{ width: '100%', height: '100%', ...style }} data-testid="grid">
         <CellEditor ref={editorRef} />
       </div>

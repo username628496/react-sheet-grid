@@ -1,7 +1,10 @@
-import { type CSSProperties, useEffect, useLayoutEffect, useRef, useState } from 'react';
+import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { columnLabel } from '../core/model/address';
 import type { GridController } from '../input/GridController';
+import { ChromeStyles } from './chrome';
+import { useMessages, useTheme } from './GridProvider';
+import type { Messages } from './messages';
 
 interface Item {
   label: string;
@@ -16,25 +19,8 @@ type Entry = Item | 'separator';
 const isMac = typeof navigator !== 'undefined' && /Mac|iPhone|iPad/.test(navigator.platform);
 const MOD = isMac ? '⌘' : 'Ctrl+';
 
-const menuStyle: CSSProperties = {
-  position: 'fixed',
-  zIndex: 1000,
-  minWidth: 240,
-  padding: '6px 0',
-  background: '#fff',
-  border: '1px solid #dadce0',
-  borderRadius: 6,
-  boxShadow: '0 2px 10px rgba(0,0,0,0.2)',
-  fontFamily: 'Arial, sans-serif',
-  fontSize: 13,
-};
-
-function plural(n: number, word: string): string {
-  return `${n} ${word}${n === 1 ? '' : 's'}`;
-}
-
 /** Builds the menu for the current selection: whole-column / whole-row selections show only their own axis. */
-export function buildMenuEntries(controller: GridController, openFilter: (viewCol: number) => void): Entry[] {
+export function buildMenuEntries(controller: GridController, openFilter: (viewCol: number) => void, m: Messages): Entry[] {
   const { sheet } = controller;
   const p = sheet.selection.primary;
   const rows = p.endRow - p.startRow + 1;
@@ -44,39 +30,39 @@ export function buildMenuEntries(controller: GridController, openFilter: (viewCo
   const col = sheet.selection.activeCol;
   const colName = columnLabel(sheet.mapping.toDataCol(col));
   const entries: Entry[] = [
-    { label: 'Cut', shortcut: `${MOD}X`, run: () => controller.clipboard.exec('cut') },
-    { label: 'Copy', shortcut: `${MOD}C`, run: () => controller.clipboard.exec('copy') },
-    { label: 'Paste', shortcut: `${MOD}V`, run: () => void controller.clipboard.pasteFromSystem() },
+    { label: m.cut, shortcut: `${MOD}X`, run: () => controller.clipboard.exec('cut') },
+    { label: m.copy, shortcut: `${MOD}C`, run: () => controller.clipboard.exec('copy') },
+    { label: m.paste, shortcut: `${MOD}V`, run: () => void controller.clipboard.pasteFromSystem() },
     'separator',
   ];
   const structure = (label: string, run: () => void): Item => ({ label, run });
   if (!wholeCols) {
     entries.push(
-      structure(`Insert ${plural(rows, 'row')} above`, () => sheet.insertRows(p.startRow, rows)),
-      structure(`Insert ${plural(rows, 'row')} below`, () => sheet.insertRows(p.endRow + 1, rows)),
+      structure(m.insertRowsAbove(rows), () => sheet.insertRows(p.startRow, rows)),
+      structure(m.insertRowsBelow(rows), () => sheet.insertRows(p.endRow + 1, rows)),
     );
   }
   if (!wholeRows) {
     entries.push(
-      structure(`Insert ${plural(cols, 'column')} left`, () => sheet.insertCols(p.startCol, cols)),
-      structure(`Insert ${plural(cols, 'column')} right`, () => sheet.insertCols(p.endCol + 1, cols)),
+      structure(m.insertColsLeft(cols), () => sheet.insertCols(p.startCol, cols)),
+      structure(m.insertColsRight(cols), () => sheet.insertCols(p.endCol + 1, cols)),
     );
   }
-  if (!wholeCols) entries.push(structure(`Delete ${rows === 1 ? `row ${p.startRow + 1}` : `rows ${p.startRow + 1}–${p.endRow + 1}`}`, () => sheet.deleteRows(p.startRow, rows)));
+  if (!wholeCols) entries.push(structure(m.deleteRows(p.startRow + 1, p.endRow + 1), () => sheet.deleteRows(p.startRow, rows)));
   if (!wholeRows) {
     const a = columnLabel(sheet.mapping.toDataCol(p.startCol));
     const b = columnLabel(sheet.mapping.toDataCol(p.endCol));
-    entries.push(structure(`Delete ${cols === 1 ? `column ${a}` : `columns ${a}–${b}`}`, () => sheet.deleteCols(p.startCol, cols)));
+    entries.push(structure(m.deleteCols(a, b), () => sheet.deleteCols(p.startCol, cols)));
   }
-  entries.push({ label: 'Clear contents', shortcut: 'Del', run: () => sheet.clearSelection() }, 'separator');
+  entries.push({ label: m.clearContents, shortcut: 'Del', run: () => sheet.clearSelection() }, 'separator');
   entries.push(
-    { label: `Sort sheet by column ${colName}, A → Z`, run: () => sheet.sortByColumn(col, true) },
-    { label: `Sort sheet by column ${colName}, Z → A`, run: () => sheet.sortByColumn(col, false) },
+    { label: m.sortSheetAsc(colName), run: () => sheet.sortByColumn(col, true) },
+    { label: m.sortSheetDesc(colName), run: () => sheet.sortByColumn(col, false) },
   );
-  if (sheet.viewState.sort !== null) entries.push({ label: 'Remove sort', run: () => sheet.clearSort() });
-  entries.push({ label: `Filter column ${colName} by values…`, run: () => openFilter(col) });
-  if (sheet.isColumnFiltered(col)) entries.push({ label: `Remove filter on column ${colName}`, run: () => sheet.setColumnFilter(col, null) });
-  if (sheet.viewState.filters.size > 1) entries.push({ label: 'Remove all filters', run: () => sheet.clearFilters() });
+  if (sheet.viewState.sort !== null) entries.push({ label: m.removeSort, run: () => sheet.clearSort() });
+  entries.push({ label: m.filterByValues(colName), run: () => openFilter(col) });
+  if (sheet.isColumnFiltered(col)) entries.push({ label: m.removeFilter(colName), run: () => sheet.setColumnFilter(col, null) });
+  if (sheet.viewState.filters.size > 1) entries.push({ label: m.removeAllFilters, run: () => sheet.clearFilters() });
   return entries;
 }
 
@@ -90,10 +76,12 @@ interface ContextMenuProps {
 
 export function ContextMenu({ controller, x, y, onClose, onFilter }: ContextMenuProps) {
   const ref = useRef<HTMLDivElement>(null);
+  const m = useMessages();
+  const theme = useTheme();
   const [active, setActive] = useState(-1);
   const [pos, setPos] = useState({ x, y });
   // Built once per opening: the selection cannot change while the menu is up.
-  const [entries] = useState(() => buildMenuEntries(controller, (col) => onFilter(col, x, y)));
+  const [entries] = useState(() => buildMenuEntries(controller, (col) => onFilter(col, x, y), m));
   const items = entries.filter((e): e is Item => e !== 'separator');
 
   // Keep the menu on screen.
@@ -152,15 +140,18 @@ export function ContextMenu({ controller, x, y, onClose, onFilter }: ContextMenu
     <div
       ref={ref}
       role="menu"
-      aria-label="Cell menu"
+      aria-label={m.cellMenu}
       tabIndex={-1}
       data-testid="context-menu"
-      style={{ ...menuStyle, left: pos.x, top: pos.y, outline: 'none' }}
+      data-rdg-theme={theme}
+      className="rdg-chrome rdg-popup rdg-menu"
+      style={{ left: pos.x, top: pos.y }}
       onKeyDown={onKeyDown}
       onContextMenu={(e) => e.preventDefault()}
     >
+      <ChromeStyles />
       {entries.map((entry, i) => {
-        if (entry === 'separator') return <div key={`s${i}`} role="separator" style={{ height: 1, background: '#e0e0e0', margin: '6px 0' }} />;
+        if (entry === 'separator') return <div key={`s${i}`} role="separator" className="rdg-menusep" />;
         index++;
         const myIndex = index;
         return (
@@ -168,26 +159,15 @@ export function ContextMenu({ controller, x, y, onClose, onFilter }: ContextMenu
             key={entry.label}
             type="button"
             role="menuitem"
+            className="rdg-menuitem"
+            data-active={active === myIndex}
             disabled={entry.disabled}
             title={entry.title}
             onMouseEnter={() => setActive(myIndex)}
             onClick={() => activate(entry)}
-            style={{
-              display: 'flex',
-              justifyContent: 'space-between',
-              gap: 24,
-              width: '100%',
-              padding: '6px 16px',
-              border: 0,
-              background: active === myIndex && entry.disabled !== true ? '#f1f3f4' : 'transparent',
-              color: entry.disabled === true ? '#9aa0a6' : '#202124',
-              cursor: entry.disabled === true ? 'default' : 'pointer',
-              font: 'inherit',
-              textAlign: 'left',
-            }}
           >
             <span>{entry.label}</span>
-            {entry.shortcut !== undefined && <span style={{ color: '#5f6368' }}>{entry.shortcut}</span>}
+            {entry.shortcut !== undefined && <span className="rdg-hint">{entry.shortcut}</span>}
           </button>
         );
       })}

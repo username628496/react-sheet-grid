@@ -7,3 +7,5 @@ export { Toolbar } from './react/Toolbar';
 export { StatusBar } from './react/StatusBar';
 export { ContextMenu } from './react/ContextMenu';
 export { FormulaBar } from './react/FormulaBar';
+export { GridProvider, useMessages, type ThemeSetting } from './react/GridProvider';
+export { MESSAGES, type Locale, type Messages } from './react/messages';

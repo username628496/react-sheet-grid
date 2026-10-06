@@ -2,18 +2,22 @@ import { type KeyboardEvent, type ReactNode, useEffect, useRef, useState, useSyn
 import type { Spreadsheet } from '../core/Spreadsheet';
 import type { HorizontalAlign, Style } from '../core/model/StyleTable';
 import { ChromeStyles } from './chrome';
+import { useMessages, useTheme } from './GridProvider';
 import { Icon, type IconName } from './icons';
+import type { Messages } from './messages';
 
-const NUMBER_FORMAT_OPTIONS: ReadonlyArray<{ value: string; label: string }> = [
-  { value: '', label: 'Automatic' },
-  { value: '0', label: 'Number (1235)' },
-  { value: '0.00', label: 'Number (1234.57)' },
-  { value: '#,##0', label: 'Number (1,235)' },
-  { value: '#,##0.00', label: 'Number (1,234.57)' },
-  { value: '0%', label: 'Percent (26%)' },
-  { value: '0.00%', label: 'Percent (25.67%)' },
-  { value: '$#,##0.00', label: 'Currency ($1,234.57)' },
-];
+function numberFormatOptions(m: Messages): ReadonlyArray<{ value: string; label: string }> {
+  return [
+    { value: '', label: m.formatAutomatic },
+    { value: '0', label: m.formatNumber('1235') },
+    { value: '0.00', label: m.formatNumber('1234.57') },
+    { value: '#,##0', label: m.formatNumber('1,235') },
+    { value: '#,##0.00', label: m.formatNumber('1,234.57') },
+    { value: '0%', label: m.formatPercent('26%') },
+    { value: '0.00%', label: m.formatPercent('25.67%') },
+    { value: '$#,##0.00', label: m.formatCurrency('$1,234.57') },
+  ];
+}
 
 const IS_MAC = typeof navigator !== 'undefined' && /Mac|iPhone|iPad/.test(navigator.platform);
 
@@ -55,6 +59,8 @@ export function Toolbar({ sheet, onAction }: ToolbarProps) {
     (listener) => sheet.subscribe(listener),
     () => snapshot(sheet),
   );
+  const m = useMessages();
+  const theme = useTheme();
   const { canUndo, canRedo, style, rows, cols } = parse(raw);
   const [notice, setNotice] = useState<string | null>(null);
   useEffect(() => {
@@ -101,28 +107,28 @@ export function Toolbar({ sheet, onAction }: ToolbarProps) {
   );
 
   return (
-    <div className="rdg-chrome rdg-toolbar-wrap">
+    <div className="rdg-chrome rdg-toolbar-wrap" data-rdg-theme={theme}>
     <ChromeStyles />
-    <div role="toolbar" aria-label="Formatting" aria-orientation="horizontal" className="rdg-toolbar" data-testid="toolbar" onKeyDown={onKeyDown}>
-      <div className="rdg-group" role="group" aria-label="History">
-        {button('undo', 'Undo', 'Mod+Z', undefined, () => sheet.undo(), !canUndo)}
-        {button('redo', 'Redo', 'Mod+Y', undefined, () => sheet.redo(), !canRedo)}
-        {button('clearFormat', 'Clear formatting', 'Mod+\\', undefined, () => sheet.clearFormatting())}
+    <div role="toolbar" aria-label={m.toolbar} aria-orientation="horizontal" className="rdg-toolbar" data-testid="toolbar" onKeyDown={onKeyDown}>
+      <div className="rdg-group" role="group" aria-label={m.groupHistory}>
+        {button('undo', m.undo, 'Mod+Z', undefined, () => sheet.undo(), !canUndo)}
+        {button('redo', m.redo, 'Mod+Y', undefined, () => sheet.redo(), !canRedo)}
+        {button('clearFormat', m.clearFormatting, 'Mod+\\', undefined, () => sheet.clearFormatting())}
       </div>
       <span className="rdg-sep" aria-hidden />
-      <div className="rdg-group" role="group" aria-label="Sort">
-        {button('sortAsc', 'Sort A to Z', undefined, undefined, () => sheet.sortByColumn(sheet.selection.activeCol, true))}
-        {button('sortDesc', 'Sort Z to A', undefined, undefined, () => sheet.sortByColumn(sheet.selection.activeCol, false))}
+      <div className="rdg-group" role="group" aria-label={m.groupSort}>
+        {button('sortAsc', m.sortAsc, undefined, undefined, () => sheet.sortByColumn(sheet.selection.activeCol, true))}
+        {button('sortDesc', m.sortDesc, undefined, undefined, () => sheet.sortByColumn(sheet.selection.activeCol, false))}
       </div>
       <span className="rdg-sep" aria-hidden />
-      <div className="rdg-group" role="group" aria-label="Text style">
-        {button('bold', 'Bold', 'Mod+B', style.bold === true, () => sheet.toggleStyle('bold'))}
-        {button('italic', 'Italic', 'Mod+I', style.italic === true, () => sheet.toggleStyle('italic'))}
-        {button('underline', 'Underline', 'Mod+U', style.underline === true, () => sheet.toggleStyle('underline'))}
-        {button('strike', 'Strikethrough', 'Mod+Shift+X', style.strike === true, () => sheet.toggleStyle('strike'))}
+      <div className="rdg-group" role="group" aria-label={m.groupTextStyle}>
+        {button('bold', m.bold, 'Mod+B', style.bold === true, () => sheet.toggleStyle('bold'))}
+        {button('italic', m.italic, 'Mod+I', style.italic === true, () => sheet.toggleStyle('italic'))}
+        {button('underline', m.underline, 'Mod+U', style.underline === true, () => sheet.toggleStyle('underline'))}
+        {button('strike', m.strike, 'Mod+Shift+X', style.strike === true, () => sheet.toggleStyle('strike'))}
         <ColorButton
           icon="textColor"
-          title="Text color"
+          title={m.textColor}
           value={style.color ?? '#1f2328'}
           active={style.color !== undefined}
           onPick={(color) => run(() => sheet.formatSelection({ color }, 'Text color'))}
@@ -130,7 +136,7 @@ export function Toolbar({ sheet, onAction }: ToolbarProps) {
         />
         <ColorButton
           icon="fillColor"
-          title="Fill color"
+          title={m.fillColor}
           value={style.background ?? '#ffffff'}
           active={style.background !== undefined}
           onPick={(background) => run(() => sheet.formatSelection({ background }, 'Fill color'))}
@@ -138,16 +144,16 @@ export function Toolbar({ sheet, onAction }: ToolbarProps) {
         />
       </div>
       <span className="rdg-sep" aria-hidden />
-      <div className="rdg-group" role="group" aria-label="Alignment">
-        {button('alignLeft', 'Align left', 'Mod+Shift+L', style.align === 'left', () => align('left'))}
-        {button('alignCenter', 'Align center', 'Mod+Shift+E', style.align === 'center', () => align('center'))}
-        {button('alignRight', 'Align right', 'Mod+Shift+R', style.align === 'right', () => align('right'))}
+      <div className="rdg-group" role="group" aria-label={m.groupAlignment}>
+        {button('alignLeft', m.alignLeft, 'Mod+Shift+L', style.align === 'left', () => align('left'))}
+        {button('alignCenter', m.alignCenter, 'Mod+Shift+E', style.align === 'center', () => align('center'))}
+        {button('alignRight', m.alignRight, 'Mod+Shift+R', style.align === 'right', () => align('right'))}
       </div>
       <span className="rdg-sep" aria-hidden />
       <select
         className="rdg-select"
-        aria-label="Number format"
-        title="Number format"
+        aria-label={m.numberFormat}
+        title={m.numberFormat}
         value={style.numberFormat ?? ''}
         onMouseDown={(e) => e.stopPropagation()}
         onChange={(e) => {
@@ -155,29 +161,31 @@ export function Toolbar({ sheet, onAction }: ToolbarProps) {
           run(() => sheet.formatSelection({ numberFormat }, 'Number format'));
         }}
       >
-        {NUMBER_FORMAT_OPTIONS.map((o) => (
+        {numberFormatOptions(m).map((o) => (
           <option key={o.value} value={o.value}>
             {o.label}
           </option>
         ))}
       </select>
       <span className="rdg-spacer" />
-      <div className="rdg-group" role="group" aria-label="Sheet size">
+      <div className="rdg-group" role="group" aria-label={m.groupSheetSize}>
         <CountField
-          label="Rows"
+          label={m.rowsLabel}
+          ariaLabel={m.rowCount}
           value={rows}
           onApply={(n) => {
             const { removedCells } = sheet.setRowCount(n);
-            setNotice(removedCells > 0 ? `Removed ${removedCells} filled cell${removedCells === 1 ? '' : 's'}. Undo to restore.` : null);
+            setNotice(removedCells > 0 ? m.removedCells(removedCells) : null);
           }}
           onDone={() => onAction?.()}
         />
         <CountField
-          label="Cols"
+          label={m.colsLabel}
+          ariaLabel={m.colCount}
           value={cols}
           onApply={(n) => {
             const { removedCells } = sheet.setColCount(n);
-            setNotice(removedCells > 0 ? `Removed ${removedCells} filled cell${removedCells === 1 ? '' : 's'}. Undo to restore.` : null);
+            setNotice(removedCells > 0 ? m.removedCells(removedCells) : null);
           }}
           onDone={() => onAction?.()}
         />
@@ -194,6 +202,7 @@ export function Toolbar({ sheet, onAction }: ToolbarProps) {
 
 interface CountFieldProps {
   label: string;
+  ariaLabel: string;
   value: number;
   onApply(n: number): void;
   /** After Enter or Esc, so the host can give focus back to the grid. */
@@ -201,7 +210,7 @@ interface CountFieldProps {
 }
 
 /** A small "Rows [ 50 ]" field: Enter or leaving the field applies the number, Esc or garbage restores the old one. */
-function CountField({ label, value, onApply, onDone }: CountFieldProps) {
+function CountField({ label, ariaLabel, value, onApply, onDone }: CountFieldProps) {
   const [draft, setDraftState] = useState<string | null>(null);
   // Enter applies and then moves focus, which fires blur in the same tick, before React re-renders: the ref makes
   // that second apply see the draft is already consumed.
@@ -222,7 +231,7 @@ function CountField({ label, value, onApply, onDone }: CountFieldProps) {
       <span>{label}</span>
       <input
         className="rdg-count-input"
-        aria-label={label === 'Rows' ? 'Row count' : 'Column count'}
+        aria-label={ariaLabel}
         inputMode="numeric"
         autoComplete="off"
         spellCheck={false}
@@ -257,6 +266,7 @@ interface ColorButtonProps {
 }
 
 function ColorButton({ icon, title, value, active, onPick, onClear }: ColorButtonProps) {
+  const m = useMessages();
   const input = useRef<HTMLInputElement>(null);
   const pick = useRef(onPick);
   pick.current = onPick;
@@ -284,13 +294,13 @@ function ColorButton({ icon, title, value, active, onPick, onClear }: ColorButto
         <Icon name={icon} />
         <span className="rdg-swatch" style={{ ['--rdg-swatch' as string]: value }} />
       </button>
-      <input ref={input} type="color" aria-label={`${title} picker`} defaultValue={value} key={value} tabIndex={-1} />
+      <input ref={input} type="color" aria-label={m.colorPicker(title)} defaultValue={value} key={value} tabIndex={-1} />
       {active && (
         <button
           type="button"
           className="rdg-reset"
-          title={`Reset ${title.toLowerCase()}`}
-          aria-label={`Reset ${title.toLowerCase()}`}
+          title={m.resetColor(title)}
+          aria-label={m.resetColor(title)}
           onMouseDown={(e) => e.preventDefault()}
           onClick={onClear}
         >

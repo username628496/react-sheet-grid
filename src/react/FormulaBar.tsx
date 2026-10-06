@@ -4,6 +4,7 @@ import type { Spreadsheet } from '../core/Spreadsheet';
 import type { GridController } from '../input/GridController';
 import type { CommitMove } from '../input/keymap';
 import { ChromeStyles } from './chrome';
+import { useMessages, useTheme } from './GridProvider';
 
 interface FormulaBarProps {
   sheet: Spreadsheet;
@@ -20,6 +21,8 @@ interface FormulaBarProps {
  * imperatively, like the grid, so typing never re-renders.
  */
 export function FormulaBar({ sheet, grid }: FormulaBarProps) {
+  const m = useMessages();
+  const theme = useTheme();
   const nameRef = useRef<HTMLInputElement>(null);
   const textRef = useRef<HTMLInputElement>(null);
 
@@ -139,12 +142,12 @@ export function FormulaBar({ sheet, grid }: FormulaBarProps) {
   };
 
   return (
-    <div className="rdg-chrome rdg-formulabar" data-testid="formula-bar">
+    <div className="rdg-chrome rdg-formulabar" data-rdg-theme={theme} data-testid="formula-bar">
       <ChromeStyles />
       <input
         ref={nameRef}
         className="rdg-field rdg-namebox"
-        aria-label="Name box"
+        aria-label={m.nameBox}
         data-testid="name-box"
         spellCheck={false}
         autoComplete="off"
@@ -158,7 +161,7 @@ export function FormulaBar({ sheet, grid }: FormulaBarProps) {
       <input
         ref={textRef}
         className="rdg-field rdg-formula"
-        aria-label="Formula bar"
+        aria-label={m.formulaBar}
         data-testid="formula-input"
         spellCheck={false}
         autoComplete="off"

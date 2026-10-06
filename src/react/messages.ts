@@ -1,0 +1,349 @@
+export type Locale = 'en' | 'vi';
+
+export interface ShortcutGroup {
+  title: string;
+  items: ReadonlyArray<readonly [keys: string, action: string]>;
+}
+
+/**
+ * Every string the UI shows. Functions take the numbers/names that vary so each language decides its own grammar
+ * (English pluralises, Vietnamese does not). Hosts can override single entries through GridProvider's `messages`.
+ */
+export interface Messages {
+  // toolbar
+  toolbar: string;
+  groupHistory: string;
+  groupSort: string;
+  groupTextStyle: string;
+  groupAlignment: string;
+  groupSheetSize: string;
+  undo: string;
+  redo: string;
+  clearFormatting: string;
+  sortAsc: string;
+  sortDesc: string;
+  bold: string;
+  italic: string;
+  underline: string;
+  strike: string;
+  textColor: string;
+  fillColor: string;
+  resetColor: (what: string) => string;
+  colorPicker: (what: string) => string;
+  alignLeft: string;
+  alignCenter: string;
+  alignRight: string;
+  numberFormat: string;
+  formatAutomatic: string;
+  formatNumber: (example: string) => string;
+  formatPercent: (example: string) => string;
+  formatCurrency: (example: string) => string;
+  rowsLabel: string;
+  colsLabel: string;
+  rowCount: string;
+  colCount: string;
+  removedCells: (n: number) => string;
+  // formula bar
+  nameBox: string;
+  formulaBar: string;
+  // status bar
+  selectionSummary: string;
+  sum: string;
+  average: string;
+  count: string;
+  // context menu
+  cellMenu: string;
+  cut: string;
+  copy: string;
+  paste: string;
+  insertRowsAbove: (n: number) => string;
+  insertRowsBelow: (n: number) => string;
+  insertColsLeft: (n: number) => string;
+  insertColsRight: (n: number) => string;
+  deleteRows: (first: number, last: number) => string;
+  deleteCols: (first: string, last: string) => string;
+  clearContents: string;
+  sortSheetAsc: (col: string) => string;
+  sortSheetDesc: (col: string) => string;
+  removeSort: string;
+  filterByValues: (col: string) => string;
+  removeFilter: (col: string) => string;
+  removeAllFilters: string;
+  // filter dialog
+  filterTitle: (col: string) => string;
+  search: string;
+  searchValues: string;
+  selectAll: string;
+  clear: string;
+  noValues: string;
+  blanks: string;
+  onlyFirstValues: (n: number) => string;
+  cancel: string;
+  ok: string;
+  close: string;
+  // shortcuts dialog
+  shortcutsTitle: string;
+  shortcutGroups: readonly ShortcutGroup[];
+}
+
+const plural = (n: number, one: string, many: string): string => `${n} ${n === 1 ? one : many}`;
+
+const en: Messages = {
+  toolbar: 'Formatting',
+  groupHistory: 'History',
+  groupSort: 'Sort',
+  groupTextStyle: 'Text style',
+  groupAlignment: 'Alignment',
+  groupSheetSize: 'Sheet size',
+  undo: 'Undo',
+  redo: 'Redo',
+  clearFormatting: 'Clear formatting',
+  sortAsc: 'Sort A to Z',
+  sortDesc: 'Sort Z to A',
+  bold: 'Bold',
+  italic: 'Italic',
+  underline: 'Underline',
+  strike: 'Strikethrough',
+  textColor: 'Text color',
+  fillColor: 'Fill color',
+  resetColor: (what) => `Reset ${what.toLowerCase()}`,
+  colorPicker: (what) => `${what} picker`,
+  alignLeft: 'Align left',
+  alignCenter: 'Align center',
+  alignRight: 'Align right',
+  numberFormat: 'Number format',
+  formatAutomatic: 'Automatic',
+  formatNumber: (example) => `Number (${example})`,
+  formatPercent: (example) => `Percent (${example})`,
+  formatCurrency: (example) => `Currency (${example})`,
+  rowsLabel: 'Rows',
+  colsLabel: 'Cols',
+  rowCount: 'Row count',
+  colCount: 'Column count',
+  removedCells: (n) => `Removed ${plural(n, 'filled cell', 'filled cells')}. Undo to restore.`,
+  nameBox: 'Name box',
+  formulaBar: 'Formula bar',
+  selectionSummary: 'Selection summary',
+  sum: 'Sum',
+  average: 'Average',
+  count: 'Count',
+  cellMenu: 'Cell menu',
+  cut: 'Cut',
+  copy: 'Copy',
+  paste: 'Paste',
+  insertRowsAbove: (n) => `Insert ${plural(n, 'row', 'rows')} above`,
+  insertRowsBelow: (n) => `Insert ${plural(n, 'row', 'rows')} below`,
+  insertColsLeft: (n) => `Insert ${plural(n, 'column', 'columns')} left`,
+  insertColsRight: (n) => `Insert ${plural(n, 'column', 'columns')} right`,
+  deleteRows: (a, b) => (a === b ? `Delete row ${a}` : `Delete rows ${a}–${b}`),
+  deleteCols: (a, b) => (a === b ? `Delete column ${a}` : `Delete columns ${a}–${b}`),
+  clearContents: 'Clear contents',
+  sortSheetAsc: (col) => `Sort sheet by column ${col}, A → Z`,
+  sortSheetDesc: (col) => `Sort sheet by column ${col}, Z → A`,
+  removeSort: 'Remove sort',
+  filterByValues: (col) => `Filter column ${col} by values…`,
+  removeFilter: (col) => `Remove filter on column ${col}`,
+  removeAllFilters: 'Remove all filters',
+  filterTitle: (col) => `Filter column ${col} by values`,
+  search: 'Search',
+  searchValues: 'Search values',
+  selectAll: 'Select all',
+  clear: 'Clear',
+  noValues: 'No values',
+  blanks: '(Blanks)',
+  onlyFirstValues: (n) => `Only the first ${n} values are listed.`,
+  cancel: 'Cancel',
+  ok: 'OK',
+  close: 'Close',
+  shortcutsTitle: 'Keyboard shortcuts',
+  shortcutGroups: [
+    {
+      title: 'Navigate and select',
+      items: [
+        ['Arrows', 'Move one cell'],
+        ['Mod+Arrows', 'Jump to the edge of the data block'],
+        ['Shift+Arrows', 'Extend the selection'],
+        ['Tab / Shift+Tab', 'Move right / left'],
+        ['Enter / Shift+Enter', 'Edit the cell / move up'],
+        ['Home / End', 'Start / end of the row'],
+        ['Mod+Home / Mod+End', 'First cell / last cell with data'],
+        ['PageUp / PageDown', 'Move one page'],
+        ['Mod+A', 'Select all'],
+        ['Mod+Space / Shift+Space', 'Select column / row'],
+        ['Mod+Backspace', 'Scroll to the active cell'],
+      ],
+    },
+    {
+      title: 'Edit',
+      items: [
+        ['F2', 'Edit the cell, caret at the end'],
+        ['Enter / Tab / Esc', 'Save and move down / save and move right / cancel'],
+        ['Alt+Enter', 'New line in the cell'],
+        ['Mod+Enter', 'Fill the selection with what you typed'],
+        ['Delete', 'Clear contents'],
+        ['Mod+Z / Mod+Y', 'Undo / redo'],
+        ['Mod+D / Mod+R', 'Fill down / fill right'],
+      ],
+    },
+    {
+      title: 'Formulas',
+      items: [
+        ['Arrows or click after = ( , +', 'Point at a cell'],
+        ['Shift+Arrows or drag', 'Point at a range'],
+        ['F4', 'Toggle $ on the reference at the caret'],
+      ],
+    },
+    {
+      title: 'Clipboard',
+      items: [
+        ['Mod+C / Mod+X / Mod+V', 'Copy / cut / paste'],
+        ['Mod+Shift+V', 'Paste values only'],
+        ['Mod+Alt+V', 'Paste format only'],
+      ],
+    },
+    {
+      title: 'Format',
+      items: [
+        ['Mod+B / Mod+I / Mod+U', 'Bold / italic / underline'],
+        ['Mod+Shift+X', 'Strikethrough'],
+        ['Mod+Shift+L / E / R', 'Align left / center / right'],
+        ['Mod+Shift+1 / 4 / 5', 'Number / currency / percent'],
+        ['Mod+\\', 'Clear formatting'],
+      ],
+    },
+    { title: 'Help', items: [['Mod+/', 'Show this list']] },
+  ],
+};
+
+const vi: Messages = {
+  toolbar: 'Định dạng',
+  groupHistory: 'Lịch sử',
+  groupSort: 'Sắp xếp',
+  groupTextStyle: 'Kiểu chữ',
+  groupAlignment: 'Căn lề',
+  groupSheetSize: 'Kích thước bảng',
+  undo: 'Hoàn tác',
+  redo: 'Làm lại',
+  clearFormatting: 'Xóa định dạng',
+  sortAsc: 'Sắp xếp A → Z',
+  sortDesc: 'Sắp xếp Z → A',
+  bold: 'Đậm',
+  italic: 'Nghiêng',
+  underline: 'Gạch chân',
+  strike: 'Gạch ngang',
+  textColor: 'Màu chữ',
+  fillColor: 'Màu nền',
+  resetColor: (what) => `Bỏ ${what.toLowerCase()}`,
+  colorPicker: (what) => `Chọn ${what.toLowerCase()}`,
+  alignLeft: 'Căn trái',
+  alignCenter: 'Căn giữa',
+  alignRight: 'Căn phải',
+  numberFormat: 'Định dạng số',
+  formatAutomatic: 'Tự động',
+  formatNumber: (example) => `Số (${example})`,
+  formatPercent: (example) => `Phần trăm (${example})`,
+  formatCurrency: (example) => `Tiền tệ (${example})`,
+  rowsLabel: 'Dòng',
+  colsLabel: 'Cột',
+  rowCount: 'Số dòng',
+  colCount: 'Số cột',
+  removedCells: (n) => `Đã xóa ${n} ô có dữ liệu. Nhấn hoàn tác để khôi phục.`,
+  nameBox: 'Ô tên',
+  formulaBar: 'Thanh công thức',
+  selectionSummary: 'Tóm tắt vùng chọn',
+  sum: 'Tổng',
+  average: 'Trung bình',
+  count: 'Đếm',
+  cellMenu: 'Menu ô',
+  cut: 'Cắt',
+  copy: 'Sao chép',
+  paste: 'Dán',
+  insertRowsAbove: (n) => `Chèn ${n} dòng phía trên`,
+  insertRowsBelow: (n) => `Chèn ${n} dòng phía dưới`,
+  insertColsLeft: (n) => `Chèn ${n} cột bên trái`,
+  insertColsRight: (n) => `Chèn ${n} cột bên phải`,
+  deleteRows: (a, b) => (a === b ? `Xóa dòng ${a}` : `Xóa dòng ${a}–${b}`),
+  deleteCols: (a, b) => (a === b ? `Xóa cột ${a}` : `Xóa cột ${a}–${b}`),
+  clearContents: 'Xóa nội dung',
+  sortSheetAsc: (col) => `Sắp xếp bảng theo cột ${col}, A → Z`,
+  sortSheetDesc: (col) => `Sắp xếp bảng theo cột ${col}, Z → A`,
+  removeSort: 'Bỏ sắp xếp',
+  filterByValues: (col) => `Lọc cột ${col} theo giá trị…`,
+  removeFilter: (col) => `Bỏ lọc cột ${col}`,
+  removeAllFilters: 'Bỏ tất cả bộ lọc',
+  filterTitle: (col) => `Lọc cột ${col} theo giá trị`,
+  search: 'Tìm kiếm',
+  searchValues: 'Tìm giá trị',
+  selectAll: 'Chọn tất cả',
+  clear: 'Bỏ chọn',
+  noValues: 'Không có giá trị',
+  blanks: '(Ô trống)',
+  onlyFirstValues: (n) => `Chỉ liệt kê ${n} giá trị đầu tiên.`,
+  cancel: 'Hủy',
+  ok: 'OK',
+  close: 'Đóng',
+  shortcutsTitle: 'Phím tắt',
+  shortcutGroups: [
+    {
+      title: 'Di chuyển và chọn',
+      items: [
+        ['Arrows', 'Di chuyển một ô'],
+        ['Mod+Arrows', 'Nhảy tới mép khối dữ liệu'],
+        ['Shift+Arrows', 'Mở rộng vùng chọn'],
+        ['Tab / Shift+Tab', 'Sang phải / sang trái'],
+        ['Enter / Shift+Enter', 'Sửa ô / lên trên'],
+        ['Home / End', 'Đầu / cuối dòng'],
+        ['Mod+Home / Mod+End', 'Ô đầu tiên / ô cuối có dữ liệu'],
+        ['PageUp / PageDown', 'Lên / xuống một trang'],
+        ['Mod+A', 'Chọn tất cả'],
+        ['Mod+Space / Shift+Space', 'Chọn cột / chọn dòng'],
+        ['Mod+Backspace', 'Cuộn tới ô đang chọn'],
+      ],
+    },
+    {
+      title: 'Chỉnh sửa',
+      items: [
+        ['F2', 'Sửa ô, con trỏ ở cuối'],
+        ['Enter / Tab / Esc', 'Lưu và xuống dưới / lưu và sang phải / hủy'],
+        ['Alt+Enter', 'Xuống dòng trong ô'],
+        ['Mod+Enter', 'Điền nội dung vừa gõ vào cả vùng chọn'],
+        ['Delete', 'Xóa nội dung'],
+        ['Mod+Z / Mod+Y', 'Hoàn tác / làm lại'],
+        ['Mod+D / Mod+R', 'Điền xuống / điền sang phải'],
+      ],
+    },
+    {
+      title: 'Công thức',
+      items: [
+        ['Arrows hoặc click sau = ( , +', 'Trỏ vào một ô'],
+        ['Shift+Arrows hoặc kéo', 'Trỏ vào một vùng'],
+        ['F4', 'Bật/tắt $ cho tham chiếu tại con trỏ'],
+      ],
+    },
+    {
+      title: 'Bộ nhớ tạm',
+      items: [
+        ['Mod+C / Mod+X / Mod+V', 'Sao chép / cắt / dán'],
+        ['Mod+Shift+V', 'Chỉ dán giá trị'],
+        ['Mod+Alt+V', 'Chỉ dán định dạng'],
+      ],
+    },
+    {
+      title: 'Định dạng',
+      items: [
+        ['Mod+B / Mod+I / Mod+U', 'Đậm / nghiêng / gạch chân'],
+        ['Mod+Shift+X', 'Gạch ngang'],
+        ['Mod+Shift+L / E / R', 'Căn trái / giữa / phải'],
+        ['Mod+Shift+1 / 4 / 5', 'Số / tiền tệ / phần trăm'],
+        ['Mod+\\', 'Xóa định dạng'],
+      ],
+    },
+    { title: 'Trợ giúp', items: [['Mod+/', 'Hiện danh sách này']] },
+  ],
+};
+
+export const MESSAGES: Readonly<Record<Locale, Messages>> = { en, vi };
+
+export function resolveMessages(locale: Locale, overrides?: Partial<Messages>): Messages {
+  return overrides === undefined ? MESSAGES[locale] : { ...MESSAGES[locale], ...overrides };
+}

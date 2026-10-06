@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { formatNumber } from '../core/model/format';
 import type { SelectionStats, Spreadsheet } from '../core/Spreadsheet';
 import { ChromeStyles } from './chrome';
+import { useMessages, useTheme } from './GridProvider';
 
 /**
  * Sum / average / count of the selected numbers, shown when more than one cell is selected.
@@ -9,6 +10,8 @@ import { ChromeStyles } from './chrome';
  * faster than the bar needs to update.
  */
 export function StatusBar({ sheet }: { sheet: Spreadsheet }) {
+  const m = useMessages();
+  const theme = useTheme();
   const [stats, setStats] = useState<SelectionStats | null>(null);
 
   useEffect(() => {
@@ -29,20 +32,20 @@ export function StatusBar({ sheet }: { sheet: Spreadsheet }) {
   }, [sheet]);
 
   return (
-    <div role="status" aria-label="Selection summary" className="rdg-chrome rdg-statusbar" data-testid="status-bar">
+    <div role="status" aria-label={m.selectionSummary} data-rdg-theme={theme} className="rdg-chrome rdg-statusbar" data-testid="status-bar">
       <ChromeStyles />
       {stats === null ? (
         <span>&nbsp;</span>
       ) : (
         <>
           <span>
-            Sum: <b data-testid="stat-sum">{formatNumber(stats.sum, undefined)}</b>
+            {m.sum}: <b data-testid="stat-sum">{formatNumber(stats.sum, undefined)}</b>
           </span>
           <span>
-            Average: <b data-testid="stat-average">{formatNumber(stats.average, undefined)}</b>
+            {m.average}: <b data-testid="stat-average">{formatNumber(stats.average, undefined)}</b>
           </span>
           <span>
-            Count: <b data-testid="stat-count">{stats.count}</b>
+            {m.count}: <b data-testid="stat-count">{stats.count}</b>
           </span>
         </>
       )}
