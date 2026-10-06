@@ -133,11 +133,11 @@ docs/
 - [x] Formula engine: tokenizer, parser, evaluator, dependency graph
 - [x] Hàm: `SUM`, `AVERAGE`, `COUNT`, `MIN`, `MAX`, `IF`, `ROUND`, `CONCAT`, `SUMIF`, `COUNTIF`, `VLOOKUP`
 - [x] Copy/fill công thức với tham chiếu tương đối và `$` tuyệt đối
-- [ ] Định dạng: đậm, nghiêng, màu chữ, màu nền, căn lề, định dạng số cơ bản
-- [ ] Sort theo cột, filter đơn giản theo giá trị
-- [ ] Chèn/xóa dòng và cột (có cập nhật tham chiếu công thức)
-- [ ] Context menu chuột phải
-- [ ] Thanh thống kê khi chọn vùng số (tổng, trung bình, đếm)
+- [x] Định dạng: đậm, nghiêng, màu chữ, màu nền, căn lề, định dạng số cơ bản
+- [x] Sort theo cột, filter đơn giản theo giá trị
+- [x] Chèn/xóa dòng và cột (có cập nhật tham chiếu công thức)
+- [x] Context menu chuột phải
+- [x] Thanh thống kê khi chọn vùng số (tổng, trung bình, đếm)
 
 ### Ngoài phạm vi MVP (không làm khi chưa được yêu cầu)
 Merge cell, nhiều sheet, nhập/xuất xlsx, find & replace, pivot, biểu đồ, định dạng có điều kiện, data validation, comment, cộng tác thời gian thực, hàm mảng.

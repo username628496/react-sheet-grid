@@ -30,6 +30,15 @@ import {
   type ViewState,
 } from './viewState';
 
+export interface SelectionStats {
+  /** How many numeric cells are selected. */
+  count: number;
+  sum: number;
+  average: number;
+  min: number;
+  max: number;
+}
+
 export interface SpreadsheetOptions {
   rowCount?: number;
   colCount?: number;
@@ -448,6 +457,34 @@ export class Spreadsheet {
     } else {
       this.selection.clamp();
     }
+  }
+
+  /**
+   * Sum/average/count of the numeric cells in the selection (overlapping ranges are not double counted),
+   * or null when there are none. Cost scales with stored cells, not with the area selected.
+   */
+  getSelectionStats(): SelectionStats | null {
+    let count = 0;
+    let sum = 0;
+    let min = Infinity;
+    let max = -Infinity;
+    const ranges = this.selection.allRanges;
+    const seen = ranges.length > 1 ? new Set<number>() : null;
+    for (const range of ranges) {
+      this.forEachStoredCellInViewRange(range, (dataRow, dataCol, cell) => {
+        if (typeof cell.value !== 'number') return;
+        if (seen !== null) {
+          const key = cellKey(dataRow, dataCol);
+          if (seen.has(key)) return;
+          seen.add(key);
+        }
+        count++;
+        sum += cell.value;
+        if (cell.value < min) min = cell.value;
+        if (cell.value > max) max = cell.value;
+      });
+    }
+    return count === 0 ? null : { count, sum, average: sum / count, min, max };
   }
 
   /** Bottom-right of the data in view coordinates, or null for an empty sheet. */

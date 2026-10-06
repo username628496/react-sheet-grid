@@ -1,8 +1,10 @@
-import { type CSSProperties, useEffect, useRef } from 'react';
+import { type CSSProperties, useCallback, useEffect, useRef, useState } from 'react';
 import type { Spreadsheet } from '../core/Spreadsheet';
 import { GridController } from '../input/GridController';
 import { GridSurface } from '../render/GridSurface';
 import { CellEditor } from './CellEditor';
+import { ContextMenu } from './ContextMenu';
+import { FilterDialog } from './FilterDialog';
 
 export interface DataGridProps {
   sheet: Spreadsheet;
@@ -21,24 +23,53 @@ export interface DataGridProps {
 export function DataGrid({ sheet, frozenRows = 0, frozenCols = 0, className, style, onReady }: DataGridProps) {
   const mountRef = useRef<HTMLDivElement>(null);
   const editorRef = useRef<HTMLTextAreaElement>(null);
+  const [controller, setController] = useState<GridController | null>(null);
+  const [menu, setMenu] = useState<{ x: number; y: number } | null>(null);
+  const [filter, setFilter] = useState<{ col: number; x: number; y: number } | null>(null);
+  const closeMenu = useCallback(() => setMenu(null), []);
+  const closeFilter = useCallback(() => {
+    setFilter(null);
+    editorRef.current?.focus({ preventScroll: true });
+  }, []);
+
+  // Frozen rows act as the header: sort and filter leave them alone.
+  useEffect(() => {
+    sheet.headerRows = frozenRows;
+  }, [sheet, frozenRows]);
 
   useEffect(() => {
     const mount = mountRef.current;
     const textarea = editorRef.current;
     if (mount === null || textarea === null) return;
     const surface = new GridSurface(mount, sheet, { frozenRows, frozenCols });
-    const controller = new GridController(surface, sheet, textarea);
-    onReady?.(controller);
+    const ctrl = new GridController(surface, sheet, textarea);
+    ctrl.mouse.onContext = (x, y) => setMenu({ x, y });
+    setController(ctrl);
+    onReady?.(ctrl);
     return () => {
-      controller.destroy();
+      ctrl.destroy();
       surface.destroy();
+      setController(null);
+      setMenu(null);
     };
     // onReady is intentionally not a dependency: a new callback identity must not rebuild the grid.
   }, [sheet, frozenRows, frozenCols]);
 
   return (
-    <div ref={mountRef} className={className} style={{ width: '100%', height: '100%', ...style }} data-testid="grid">
-      <CellEditor ref={editorRef} />
-    </div>
+    <>
+      <div ref={mountRef} className={className} style={{ width: '100%', height: '100%', ...style }} data-testid="grid">
+        <CellEditor ref={editorRef} />
+      </div>
+      {controller !== null && menu !== null && (
+        <ContextMenu
+          controller={controller}
+          x={menu.x}
+          y={menu.y}
+          onClose={closeMenu}
+          onFilter={(col, x, y) => setFilter({ col, x, y })}
+        />
+      )}
+      {filter !== null && <FilterDialog sheet={sheet} viewCol={filter.col} x={filter.x} y={filter.y} onClose={closeFilter} />}
+    </>
   );
 }

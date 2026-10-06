@@ -1,59 +1,91 @@
 # Progress
 
+Toàn bộ lộ trình MVP trong CLAUDE.md (tuần 1 và tuần 2) đã xong.
+
 ## Đã xong
+
+**Nền tảng**
 - Khởi tạo dự án: Vite (library mode), TS strict, Vitest, Playwright, ESLint, trang demo.
-- `SheetModel` thưa + `StyleTable` + unit test (16 test pass).
-- `layout`: `AxisLayout` (kích thước dòng/cột thưa, offset, tra chỉ số theo pixel, visibleRange) + 11 unit test.
-- Canvas renderer (lưới, header, nội dung ô, DPR), virtualization 1M × 100, freeze dòng/cột (`frozenRows`/`frozenCols`). Đo thực tế trên Chromium: 16,5ms/khung khi cuộn (khóa 60fps).
-- Lõi bổ sung: `Spreadsheet` (headless), `ViewMapping`, `format`, `parseInput`, `address`.
+- `SheetModel` thưa + `StyleTable` dùng chung; `AxisLayout` (kích thước dòng/cột thưa, prefix sum, tra vị trí theo pixel).
+- Canvas renderer (lưới, header, nội dung ô, DPR), virtualization 1M × 100, freeze dòng/cột.
 - Chọn ô (click, kéo, Shift/Ctrl+click, header dòng/cột, góc chọn tất cả), di chuyển bằng phím (mũi tên, Ctrl+mũi tên theo khối dữ liệu, Tab, Enter, Home/End, PageUp/PageDown).
 - Edit ô: gõ đè, F2, double-click, Enter/Tab/Esc, Alt+Enter xuống dòng, Delete, IME (composition).
-- Command pattern + `History` (undo/redo): `SetCellsCommand`, `ResizeCommand`.
-- Resize cột/dòng bằng kéo chuột (resize nhiều cột khi đang chọn cả cột).
-- 20 e2e test (Chromium) và 92 unit test.
-- Copy/cut/paste: ghi `text/plain` (TSV có quote) và `text/html` (`<table>` kèm style), paste ưu tiên `text/html` rồi `text/plain`. Dán lặp ô khi vùng chọn là bội số của vùng copy. Cut chỉ xóa nguồn khi paste (như Sheets), cả hai trong một bước undo. Viền đứt quanh vùng đã copy.
-- Formula engine: tokenizer, parser (A1 → AST tương đối), printer (AST → A1), evaluator, dependency graph, tính lại theo thứ tự topo, phát hiện vòng. Hàm: `SUM`, `AVERAGE`, `COUNT`, `MIN`, `MAX`, `IF`, `ROUND`, `CONCAT`, `SUMIF`, `COUNTIF`, `VLOOKUP`. Có tham chiếu `A:A`, `1:1`, `$`, dấu `;` làm phân cách tham số (locale tiếng Việt).
-- 401 unit test (trong đó ~300 test công thức theo bảng) và 28 e2e (Chromium).
-- Fill handle: kéo ô vuông ở góc vùng chọn xuống/lên/trái/phải. Chuỗi số (hằng số bước hoặc xu hướng tuyến tính bình phương tối thiểu), chuỗi chữ có số cuối (`Item 1` → `Item 2`, giữ số 0 đệm), còn lại lặp vòng ô nguồn kèm style; công thức được copy nên tham chiếu tương đối tự dịch, `$` giữ nguyên. Một lần kéo là một bước undo.
-- Chèn/xóa dòng và cột: dữ liệu, kích thước dòng/cột và tham chiếu công thức cùng di chuyển (`remapFormula`): tham chiếu vào ô bị xóa thành `#REF!`, range co lại hoặc giãn ra, tham chiếu cả cột `A:A` giữ nguyên. Undo bằng snapshot nên khôi phục chính xác. Chỉ cho phép khi chưa sort/filter.
-- Sort và filter (theo giá trị hiển thị) qua `ViewMapping`, undo một bước; dòng tiêu đề (`headerRows`) và các dòng trống bên dưới dữ liệu được giữ nguyên; ô trống luôn nằm cuối khi sort.
-- Fuzz test: 80 chuỗi 120 thao tác ngẫu nhiên (nhập giá trị/công thức, chèn/xóa dòng/cột, sort, filter, paste, fill, resize, định dạng, undo, redo) kiểm tra model hợp lệ, giá trị công thức tăng dần khớp tính lại từ đầu, undo hết về đúng trạng thái đầu, redo hết về đúng trạng thái cuối; 60 chuỗi chèn/xóa với oracle độc lập kiểm tra công thức vẫn trỏ đúng ô đánh dấu.
+- Command pattern + `History` (undo/redo); resize cột/dòng bằng kéo chuột.
+
+**Tính năng spreadsheet**
+- Copy/cut/paste (TSV + HTML, tương thích Excel/Sheets), dán lặp ô, cut = di chuyển.
+- Fill handle: chuỗi số, chuỗi chữ-số (`Item 1` → `Item 2`), lặp ô, công thức dịch tham chiếu.
+- Formula engine: tokenizer, parser, printer, evaluator, dependency graph, tính lại theo thứ tự topo, phát hiện vòng. Hàm: `SUM`, `AVERAGE`, `COUNT`, `MIN`, `MAX`, `IF`, `ROUND`, `CONCAT`, `SUMIF`, `COUNTIF`, `VLOOKUP`; tham chiếu `A1`, `$A$1`, `A:A`, `1:1`; dấu `;` làm phân cách tham số.
+- Định dạng: đậm, nghiêng, màu chữ, màu nền, căn lề, định dạng số; toolbar phản ánh ô đang chọn.
+- Sort theo cột, filter theo giá trị (hộp thoại có tìm kiếm); ký hiệu ↑ ↓ ▾ trên header.
+- Chèn/xóa dòng và cột, có cập nhật tham chiếu công thức.
+- Context menu chuột phải; thanh thống kê (tổng, trung bình, đếm).
+
+**Kiểm thử**: 625 unit test (gồm ~300 test công thức theo bảng, 80 chuỗi fuzz × 120 thao tác, 60 chuỗi fuzz chèn/xóa với oracle độc lập) và 48 e2e test (Chromium).
+
+**Hiệu năng đo trên Chromium với dữ liệu demo ~400k ô trong lưới 1.000.000 × 100**: cuộn dọc và chéo 16,6ms/khung (khóa 60fps), sort 1M dòng 155ms, filter 42ms, chèn dòng 47ms, thống kê khi chọn tất cả 20ms.
 
 ## Quyết định kỹ thuật
-- Một `<textarea>` ẩn giữ focus mọi lúc và đồng thời là editor ô (`CellEditor.tsx` render, `EditorController` điều khiển). Gõ ký tự khi đang chọn ô chỉ đổi style textarea rồi để trình duyệt chèn ký tự mặc định, nên không mất ký tự đầu. IME vào edit qua `compositionstart`. Textarea luôn nằm đè lên ô active để cửa sổ gợi ý IME hiện đúng chỗ.
-- Keymap là hàm thuần theo context (`navigating` / `editing` / `editingFormula`) và luôn trả `null` khi `isComposing` hoặc `keyCode === 229`.
-- Enter khi đang chọn ô = vào chế độ sửa (giống Google Sheets); Enter khi commit = xuống ô dưới (hoặc vòng trong vùng chọn nhiều ô).
-- Gõ ký tự → "enter mode" (mũi tên commit và di chuyển); F2/double-click → "edit mode" (mũi tên di chuyển con trỏ).
-- Kéo resize ghi trực tiếp vào layout để xem trước, rồi lúc thả chuột trả về kích thước cũ và tạo đúng một `ResizeCommand`, nên undo chỉ một bước.
-- Định dạng lên vùng quá lớn (> 50.000 ô, ví dụ cả cột) chỉ áp dụng cho ô đã có dữ liệu để không sinh hàng triệu ô.
-- Cuộn: một `div` cuộn native nằm trên canvas, canvas vẽ lại theo vị trí cuộn logic. Firefox giới hạn chiều cao phần tử ~17,9M px mà 1M dòng × 21px = 21M, nên host chỉ được tối đa 8M px vật lý và `logic = vật lý × scale` (`computeScrollMetrics`).
+
+**Kiến trúc**
+- `core/` và `formula/` không phụ thuộc DOM/React. `Spreadsheet` là engine headless: model, style, mapping, layout, selection, history, formula engine. UI chỉ đọc từ đó và chỉ ghi qua `execute(command)`.
+- Cuộn: một `div` cuộn native nằm trên canvas, canvas vẽ lại theo vị trí cuộn logic. Firefox giới hạn chiều cao phần tử ~17,9M px mà 1M dòng × 21px = 21M, nên host chỉ được tối đa 8M px vật lý và `logic = vật lý × scale`.
 - Vẽ theo "segment": mỗi trục có segment đóng băng và segment cuộn; vùng vẽ = tích hai trục, nên freeze không cần code riêng.
 - Dữ liệu demo là bản thưa (khối dày 5000×20 + 300k ô rải rác) vì 100M ô không thể lưu trong `Map`.
 - Chữ chỉ clip khi tràn ô; tràn sang ô trống bên cạnh để sau MVP.
-- Sort/filter dùng `ViewMapping` (`Int32Array` viewRow → dataRow); `AxisLayout.setCount` để filter đổi số dòng hiển thị.
-- `vitest` chạy môi trường `node` để đảm bảo `core/` và `formula/` không phụ thuộc DOM.
-- React được đặt `external` khi build thư viện.
 
-- `SheetModel` lưu ô trong `Map<number, Cell>` với khóa `dataRow * 16384 + dataCol` (không cấp phát string khi tra cứu). Ô rỗng và không style bị xóa khỏi map.
-- `StyleTable` intern style theo khóa đã sắp xếp; id không bao giờ tái sử dụng để undo/redo giữ id cũ an toàn. Id 0 là style mặc định.
-- Hàm ghi của `SheetModel` là mức thấp, chỉ command được gọi.
-- `AxisLayout` chỉ lưu kích thước khác mặc định + prefix sum dựng lại lười; kích thước 0 nghĩa là ẩn. Làm việc trên tọa độ hiển thị (`viewIndex`).
-- `visibleRange` ghi vào object do caller truyền để vòng vẽ không cấp phát.
-- Copy nội bộ giữ nguyên `Cell` (công thức + style) nhận biết qua so sánh `text/plain` với bản đã ghi; dữ liệu từ app khác đi qua parse HTML/TSV. Parse HTML bằng regex (không cần DOM) để chạy được trong Node; ô gộp (`colspan`) chưa được mở rộng.
-- `readCells` cắt theo vùng dữ liệu khi vùng chọn > 100.000 ô, để copy cả cột không tạo ma trận 1M dòng.
-- Công thức lưu là cây AST bất biến với tham chiếu tương đối (offset), nên copy/fill chỉ chia sẻ cây; `$` lưu chỉ số tuyệt đối. Tham chiếu theo tọa độ dữ liệu (`dataRow`/`dataCol`) nên sort chỉ đổi mapping không làm công thức trỏ sai.
-- Kết quả công thức cache trong `Cell.value`; `SheetModel.onCellChange` ghi nhận ô bị đổi (chỉ khi đang có công thức), `Spreadsheet` tính lại sau mỗi `execute`/`undo`/`redo`. Nạp dữ liệu thẳng vào model thì gọi `recalculateAll()`.
+**Nhập liệu**
+- Một `<textarea>` ẩn giữ focus mọi lúc và đồng thời là editor ô (`CellEditor.tsx` render, `EditorController` điều khiển). Gõ ký tự khi đang chọn ô chỉ đổi style textarea rồi để trình duyệt chèn ký tự mặc định, nên không mất ký tự đầu. IME vào edit qua `compositionstart`. Textarea luôn nằm đè lên ô active để cửa sổ gợi ý IME hiện đúng chỗ.
+- Keymap là hàm thuần theo context (`navigating` / `editing` / `editingFormula`) và luôn trả `null` khi `isComposing` hoặc `keyCode === 229`.
+- Enter khi đang chọn ô = vào chế độ sửa (giống Sheets); Enter khi commit = xuống ô dưới (hoặc vòng trong vùng chọn nhiều ô). Gõ ký tự → "enter mode" (mũi tên commit và di chuyển); F2/double-click → "edit mode" (mũi tên di chuyển con trỏ).
+- Kéo resize ghi trực tiếp vào layout để xem trước, lúc thả chuột tạo đúng một `ResizeCommand`.
+
+**Clipboard**
+- Ghi `text/plain` (TSV có quote) và `text/html` (`<table>` kèm style), paste ưu tiên `text/html` rồi `text/plain`. Copy nội bộ giữ nguyên `Cell` (công thức + style), nhận biết qua so sánh `text/plain`. Parse HTML bằng regex (không cần DOM); ô gộp (`colspan`) chưa mở rộng.
+- Cut chỉ xóa nguồn khi paste (như Sheets), cả hai trong một bước undo.
+
+**Công thức**
+- Lưu là cây AST bất biến với tham chiếu tương đối (offset), nên copy/fill chỉ chia sẻ cây; `$` lưu chỉ số tuyệt đối. Tham chiếu theo tọa độ dữ liệu (`dataRow`/`dataCol`), nên sort chỉ đổi mapping và không làm công thức trỏ sai.
+- Kết quả cache trong `Cell.value`; `SheetModel.onCellChange` ghi nhận ô bị đổi (chỉ khi đang có công thức), `Spreadsheet` tính lại sau mỗi `execute`/`undo`/`redo`. Nạp dữ liệu thẳng vào model thì gọi `recalculateAll()`.
 - Tính lại: BFS tìm mọi ô phụ thuộc rồi sắp xếp Kahn. Khi kẹt, Tarjan (lặp, không đệ quy) tìm các ô thật sự nằm TRÊN vòng và gán `#REF!`; các ô chỉ đọc chúng vẫn tính bình thường (`SUM` lan truyền lỗi, `COUNTIF` bỏ qua). Quy tắc ban đầu "mọi ô sau vòng đều `#REF!`" bị fuzz test chỉ ra là sai vì làm tính tăng dần và tính từ đầu cho kết quả khác nhau.
-- Tham chiếu một ô khi làm đối số hàm được truyền như range 1×1 để `SUM(A1)` bỏ qua chữ giống Sheets; `IF` đánh giá lười.
-- Công thức sai cú pháp lưu thành `#ERROR!` kèm nguyên văn để sửa lại được.
-- Cut-paste công thức dùng `rebaseFormula` (giữ nguyên ô được trỏ tới) còn copy dùng tham chiếu tương đối. Tham chiếu từ ô khác tới vùng bị cut chưa được cập nhật.
+- Tham chiếu một ô khi làm đối số hàm được truyền như range 1×1 để `SUM(A1)` bỏ qua chữ giống Sheets; `IF` đánh giá lười. Công thức sai cú pháp lưu thành `#ERROR!` kèm nguyên văn để sửa lại được.
+- Cut-paste công thức dùng `rebaseFormula` (giữ nguyên ô được trỏ tới), copy dùng tham chiếu tương đối.
 - `toNumber("")` = 0 (theo Sheets); `COUNTIF(range,"<>x")` đếm cả ô trống.
-- Fill: một số đơn lẻ được copy (không tăng) như Sheets; ngày tháng và double-click fill handle để điền tự động chưa làm.
 
-## Lỗi đã biết
-- Firefox và WebKit chưa chạy được e2e trong môi trường này (không tải được binary Playwright). Cần chạy `pnpm exec playwright install` rồi `pnpm test:e2e` trên máy bạn.
-- Double-click vào viền resize chưa tự fit độ rộng cột.
-- `setSize` đánh dấu prefix sum bẩn, mỗi lần truy vấn sau đó tốn O(k) (k = số override). Cần chú ý khi kéo resize với rất nhiều override.
+**Sort / filter / cấu trúc**
+- Sort và filter chỉ đổi `ViewMapping` (`Int32Array` viewRow → dataRow) qua một command lưu lại trạng thái trước (thứ tự, kích thước dòng) nên undo chính xác. Dòng tiêu đề (`headerRows` = số dòng đóng băng) và các dòng trống bên dưới dữ liệu được giữ nguyên; ô trống luôn nằm cuối khi sort. Filter so khớp theo văn bản hiển thị.
+- Chèn/xóa dòng/cột đổi số dòng/cột, di chuyển dữ liệu, kích thước và viết lại tham chiếu (`remapFormula`): tham chiếu vào ô bị xóa thành `#REF!`, range co lại hoặc giãn ra, `A:A` giữ nguyên. Undo bằng snapshot. Chỉ cho phép khi chưa sort/filter.
+- Định dạng lên vùng quá lớn (> 50.000 ô, ví dụ cả cột) chỉ áp dụng cho ô đã có dữ liệu để không sinh hàng triệu ô.
 
-## Việc tiếp theo
-- Định dạng (đậm, nghiêng, màu, căn lề, số) và toolbar; sort/filter; chèn/xóa dòng/cột; context menu; thanh thống kê.
+## Lỗi đã biết / giới hạn
+
+- **Firefox và WebKit chưa được chạy e2e** trong môi trường này (không tải được binary Playwright). Cần chạy `pnpm exec playwright install` rồi `pnpm test:e2e` trên máy bạn.
+- Chèn/xóa dòng/cột bị chặn khi đang sort/filter (cần bỏ sort/filter trước).
+- Tham chiếu từ ô khác tới vùng bị cut chưa được cập nhật (Sheets cập nhật).
+- Công thức tham chiếu theo tọa độ dữ liệu: khi đang sort, nhãn A1 trong công thức là vị trí dữ liệu gốc, không phải vị trí đang hiển thị.
+- Chiều cao dòng gắn với vị trí hiển thị, không đi theo dữ liệu khi sort.
+- Khi gõ công thức, phím mũi tên chưa chèn tham chiếu ô (chỉ di chuyển con trỏ).
+- Double-click viền resize chưa tự fit độ rộng; double-click fill handle chưa tự điền; ngày tháng chưa có chuỗi.
+- Một số đơn lẻ khi fill được copy (không tăng) như Sheets.
+- Chữ chưa tràn sang ô trống bên cạnh; ô gộp, nhiều sheet, xlsx, find & replace... nằm ngoài MVP.
+- Paste từ menu chuột phải dùng `navigator.clipboard.read()` nên trình duyệt có thể hỏi quyền (Firefox chỉ đọc được text).
+
+## Kiểm tra thủ công cho bạn (nhất là IME, clipboard, Safari)
+
+Chạy `pnpm dev` rồi mở http://localhost:5173/demo/ (thêm `?mode=empty` để có trang trống nhỏ).
+
+1. **IME tiếng Việt (Telex và VNI), cả Chrome, Safari, Firefox**: chọn một ô rồi gõ ngay `viet` + `e` + `j` (Telex) hoặc `vie6t5`; ký tự đầu không được mất, cửa sổ gợi ý phải hiện cạnh ô, Enter khi đang gõ dở (đang gạch chân) không được commit ô. Thử cả khi đang sửa ô (F2) và trong công thức (`=IF(A1>1;"có";"không")`). Thử Unikey/EVKey kiểu gửi Backspace.
+2. **Clipboard với Excel và Google Sheets**: copy một vùng từ Excel/Sheets rồi Ctrl/Cmd+V vào lưới (số phải thành số, ô có xuống dòng giữ nguyên); ngược lại copy từ lưới rồi dán vào Excel/Sheets (giữ đậm, nghiêng, màu). Thử cut + paste và menu chuột phải → Copy/Paste.
+3. **Safari**: cuộn mượt và sắc nét trên màn hình Retina, kéo thanh cuộn dọc tới cuối (dòng 1.000.000), Cmd+C/V/Z, phím Alt gõ ký tự đặc biệt, double-click sửa ô, `<input type=color>` trên toolbar.
+4. **Cuộn 1.000.000 dòng**: cuộn nhanh bằng trackpad, kéo thanh cuộn, Ctrl/Cmd+↓ tới cuối khối dữ liệu, PageDown liên tục; kiểm tra freeze dòng 1 và cột A giữ nguyên và không giật.
+5. **Công thức**: gõ `=SUM(A:A)`, `=VLOOKUP(...)`, `=A1/0`, tạo vòng `A1 = B1`, `B1 = A1`; kéo fill handle công thức; chèn/xóa dòng giữa vùng được `SUM` tham chiếu.
+6. **Sort/filter**: chuột phải một cột → sort, filter theo giá trị; xem ký hiệu trên header; Ctrl/Cmd+Z hoàn tác từng bước.
+7. **Kéo chọn vùng ra ngoài mép** để thử tự cuộn; kéo viền header để resize; Shift+click, Ctrl/Cmd+click nhiều vùng.
+
+## Việc tiếp theo (ngoài MVP, chỉ làm khi bạn yêu cầu)
+
+- Chạy e2e trên Firefox/WebKit và sửa nếu có khác biệt.
+- Chèn tham chiếu ô bằng phím mũi tên/click khi đang gõ công thức; tô màu tham chiếu.
+- Chữ tràn sang ô trống, tự fit độ rộng cột, fill ngày tháng, cập nhật tham chiếu khi cut.
+- Sort/filter không chặn chèn/xóa dòng; công thức theo vị trí hiển thị khi sort.
+- Tính toán trong Web Worker cho bảng rất lớn.

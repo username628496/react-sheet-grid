@@ -94,3 +94,37 @@ describe('formatSelection', () => {
     expect(s.styles.get(s.model.getCell(0, 0).styleId).bold).toBeUndefined();
   });
 });
+
+describe('getSelectionStats', () => {
+  it('summarizes the numeric cells of the selection', () => {
+    const s = makeSheet({ A1: 1, A2: 2, A3: 'text', A4: 6, B1: '=A1+10' });
+    s.selection.selectCell(0, 0);
+    s.selection.extendTo(3, 1);
+    expect(s.getSelectionStats()).toEqual({ count: 4, sum: 1 + 2 + 6 + 11, average: 20 / 4, min: 1, max: 11 });
+  });
+
+  it('is null without numbers and counts overlapping ranges once', () => {
+    const s = makeSheet({ A1: 'a', B1: 5 });
+    s.selection.selectCell(0, 0);
+    expect(s.getSelectionStats()).toBeNull();
+    s.selection.selectCell(0, 1);
+    s.selection.addCell(0, 1);
+    expect(s.getSelectionStats()?.count).toBe(1);
+  });
+
+  it('is cheap for a whole-sheet selection', () => {
+    const s = new Spreadsheet({ rowCount: 1_000_000, colCount: 100 });
+    s.model.setCell(500_000, 50, { value: 7, styleId: 0 });
+    s.selection.selectAll();
+    const t0 = performance.now();
+    expect(s.getSelectionStats()).toMatchObject({ count: 1, sum: 7 });
+    expect(performance.now() - t0).toBeLessThan(200);
+  });
+
+  it('works through a sorted view', () => {
+    const s = makeSheet({ A1: 3, A2: 1 });
+    s.mapping.setOrder(Int32Array.from([1, 0]));
+    s.selection.selectCell(0, 0);
+    expect(s.getSelectionStats()?.sum).toBe(1);
+  });
+});

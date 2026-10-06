@@ -1,5 +1,5 @@
 import { createRoot } from 'react-dom/client';
-import { DataGrid, type GridController, Spreadsheet, Toolbar } from '../src/index';
+import { DataGrid, type GridController, Spreadsheet, StatusBar, Toolbar } from '../src/index';
 
 const ROWS = 1_000_000;
 const COLS = 100;
@@ -51,5 +51,6 @@ createRoot(document.getElementById('root')!).render(
       }}
     />
     </div>
+    <StatusBar sheet={sheet} />
   </div>,
 );

@@ -25,7 +25,16 @@ export class GridController {
     this.clipboard = new ClipboardController(sheet, this.editor);
     this.keyboard = new KeyboardController({ sheet, surface, editor: this.editor, clipboard: this.clipboard });
 
-    surface.renderer.highlight = sheet.selection;
+    surface.renderer.highlight = {
+      isRowSelected: (r) => sheet.selection.isRowSelected(r),
+      isColSelected: (c) => sheet.selection.isColSelected(c),
+      colMark: (c) => {
+        const dir = sheet.sortDirection(c);
+        const filtered = sheet.isColumnFiltered(c);
+        if (dir === null && !filtered) return null;
+        return `${dir === 'asc' ? '↑' : dir === 'desc' ? '↓' : ''}${filtered ? '▾' : ''}`;
+      },
+    };
     surface.renderer.overlay = (ctx, rowSeg, colSeg) => {
       drawSelection(ctx, sheet, sheet.selection, rowSeg, colSeg, !this.editor.editing);
       const marquee = this.clipboard.visibleMarquee;

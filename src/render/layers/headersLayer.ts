@@ -6,6 +6,8 @@ import type { Viewport } from '../viewport';
 export interface HeaderHighlight {
   isRowSelected(viewRow: number): boolean;
   isColSelected(viewCol: number): boolean;
+  /** Small indicator drawn at the right end of a column header (sort arrow, filter funnel). */
+  colMark?(viewCol: number): string | null;
 }
 
 export function drawHeaders(
@@ -36,6 +38,11 @@ export function drawHeaders(
       ctx.fillRect(x, 0, w, hh);
       ctx.fillStyle = active ? theme.headerActiveText : theme.headerText;
       ctx.fillText(columnLabel(mapping.toDataCol(c)), x + w / 2, hh / 2 + 0.5);
+      const mark = highlight?.colMark?.(c) ?? null;
+      if (mark !== null && w > 40) {
+        ctx.fillStyle = theme.accent;
+        ctx.fillText(mark, x + w - 10, hh / 2 + 0.5);
+      }
       ctx.fillStyle = theme.headerLine;
       ctx.fillRect(Math.floor(x + w) - 1, 0, 1, hh);
       x += w;

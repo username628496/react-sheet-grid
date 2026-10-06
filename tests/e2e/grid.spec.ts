@@ -474,3 +474,154 @@ test.describe('formatting', () => {
     expect(await cellValue(page, 0, 0)).toBe('abcd');
   });
 });
+
+test.describe('context menu', () => {
+  async function rightClick(page: import('@playwright/test').Page, row: number, col: number): Promise<void> {
+    const { x, y } = await cellCenter(page, row, col);
+    await page.mouse.click(x, y, { button: 'right' });
+  }
+
+  test('right click selects the cell and opens the menu; Escape closes it', async ({ page }) => {
+    await rightClick(page, 2, 1);
+    expect((await selection(page)).active).toEqual([2, 1]);
+    await expect(page.getByRole('menu')).toBeVisible();
+    await page.keyboard.press('Escape');
+    await expect(page.getByRole('menu')).toBeHidden();
+  });
+
+  test('right click inside the selection keeps it', async ({ page }) => {
+    await clickCell(page, 1, 1);
+    await clickCell(page, 3, 3, { modifiers: ['Shift'] });
+    await rightClick(page, 2, 2);
+    expect((await selection(page)).range).toEqual({ startRow: 1, startCol: 1, endRow: 3, endCol: 3 });
+  });
+
+  test('clicking outside closes the menu', async ({ page }) => {
+    await rightClick(page, 0, 0);
+    await expect(page.getByRole('menu')).toBeVisible();
+    await clickCell(page, 5, 5);
+    await expect(page.getByRole('menu')).toBeHidden();
+  });
+
+  test('insert rows above/below and delete rows, with the count following the selection', async ({ page }) => {
+    await page.evaluate(() => {
+      window.__sheet!.setCellInput(1, 0, 'a');
+      window.__sheet!.setCellInput(2, 0, 'b');
+    });
+    await clickCell(page, 1, 0);
+    await clickCell(page, 2, 0, { modifiers: ['Shift'] });
+    await rightClick(page, 1, 0);
+    await page.getByRole('menuitem', { name: /Insert 2 rows above/ }).click();
+    expect(await page.evaluate(() => window.__sheet!.rowCount)).toBe(1002);
+    expect(await cellValue(page, 3, 0)).toBe('a');
+    // The two new rows are selected; right-clicking inside that selection deletes exactly them.
+    await rightClick(page, 1, 0);
+    await page.getByRole('menuitem', { name: /Delete rows 2–3/ }).click();
+    expect(await page.evaluate(() => window.__sheet!.rowCount)).toBe(1000);
+    expect(await cellValue(page, 1, 0)).toBe('a');
+    await page.keyboard.press(`${mod}+z`);
+    expect(await page.evaluate(() => window.__sheet!.rowCount)).toBe(1002);
+  });
+
+  test('insert column right', async ({ page }) => {
+    await page.evaluate(() => window.__sheet!.setCellInput(0, 1, 'x'));
+    await rightClick(page, 0, 0);
+    await page.getByRole('menuitem', { name: /Insert 1 column right/ }).click();
+    expect(await page.evaluate(() => window.__sheet!.colCount)).toBe(27);
+    expect(await cellValue(page, 0, 2)).toBe('x');
+  });
+
+  test('clear contents', async ({ page }) => {
+    await page.evaluate(() => window.__sheet!.setCellInput(0, 0, 'x'));
+    await rightClick(page, 0, 0);
+    await page.getByRole('menuitem', { name: /Clear contents/ }).click();
+    expect(await cellValue(page, 0, 0)).toBeNull();
+  });
+
+  test('keyboard: arrows move through items and Enter runs one', async ({ page }) => {
+    await page.evaluate(() => window.__sheet!.setCellInput(0, 0, 'gone'));
+    await rightClick(page, 0, 0);
+    const items = await page.getByRole('menuitem').allTextContents();
+    const target = items.findIndex((t) => t.startsWith('Clear contents'));
+    for (let i = 0; i <= target; i++) await page.keyboard.press('ArrowDown');
+    await page.keyboard.press('Enter');
+    expect(await cellValue(page, 0, 0)).toBeNull();
+  });
+
+  test('sort from the menu, with the structure items disabled while sorted', async ({ page }) => {
+    await page.evaluate(() => {
+      for (const [r, v] of [[0, 3], [1, 1], [2, 2]] as const) window.__sheet!.setCellInput(r, 0, String(v));
+    });
+    await rightClick(page, 0, 0);
+    await page.getByRole('menuitem', { name: /Sort sheet by column A, A → Z/ }).click();
+    expect(await page.evaluate(() => [0, 1, 2].map((r) => window.__sheet!.getCellByView(r, 0).value))).toEqual([1, 2, 3]);
+    await rightClick(page, 0, 0);
+    await expect(page.getByRole('menuitem', { name: /Insert 1 row above/ })).toBeDisabled();
+    await page.getByRole('menuitem', { name: /Remove sort/ }).click();
+    expect(await cellValue(page, 0, 0)).toBe(3);
+  });
+
+  test('filter by values through the dialog', async ({ page }) => {
+    await page.evaluate(() => {
+      ['apple', 'pear', 'apple', 'fig'].forEach((v, r) => window.__sheet!.setCellInput(r, 0, v));
+    });
+    await rightClick(page, 0, 0);
+    await page.getByRole('menuitem', { name: /Filter column A by values/ }).click();
+    const dialog = page.getByTestId('filter-dialog');
+    await expect(dialog).toBeVisible();
+    await expect(dialog.getByText('apple')).toBeVisible();
+    await dialog.getByRole('button', { name: 'Clear' }).click();
+    await dialog.getByLabel('apple').check();
+    await dialog.getByRole('button', { name: 'OK' }).click();
+    await expect(dialog).toBeHidden();
+    expect(await page.evaluate(() => window.__sheet!.rowCount)).toBe(998);
+    expect(await cellValue(page, 0, 0)).toBe('apple');
+    expect(await cellValue(page, 1, 0)).toBe('apple');
+    expect(await page.evaluate(() => window.__sheet!.isColumnFiltered(0))).toBe(true);
+    await page.keyboard.press(`${mod}+z`);
+    expect(await page.evaluate(() => window.__sheet!.rowCount)).toBe(1000);
+  });
+
+  test('the filter dialog search narrows the list and Cancel changes nothing', async ({ page }) => {
+    await page.evaluate(() => {
+      ['apple', 'pear', 'fig'].forEach((v, r) => window.__sheet!.setCellInput(r, 0, v));
+    });
+    await rightClick(page, 0, 0);
+    await page.getByRole('menuitem', { name: /Filter column A by values/ }).click();
+    const dialog = page.getByTestId('filter-dialog');
+    await dialog.getByLabel('Search values').fill('pe');
+    await expect(dialog.getByText('apple')).toBeHidden();
+    await expect(dialog.getByText('pear')).toBeVisible();
+    await dialog.getByRole('button', { name: 'Cancel' }).click();
+    expect(await page.evaluate(() => window.__sheet!.rowCount)).toBe(1000);
+  });
+});
+
+test.describe('status bar', () => {
+  test('shows sum, average and count for a numeric selection and hides for one cell', async ({ page }) => {
+    await page.evaluate(() => {
+      [2, 4, 6].forEach((v, r) => window.__sheet!.setCellInput(r, 0, String(v)));
+      window.__sheet!.setCellInput(3, 0, 'text');
+    });
+    await clickCell(page, 0, 0);
+    await expect(page.getByTestId('stat-sum')).toBeHidden();
+    await clickCell(page, 3, 0, { modifiers: ['Shift'] });
+    await expect(page.getByTestId('stat-sum')).toHaveText('12');
+    await expect(page.getByTestId('stat-average')).toHaveText('4');
+    await expect(page.getByTestId('stat-count')).toHaveText('3');
+    await clickCell(page, 5, 5);
+    await expect(page.getByTestId('stat-sum')).toBeHidden();
+  });
+
+  test('updates when a value changes', async ({ page }) => {
+    await page.evaluate(() => {
+      window.__sheet!.setCellInput(0, 0, '1');
+      window.__sheet!.setCellInput(1, 0, '2');
+    });
+    await clickCell(page, 0, 0);
+    await clickCell(page, 1, 0, { modifiers: ['Shift'] });
+    await expect(page.getByTestId('stat-sum')).toHaveText('3');
+    await page.evaluate(() => window.__sheet!.setCellInput(1, 0, '10'));
+    await expect(page.getByTestId('stat-sum')).toHaveText('11');
+  });
+});
