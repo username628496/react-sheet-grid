@@ -1468,3 +1468,126 @@ test.describe('hiding rows and columns', () => {
     expect(tops[1]).toBe(tops[2]);
   });
 });
+
+test.describe('zoom', () => {
+  type Page = import('@playwright/test').Page;
+  const setZoom = (page: Page, z: number) => page.evaluate((v) => window.__grid!.surface.setZoom(v), z);
+  /** Screen position of a cell center when zoomed: logical positions times the zoom. */
+  const zoomedCenter = (page: Page, row: number, col: number) =>
+    page.evaluate(
+      ([r, c]) => {
+        const g = window.__grid!;
+        const vp = g.surface.viewport;
+        const z = g.surface.zoom;
+        const rect = g.surface.host.getBoundingClientRect();
+        return {
+          x: rect.left + (vp.colLeft(c as number) + g.sheet.cols.getSize(c as number) / 2) * z,
+          y: rect.top + (vp.rowTop(r as number) + g.sheet.rows.getSize(r as number) / 2) * z,
+        };
+      },
+      [row, col],
+    );
+
+  for (const z of [0.5, 1.5, 2]) {
+    test(`clicks select the cell under the pointer at ${z * 100}%`, async ({ page }) => {
+      await setZoom(page, z);
+      for (const [r, c] of [[0, 0], [3, 2], [6, 4]] as const) {
+        const { x, y } = await zoomedCenter(page, r, c);
+        await page.mouse.click(x, y);
+        expect((await selection(page)).active).toEqual([r, c]);
+      }
+    });
+  }
+
+  test('the cell editor sits exactly over the cell and scales its text', async ({ page }) => {
+    await setZoom(page, 1.5);
+    const { x, y } = await zoomedCenter(page, 2, 1);
+    await page.mouse.click(x, y);
+    await page.keyboard.type('zoomed');
+    const geometry = await page.evaluate(() => {
+      const g = window.__grid!;
+      const box = g.editor.textarea.getBoundingClientRect();
+      const host = g.surface.host.getBoundingClientRect();
+      const vp = g.surface.viewport;
+      return {
+        left: box.left - host.left,
+        top: box.top - host.top,
+        expectedLeft: vp.colLeft(1) * 1.5,
+        expectedTop: vp.rowTop(2) * 1.5,
+        fontSize: parseFloat(getComputedStyle(g.editor.textarea).fontSize),
+      };
+    });
+    expect(Math.abs(geometry.left - geometry.expectedLeft)).toBeLessThan(2);
+    expect(Math.abs(geometry.top - geometry.expectedTop)).toBeLessThan(2);
+    expect(geometry.fontSize).toBeCloseTo(13 * 1.5, 1);
+    await page.keyboard.press('Enter');
+    expect(await cellValue(page, 2, 1)).toBe('zoomed');
+  });
+
+  test('scrolling reaches the last row and column at 200% and the frozen panes hold still', async ({ page }) => {
+    await page.evaluate(() => window.__sheet!.setFrozen(1, 1));
+    await setZoom(page, 2);
+    await page.evaluate(() => window.__grid!.surface.scrollBy(0, 1e7));
+    await page.evaluate(() => window.__grid!.surface.scrollBy(1e7, 0));
+    const reach = await page.evaluate(() => {
+      const g = window.__grid!;
+      const vp = g.surface.viewport;
+      return {
+        scrollY: vp.scrollY,
+        maxY: vp.maxScrollY,
+        scrollX: vp.scrollX,
+        maxX: vp.maxScrollX,
+        hostBottom: g.surface.host.scrollTop + g.surface.host.clientHeight,
+        hostHeight: g.surface.host.scrollHeight,
+        firstColLeft: vp.colLeft(0),
+        headerWidth: vp.headerWidth,
+      };
+    });
+    expect(reach.scrollY).toBe(reach.maxY);
+    expect(reach.scrollX).toBe(reach.maxX);
+    expect(Math.abs(reach.hostBottom - reach.hostHeight)).toBeLessThan(2); // the native scrollbar agrees it is at the end
+    expect(reach.firstColLeft).toBe(reach.headerWidth);
+  });
+
+  test('native scrolling moves the grid by the right amount at 150%', async ({ page }) => {
+    await setZoom(page, 1.5);
+    await page.evaluate(() => (window.__grid!.surface.host.scrollTop = 300));
+    await expect.poll(() => page.evaluate(() => window.__grid!.surface.viewport.scrollY)).toBe(200); // 300 screen px = 200 logical
+  });
+
+  test('dragging a column border resizes in logical units', async ({ page }) => {
+    await setZoom(page, 1.5);
+    const { x, y } = await page.evaluate(() => {
+      const g = window.__grid!;
+      const vp = g.surface.viewport;
+      const rect = g.surface.host.getBoundingClientRect();
+      return { x: rect.left + (vp.colLeft(1) + g.sheet.cols.getSize(1)) * 1.5, y: rect.top + (vp.headerHeight / 2) * 1.5 };
+    });
+    await page.mouse.move(x, y);
+    await page.mouse.down();
+    await page.mouse.move(x + 30, y, { steps: 4 });
+    await page.mouse.up();
+    expect(await page.evaluate(() => window.__sheet!.cols.getSize(1))).toBe(120); // 30 screen px = 20 logical
+  });
+
+  test('the zoom menu changes the level, shows it, and the demo remembers it', async ({ page }) => {
+    await page.getByRole('button', { name: 'Zoom', exact: true }).click();
+    await page.getByRole('menuitemradio', { name: '150%' }).click();
+    expect(await page.evaluate(() => window.__grid!.surface.zoom)).toBe(1.5);
+    await expect(page.getByRole('button', { name: 'Zoom', exact: true })).toContainText('150%');
+    await page.reload();
+    await page.waitForFunction(() => window.__grid !== undefined);
+    await expect.poll(() => page.evaluate(() => window.__grid!.surface.zoom)).toBe(1.5);
+  });
+
+  test('zoom is clamped and stepped', async ({ page }) => {
+    await setZoom(page, 9);
+    expect(await page.evaluate(() => window.__grid!.surface.zoom)).toBe(2);
+    await setZoom(page, 0.01);
+    expect(await page.evaluate(() => window.__grid!.surface.zoom)).toBe(0.5);
+    await setZoom(page, 1.234);
+    expect(await page.evaluate(() => window.__grid!.surface.zoom)).toBe(1.25);
+    await setZoom(page, Number.NaN);
+    expect(await page.evaluate(() => window.__grid!.surface.zoom)).toBe(1);
+  });
+});

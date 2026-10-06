@@ -18,6 +18,9 @@ export interface DataGridProps {
   className?: string;
   style?: CSSProperties;
   /** Gives the host app access to the imperative controller (scrolling, focus, editor state). */
+  /** Zoom factor, 0.5 to 2 (1 = 100%). Changes made from the toolbar are reported through `onZoomChange`. */
+  zoom?: number;
+  onZoomChange?: (zoom: number) => void;
   onReady?: (controller: GridController) => void;
 }
 
@@ -25,7 +28,9 @@ export interface DataGridProps {
  * Thin React shell. No cell data or scroll position goes through React state:
  * the surface draws imperatively and React only mounts/unmounts it.
  */
-export function DataGrid({ sheet, frozenRows, frozenCols, className, style, onReady }: DataGridProps) {
+export function DataGrid({ sheet, frozenRows, frozenCols, className, style, zoom, onZoomChange, onReady }: DataGridProps) {
+  const zoomCallback = useRef(onZoomChange);
+  zoomCallback.current = onZoomChange;
   const mountRef = useRef<HTMLDivElement>(null);
   const editorRef = useRef<HTMLTextAreaElement>(null);
   const colorTheme = useTheme();
@@ -42,6 +47,12 @@ export function DataGrid({ sheet, frozenRows, frozenCols, className, style, onRe
     setFilter(null);
     editorRef.current?.focus({ preventScroll: true });
   }, []);
+
+  useEffect(() => {
+    if (controller === null) return;
+    if (zoom !== undefined) controller.surface.setZoom(zoom);
+    return controller.surface.subscribeZoom((z) => zoomCallback.current?.(z));
+  }, [controller, zoom]);
 
   // The canvas reads its colors from a shared palette; switching it needs a repaint and a restyled editor box.
   useEffect(() => {

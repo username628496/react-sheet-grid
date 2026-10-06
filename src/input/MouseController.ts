@@ -65,13 +65,16 @@ export class MouseController {
   /** Called with the cell under a right click, after the selection was adjusted. Set by the context menu. */
   onContext: ((clientX: number, clientY: number) => void) | null = null;
 
+  /** Position inside the grid in logical pixels: screen pixels divided by the zoom, so hit tests need no zoom logic. */
   private local(e: MouseEvent): { x: number; y: number } {
     const rect = this.host.getBoundingClientRect();
-    return { x: e.clientX - rect.left, y: e.clientY - rect.top };
+    const zoom = this.deps.surface.zoom;
+    return { x: (e.clientX - rect.left) / zoom, y: (e.clientY - rect.top) / zoom };
   }
 
   private onScrollbar(x: number, y: number): boolean {
-    return x >= this.host.clientWidth || y >= this.host.clientHeight;
+    const zoom = this.deps.surface.zoom;
+    return x * zoom >= this.host.clientWidth || y * zoom >= this.host.clientHeight;
   }
 
   private locate(x: number, y: number): Hit {

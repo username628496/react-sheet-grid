@@ -120,6 +120,7 @@ function App({ sheet, notice }: { sheet: Spreadsheet; notice: string | null }) {
   const [saveStatus, setSaveStatus] = useState<SaveStatus | null>(null);
   const [locale, setLocale] = useState<Locale>(() => readPref('rdg-locale', LOCALES, defaultLocale));
   const [theme, setTheme] = useState<ThemeSetting>(() => readPref('rdg-theme', THEMES, 'auto'));
+  const [zoom, setZoom] = useState<number>(() => Number(readPref('rdg-zoom', ['0.5', '0.75', '0.9', '1', '1.25', '1.5', '1.75', '2'], '1')));
   useEffect(() => (persistent ? autoSave(sheet, setSaveStatus) : undefined), [sheet]);
   return (
     <GridProvider locale={locale} theme={theme}>
@@ -130,6 +131,11 @@ function App({ sheet, notice }: { sheet: Spreadsheet; notice: string | null }) {
         saveStatus={saveStatus}
         locale={locale}
         theme={theme}
+        zoom={zoom}
+        onZoom={(z) => {
+          setZoom(z);
+          writePref('rdg-zoom', String(z));
+        }}
         onGrid={setGrid}
         onLocale={(l) => {
           setLocale(l);
@@ -151,12 +157,14 @@ interface PageProps {
   saveStatus: SaveStatus | null;
   locale: Locale;
   theme: ThemeSetting;
+  zoom: number;
+  onZoom(z: number): void;
   onGrid(g: GridController): void;
   onLocale(l: Locale): void;
   onTheme(t: ThemeSetting): void;
 }
 
-function Page({ sheet, grid, notice, saveStatus, locale, theme, onGrid, onLocale, onTheme }: PageProps) {
+function Page({ sheet, grid, notice, saveStatus, locale, theme, zoom, onZoom, onGrid, onLocale, onTheme }: PageProps) {
   const resolved = useResolvedTheme(theme);
   const reset = async (): Promise<void> => {
     if (!window.confirm(locale === 'vi' ? 'Xóa bảng đã lưu và bắt đầu bảng trống?' : 'Discard the saved sheet and start a blank one?')) return;
@@ -175,6 +183,8 @@ function Page({ sheet, grid, notice, saveStatus, locale, theme, onGrid, onLocale
           sheet={sheet}
           frozenRows={sample ? 1 : 0}
           frozenCols={sample ? 1 : 0}
+          zoom={zoom}
+          onZoomChange={onZoom}
           onReady={(controller) => {
             window.__grid = controller;
             onGrid(controller);

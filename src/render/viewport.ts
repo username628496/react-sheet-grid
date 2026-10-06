@@ -29,6 +29,8 @@ export class Viewport {
   headerHeight = 24;
   frozenRows = 0;
   frozenCols = 0;
+  /** Everything in the viewport is in logical (zoom 1) pixels; this is how many screen pixels one logical pixel takes. */
+  zoom = 1;
 
   // Reused every frame so the render loop never allocates.
   readonly rowSegments: [Segment, Segment] = [newSegment(true), newSegment(false)];

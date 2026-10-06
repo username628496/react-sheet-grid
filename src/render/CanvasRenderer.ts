@@ -24,6 +24,7 @@ export class CanvasRenderer {
   private cssWidth = 0;
   private cssHeight = 0;
   private dpr = 1;
+  private zoom = 1;
 
   constructor(
     private readonly canvas: HTMLCanvasElement,
@@ -49,6 +50,12 @@ export class CanvasRenderer {
     this.invalidate();
   }
 
+  /** Draws everything scaled: layout stays in logical pixels and the canvas transform does the zooming. */
+  setZoom(zoom: number): void {
+    this.zoom = zoom;
+    this.invalidate();
+  }
+
   /** Width of `text` in `font`, through the same cache the drawing code uses. */
   measure(font: string, text: string): number {
     return this.measurer.measure(font, text);
@@ -70,9 +77,10 @@ export class CanvasRenderer {
 
   draw(): void {
     const { ctx, viewport: vp, sheet } = this;
-    ctx.setTransform(this.dpr, 0, 0, this.dpr, 0, 0);
+    const scale = this.dpr * this.zoom;
+    ctx.setTransform(scale, 0, 0, scale, 0, 0);
     ctx.fillStyle = theme.background;
-    ctx.fillRect(0, 0, this.cssWidth, this.cssHeight);
+    ctx.fillRect(0, 0, this.cssWidth / this.zoom, this.cssHeight / this.zoom);
     vp.updateSegments();
 
     for (const rowSeg of vp.rowSegments) {
@@ -98,7 +106,7 @@ export class CanvasRenderer {
   private drawFreezeLines(): void {
     const { ctx, viewport: vp } = this;
     ctx.fillStyle = theme.freezeLine;
-    if (vp.frozenCols > 0) ctx.fillRect(Math.floor(vp.headerWidth + vp.frozenWidth) - 1, 0, 2, this.cssHeight);
-    if (vp.frozenRows > 0) ctx.fillRect(0, Math.floor(vp.headerHeight + vp.frozenHeight) - 1, this.cssWidth, 2);
+    if (vp.frozenCols > 0) ctx.fillRect(Math.floor(vp.headerWidth + vp.frozenWidth) - 1, 0, 2, this.cssHeight / this.zoom);
+    if (vp.frozenRows > 0) ctx.fillRect(0, Math.floor(vp.headerHeight + vp.frozenHeight) - 1, this.cssWidth / this.zoom, 2);
   }
 }

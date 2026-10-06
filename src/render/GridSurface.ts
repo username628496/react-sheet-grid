@@ -2,6 +2,9 @@ import type { Spreadsheet } from '../core/Spreadsheet';
 import { CanvasRenderer } from './CanvasRenderer';
 import { computeScrollMetrics, Viewport, type ScrollMetrics } from './viewport';
 
+export const MIN_ZOOM = 0.5;
+export const MAX_ZOOM = 2;
+
 export interface SurfaceOptions {
   frozenRows?: number;
   frozenCols?: number;
@@ -27,6 +30,8 @@ export class GridSurface {
   private metricsY: ScrollMetrics = { physical: 0, scale: 1 };
   private hostLeft = 0;
   private hostTop = 0;
+  private zoomLevel = 1;
+  private readonly zoomListeners = new Set<(zoom: number) => void>();
 
   constructor(
     private readonly mount: HTMLElement,
@@ -77,6 +82,32 @@ export class GridSurface {
     this.emitView();
   }
 
+  /** Screen pixels per logical pixel (1 = 100%). */
+  get zoom(): number {
+    return this.zoomLevel;
+  }
+
+  /**
+   * Zooms between 50% and 200% in steps of 5%. Layout, selection and scroll stay in logical pixels (so the data and
+   * every size are untouched); only the drawing, the native scroll extent, the mouse mapping and the editor box
+   * are scaled. The cell at the top-left of the scrolling area stays where it is.
+   */
+  setZoom(zoom: number): void {
+    const next = Math.round(Math.max(MIN_ZOOM, Math.min(MAX_ZOOM, Number.isFinite(zoom) ? zoom : 1)) * 20) / 20;
+    if (next === this.zoomLevel) return;
+    this.zoomLevel = next;
+    this.viewport.zoom = next;
+    this.renderer.setZoom(next);
+    this.measure();
+    for (const listener of this.zoomListeners) listener(next);
+    this.sheet.notify();
+  }
+
+  subscribeZoom(listener: (zoom: number) => void): () => void {
+    this.zoomListeners.add(listener);
+    return () => this.zoomListeners.delete(listener);
+  }
+
   /** Called whenever scroll position or size changes (used to reposition the cell editor). */
   subscribeView(listener: () => void): () => void {
     this.viewListeners.add(listener);
@@ -118,8 +149,8 @@ export class GridSurface {
     const width = this.mount.clientWidth;
     const height = this.mount.clientHeight;
     const vp = this.viewport;
-    vp.width = this.host.clientWidth || width;
-    vp.height = this.host.clientHeight || height;
+    vp.width = (this.host.clientWidth || width) / this.zoomLevel;
+    vp.height = (this.host.clientHeight || height) / this.zoomLevel;
     this.renderer.resize(width, height, window.devicePixelRatio || 1);
     this.updateExtent();
     this.emitView();
@@ -128,8 +159,9 @@ export class GridSurface {
   private updateExtent(): void {
     const vp = this.viewport;
     vp.clampScroll();
-    this.metricsX = computeScrollMetrics(vp.maxScrollX);
-    this.metricsY = computeScrollMetrics(vp.maxScrollY);
+    // The native scroll extent is in screen pixels, i.e. the logical distance times the zoom.
+    this.metricsX = computeScrollMetrics(vp.maxScrollX * this.zoomLevel);
+    this.metricsY = computeScrollMetrics(vp.maxScrollY * this.zoomLevel);
     this.spacer.style.width = `${this.host.clientWidth + this.metricsX.physical}px`;
     this.spacer.style.height = `${this.host.clientHeight + this.metricsY.physical}px`;
     this.applyScrollToHost();
@@ -139,8 +171,8 @@ export class GridSurface {
     const vp = this.viewport;
     vp.scrollX = Math.round(vp.scrollX);
     vp.scrollY = Math.round(vp.scrollY);
-    this.host.scrollLeft = vp.scrollX / this.metricsX.scale;
-    this.host.scrollTop = vp.scrollY / this.metricsY.scale;
+    this.host.scrollLeft = (vp.scrollX * this.zoomLevel) / this.metricsX.scale;
+    this.host.scrollTop = (vp.scrollY * this.zoomLevel) / this.metricsY.scale;
     // Read back: the browser rounds/clamps, and the scroll handler must not mistake that for user input.
     this.hostLeft = this.host.scrollLeft;
     this.hostTop = this.host.scrollTop;
@@ -153,8 +185,8 @@ export class GridSurface {
     if (left === this.hostLeft && top === this.hostTop) return;
     this.hostLeft = left;
     this.hostTop = top;
-    vp.scrollX = left >= this.metricsX.physical - 1 ? vp.maxScrollX : Math.round(left * this.metricsX.scale);
-    vp.scrollY = top >= this.metricsY.physical - 1 ? vp.maxScrollY : Math.round(top * this.metricsY.scale);
+    vp.scrollX = left >= this.metricsX.physical - 1 ? vp.maxScrollX : Math.round((left * this.metricsX.scale) / this.zoomLevel);
+    vp.scrollY = top >= this.metricsY.physical - 1 ? vp.maxScrollY : Math.round((top * this.metricsY.scale) / this.zoomLevel);
     vp.clampScroll();
     this.renderer.invalidate();
     this.emitView();

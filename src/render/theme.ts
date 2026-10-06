@@ -55,8 +55,9 @@ export function applyCanvasTheme(name: 'light' | 'dark'): void {
   Object.assign(theme, name === 'dark' ? DARK : LIGHT);
 }
 
-export function fontFor(bold: boolean | undefined, italic: boolean | undefined): string {
-  return `${italic === true ? 'italic ' : ''}${bold === true ? 'bold ' : ''}${theme.fontSize}px ${theme.fontFamily}`;
+/** `scale` is for DOM boxes that sit on top of the canvas (the editor) and so need screen pixels; the canvas itself scales by transform. */
+export function fontFor(bold: boolean | undefined, italic: boolean | undefined, scale = 1): string {
+  return `${italic === true ? 'italic ' : ''}${bold === true ? 'bold ' : ''}${theme.fontSize * scale}px ${theme.fontFamily}`;
 }
 
 /** Colors given to the references of a formula being edited, in order of first appearance (as in Sheets). */

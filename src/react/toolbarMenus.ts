@@ -4,7 +4,7 @@ import type { GridController } from '../input/GridController';
 import type { MenuEntry } from './Menu';
 import type { Messages } from './messages';
 
-export type MenuId = 'paste' | 'numberFormat' | 'insert' | 'delete' | 'visibility' | 'freeze' | 'functions';
+export type MenuId = 'paste' | 'numberFormat' | 'insert' | 'delete' | 'visibility' | 'freeze' | 'functions' | 'zoom';
 
 /** Number patterns offered by the "More formats" menu, in display order; '' is the automatic format. */
 export function numberFormatEntries(sheet: Spreadsheet, m: Messages): MenuEntry[] {
@@ -114,3 +114,13 @@ export function visibilityEntries(sheet: Spreadsheet, m: Messages): MenuEntry[] 
 }
 
 const MOD = typeof navigator !== 'undefined' && /Mac|iPhone|iPad/.test(navigator.platform) ? '⌘' : 'Ctrl+';
+
+export const ZOOM_LEVELS = [0.5, 0.75, 0.9, 1, 1.25, 1.5, 1.75, 2] as const;
+
+export function zoomEntries(grid: GridController): MenuEntry[] {
+  return ZOOM_LEVELS.map((level) => ({
+    label: `${Math.round(level * 100)}%`,
+    checked: grid.surface.zoom === level,
+    run: () => grid.surface.setZoom(level),
+  }));
+}

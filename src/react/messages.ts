@@ -63,6 +63,7 @@ export interface Messages {
   freezeUpToRow: (n: number) => string;
   freezeUpToCol: (col: string) => string;
   functions: string;
+  zoom: string;
   visibility: string;
   hideRows: (first: number, last: number) => string;
   hideCols: (first: string, last: string) => string;
@@ -176,6 +177,7 @@ const en: Messages = {
   freezeUpToRow: (n) => `Up to row ${n}`,
   freezeUpToCol: (col) => `Up to column ${col}`,
   functions: 'Functions',
+  zoom: 'Zoom',
   visibility: 'Show or hide',
   hideRows: (a, b) => (a === b ? `Hide row ${a}` : `Hide rows ${a}–${b}`),
   hideCols: (a, b) => (a === b ? `Hide column ${a}` : `Hide columns ${a}–${b}`),
@@ -340,6 +342,7 @@ const vi: Messages = {
   freezeUpToRow: (n) => `Đến dòng ${n}`,
   freezeUpToCol: (col) => `Đến cột ${col}`,
   functions: 'Hàm',
+  zoom: 'Thu phóng',
   visibility: 'Hiện hoặc ẩn',
   hideRows: (a, b) => (a === b ? `Ẩn dòng ${a}` : `Ẩn dòng ${a}–${b}`),
   hideCols: (a, b) => (a === b ? `Ẩn cột ${a}` : `Ẩn cột ${a}–${b}`),

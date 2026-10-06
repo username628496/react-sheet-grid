@@ -13,6 +13,7 @@ import {
   functionEntries,
   insertEntries,
   type MenuId,
+  zoomEntries,
   visibilityEntries,
   numberFormatEntries,
   pasteEntries,
@@ -39,6 +40,7 @@ interface ToolbarState {
   painting: boolean;
   viewActive: boolean;
   columnFiltered: boolean;
+  zoom: number;
 }
 
 // Reading from the sheet through one string keeps useSyncExternalStore's snapshot comparison trivial and stable.
@@ -54,6 +56,7 @@ function snapshot(sheet: Spreadsheet, grid: GridController | null | undefined): 
     painting: grid?.painter.armed === true,
     viewActive: sheet.viewState.sort !== null || sheet.viewState.filters.size > 0,
     columnFiltered: sheet.isColumnFiltered(selection.activeCol),
+    zoom: grid?.surface.zoom ?? 1,
   };
   return JSON.stringify(state);
 }
@@ -84,7 +87,7 @@ export function Toolbar({ sheet, grid = null, onAction }: ToolbarProps) {
   );
   const m = useMessages();
   const theme = useTheme();
-  const { canUndo, canRedo, style, rows, cols, painting, viewActive, columnFiltered } = JSON.parse(raw) as ToolbarState;
+  const { canUndo, canRedo, style, rows, cols, painting, viewActive, columnFiltered, zoom } = JSON.parse(raw) as ToolbarState;
   const [notice, setNotice] = useState<string | null>(null);
   const [menu, setMenu] = useState<OpenMenu | null>(null);
   const lastClosed = useRef<{ id: MenuId; at: number } | null>(null);
@@ -174,6 +177,8 @@ export function Toolbar({ sheet, grid = null, onAction }: ToolbarProps) {
         return insertEntries(sheet, m);
       case 'delete':
         return deleteEntries(sheet, m);
+      case 'zoom':
+        return grid === null ? [] : zoomEntries(grid);
       case 'visibility':
         return visibilityEntries(sheet, m);
       case 'freeze':
@@ -190,6 +195,7 @@ export function Toolbar({ sheet, grid = null, onAction }: ToolbarProps) {
     visibility: m.visibility,
     freeze: m.freeze,
     functions: m.functions,
+    zoom: m.zoom,
   };
 
   const text = (glyph: string): ReactNode => <span className="rdg-glyph">{glyph}</span>;
@@ -282,6 +288,9 @@ export function Toolbar({ sheet, grid = null, onAction }: ToolbarProps) {
           {menuButton('functions', 'sigma', m.functions, undefined)}
         </div>
         <span className="rdg-spacer" />
+        <div className="rdg-group" role="group" aria-label={m.zoom}>
+          {menuButton('zoom', text(`${Math.round(zoom * 100)}%`), m.zoom, undefined, noGrid)}
+        </div>
         <div className="rdg-group" role="group" aria-label={m.groupSheetSize}>
           <CountField
             label={m.rowsLabel}

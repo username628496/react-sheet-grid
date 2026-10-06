@@ -232,14 +232,16 @@ export class EditorController {
   reposition(): void {
     const { selection, rows, cols, styles } = this.sheet;
     const vp = this.surface.viewport;
+    // Layout is in logical pixels; the editor is a DOM box, so everything is scaled to screen pixels here.
+    const z = this.surface.zoom;
     const r = selection.activeRow;
     const c = selection.activeCol;
-    const left = vp.colLeft(c);
-    const top = vp.rowTop(r);
-    const cellW = cols.getSize(c);
-    const cellH = rows.getSize(r);
+    const left = vp.colLeft(c) * z;
+    const top = vp.rowTop(r) * z;
+    const cellW = cols.getSize(c) * z;
+    const cellH = rows.getSize(r) * z;
     const style = styles.get(this.sheet.getCellByView(r, c).styleId);
-    const font = fontFor(style.bold, style.italic);
+    const font = fontFor(style.bold, style.italic, z);
     const t = this.textarea;
 
     this.refs = this.editing ? this.colorRefs(findReferences(t.value)) : [];
@@ -258,14 +260,14 @@ export class EditorController {
       this.measureCtx.font = font;
       for (const line of lines) width = Math.max(width, this.measureCtx.measureText(line).width);
     }
-    const lineHeight = Math.max(14, rows.defaultSize - 4);
-    const maxWidth = Math.max(cellW, vp.width - left);
-    const w = Math.min(maxWidth, Math.max(cellW, Math.ceil(width) + 16));
-    const h = Math.max(cellH, lines.length * lineHeight + 4);
+    const lineHeight = Math.max(14, rows.defaultSize - 4) * z;
+    const maxWidth = Math.max(cellW, vp.width * z - left);
+    const w = Math.min(maxWidth, Math.max(cellW, Math.ceil(width) + 16 * z));
+    const h = Math.max(cellH, lines.length * lineHeight + 4 * z);
     // Formulas are drawn in a backdrop element behind a transparent textarea so each reference can have its own
     // color. Not during IME composition, when the textarea has to show its own text.
     const colored = t.value.startsWith('=') && !this.composing;
-    const box = `${BASE_STYLE}left:${left}px;top:${top}px;width:${w}px;height:${h}px;padding:0 4px;font:${font};line-height:${lineHeight}px;`;
+    const box = `${BASE_STYLE}left:${left}px;top:${top}px;width:${w}px;height:${h}px;padding:0 ${4 * z}px;font:${font};line-height:${lineHeight}px;`;
     t.style.cssText =
       `${box}background:${colored ? 'transparent' : theme.background};color:${colored ? 'transparent' : (style.color ?? theme.text)};` +
       `caret-color:${theme.text};border:2px solid ${theme.accent};pointer-events:auto;` +
