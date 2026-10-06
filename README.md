@@ -134,6 +134,19 @@ Every change goes through `sheet.execute(command)`, which is what makes undo/red
 `insertRows`, … are conveniences that do that for you. `sheet.subscribe(fn)` fires on every change including selection;
 `sheet.subscribeChanges(fn)` only when the document changed.
 
+## Find and replace
+
+<kbd>Ctrl/⌘</kbd>+<kbd>F</kbd> opens the panel (also the magnifier button), <kbd>Ctrl</kbd>+<kbd>H</kbd> (<kbd>⌘</kbd>+<kbd>Shift</kbd>+<kbd>H</kbd> on a Mac)
+opens it with the replace row. Matches are highlighted as you type and <kbd>Enter</kbd> / <kbd>Shift</kbd>+<kbd>Enter</kbd> move between them.
+Options: match case, match entire cell, **ignore accents** (so `viet` finds `Việt` and `duong` finds `Đường`), also search in
+formulas, and search only the selected range. Replace works on what you would edit (typed text or the formula), as one undo step for
+"Replace all". Hidden rows and rows filtered out are skipped.
+
+```ts
+const { matches } = sheet.findCells({ query: 'viet', ignoreAccents: true });
+sheet.replaceInCells({ query: 'viet', ignoreAccents: true }, 'VN');   // { cells, occurrences }
+```
+
 ## CSV
 
 The toolbar's File menu imports a CSV (comma, semicolon or tab separated, detected automatically; UTF-8 or Windows-1252)

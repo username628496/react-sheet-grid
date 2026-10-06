@@ -128,3 +128,29 @@ export function drawFormulaRef(
   ctx.lineWidth = 2;
   ctx.strokeRect(x, y, w, h);
 }
+
+/** Match highlighting for Find: every visible matching cell is tinted, the current one more strongly. */
+export function drawFindMatches(
+  ctx: CanvasRenderingContext2D,
+  sheet: Spreadsheet,
+  matches: { isMatch(viewRow: number, viewCol: number): boolean; isCurrent(viewRow: number, viewCol: number): boolean; readonly matchCount: number },
+  rowSeg: Segment,
+  colSeg: Segment,
+): void {
+  if (matches.matchCount === 0) return;
+  const { rows, cols } = sheet;
+  let y = rowSeg.origin + rows.offsetOf(rowSeg.first) - rowSeg.base;
+  for (let r = rowSeg.first; r <= rowSeg.last; r++) {
+    const h = rows.getSize(r);
+    let x = colSeg.origin + cols.offsetOf(colSeg.first) - colSeg.base;
+    for (let c = colSeg.first; c <= colSeg.last; c++) {
+      const w = cols.getSize(c);
+      if (w > 0 && h > 0 && matches.isMatch(r, c)) {
+        ctx.fillStyle = matches.isCurrent(r, c) ? theme.findCurrent : theme.findMatch;
+        ctx.fillRect(x, y, w - 1, h - 1);
+      }
+      x += w;
+    }
+    y += h;
+  }
+}

@@ -46,6 +46,7 @@ export type Action =
   | { type: 'pasteValues' }
   | { type: 'pasteFormat' }
   | { type: 'showShortcuts' }
+  | { type: 'find'; replace: boolean }
   | { type: 'leaveGrid'; backward: boolean }
   | { type: 'hide'; axis: 'row' | 'col' }
   | { type: 'unhide'; axis: 'row' | 'col' }
@@ -159,6 +160,8 @@ function navigatingKey(k: KeyInput): Action | null {
           return { type: 'strike' };
         case 'v':
           return { type: 'pasteValues' }; // the paste event itself still comes from the browser
+        case 'h':
+          return { type: 'find', replace: true };
         default:
           return null;
       }
@@ -186,6 +189,10 @@ function navigatingKey(k: KeyInput): Action | null {
         return { type: 'selectColumn' };
       case '/':
         return { type: 'showShortcuts' };
+      case 'f':
+        return { type: 'find', replace: false };
+      case 'h':
+        return { type: 'find', replace: true }; // Ctrl+H; on a Mac Cmd+H belongs to the system, so Cmd+Shift+H (below) is used
       default:
         return null; // Mod+C/X/V arrive as clipboard events, not keys.
     }

@@ -1661,3 +1661,128 @@ test.describe('CSV import and export', () => {
     await expect(page.getByRole('menuitem', { name: 'Import CSV…' })).toBeDisabled();
   });
 });
+
+test.describe('find and replace', () => {
+  type Page = import('@playwright/test').Page;
+  const dialog = (page: Page) => page.getByTestId('find-dialog');
+  const findBox = (page: Page) => page.getByRole('textbox', { name: 'Find', exact: true });
+  const seed = (page: Page) =>
+    page.evaluate(() => {
+      const s = window.__sheet!;
+      s.setCellInput(0, 0, 'red apple');
+      s.setCellInput(2, 1, 'green apple');
+      s.setCellInput(4, 0, 'pear');
+      s.setCellInput(6, 2, 'APPLE pie');
+      s.setCellInput(7, 0, 'Việt Nam');
+    });
+
+  test('Mod+F opens the panel, finds as you type, and Enter / Shift+Enter move between results', async ({ page }) => {
+    await seed(page);
+    await clickCell(page, 0, 0);
+    await page.keyboard.press(`${mod}+f`);
+    await expect(dialog(page)).toBeVisible();
+    await expect(findBox(page)).toBeFocused();
+    await expect(findBox(page)).toHaveValue('red apple'); // prefilled from the selected cell
+    await findBox(page).fill('apple');
+    await expect(page.getByTestId('find-count')).toHaveText('1 of 3');
+    expect((await selection(page)).active).toEqual([0, 0]);
+    await findBox(page).press('Enter');
+    await expect(page.getByTestId('find-count')).toHaveText('2 of 3');
+    expect((await selection(page)).active).toEqual([2, 1]);
+    await findBox(page).press('Enter');
+    expect((await selection(page)).active).toEqual([6, 2]);
+    await findBox(page).press('Enter'); // wraps
+    expect((await selection(page)).active).toEqual([0, 0]);
+    await findBox(page).press('Shift+Enter');
+    expect((await selection(page)).active).toEqual([6, 2]);
+    await findBox(page).fill('zzz');
+    await expect(page.getByTestId('find-count')).toHaveText('No results');
+  });
+
+  test('matches are highlighted on the canvas and the highlight goes away when the panel closes', async ({ page }) => {
+    await seed(page);
+    await clickCell(page, 4, 0);
+    await page.keyboard.press(`${mod}+f`);
+    await findBox(page).fill('apple');
+    await page.evaluate(() => window.__sheet!.selection.selectCell(9, 9)); // keep the selection tint out of the way
+    const tint = (row: number, col: number): Promise<number[]> =>
+      page.evaluate(
+        async ([r, c]) => {
+          await new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)));
+          const g = window.__grid!;
+          const vp = g.surface.viewport;
+          const canvas = document.querySelector('[data-testid=grid] canvas') as HTMLCanvasElement;
+          const dpr = window.devicePixelRatio || 1;
+          // The right edge of the cell is clear of text; sample there.
+          const x = Math.round((vp.colLeft(c as number) + g.sheet.cols.getSize(c as number) - 4) * dpr);
+          const y = Math.round((vp.rowTop(r as number) + 3) * dpr);
+          return Array.from(canvas.getContext('2d')!.getImageData(x, y, 1, 1).data).slice(0, 3);
+        },
+        [row, col],
+      );
+    await expect.poll(async () => (await tint(0, 0))[2]).toBeLessThan(200); // yellow-ish: blue channel is low
+    expect((await tint(4, 0))[2]).toBeGreaterThan(240); // "pear" is not a match: plain white
+    await page.keyboard.press('Escape');
+    await expect(dialog(page)).toBeHidden();
+    await expect.poll(async () => (await tint(0, 0))[2]).toBeGreaterThan(240);
+    expect(await page.evaluate(() => document.activeElement === window.__grid!.editor.textarea)).toBe(true);
+  });
+
+  test('Replace all changes every match in one undo step; Replace goes one cell at a time', async ({ page }) => {
+    await seed(page);
+    await clickCell(page, 9, 9);
+    await page.keyboard.press(`${mod}+h`);
+    await findBox(page).fill('apple');
+    await page.getByRole('textbox', { name: 'Replace with' }).fill('plum');
+    await page.getByRole('button', { name: 'Replace', exact: true }).click();
+    expect(await cellValue(page, 0, 0)).toBe('red plum');
+    expect(await cellValue(page, 2, 1)).toBe('green apple');
+    await expect(page.getByTestId('find-replaced')).toHaveText('Replaced 1 occurrence in 1 cell');
+    await page.getByRole('button', { name: 'Replace all' }).click();
+    expect(await cellValue(page, 2, 1)).toBe('green plum');
+    expect(await cellValue(page, 6, 2)).toBe('plum pie');
+    await expect(page.getByTestId('find-replaced')).toHaveText('Replaced 2 occurrences in 2 cells');
+    await page.keyboard.press('Escape');
+    await page.keyboard.press(`${mod}+z`);
+    expect(await cellValue(page, 2, 1)).toBe('green apple');
+    expect(await cellValue(page, 6, 2)).toBe('APPLE pie');
+    expect(await cellValue(page, 0, 0)).toBe('red plum'); // the first, separate Replace is its own step
+  });
+
+  test('options: accents ignored, match case, whole cell, and the selected range', async ({ page }) => {
+    await seed(page);
+    await clickCell(page, 9, 9); // a click also gives the grid keyboard focus, which Mod+F needs
+    await page.keyboard.press(`${mod}+f`);
+    await findBox(page).fill('viet');
+    await expect(page.getByTestId('find-count')).toHaveText('No results');
+    await page.getByRole('checkbox', { name: /Ignore accents/ }).check();
+    await expect(page.getByTestId('find-count')).toHaveText('1 of 1');
+    await findBox(page).fill('apple');
+    await expect(page.getByTestId('find-count')).toHaveText(/of 3$/);
+    await page.getByRole('checkbox', { name: 'Match case' }).check();
+    await expect(page.getByTestId('find-count')).toHaveText('1 of 2');
+    await page.getByRole('checkbox', { name: 'Match case' }).uncheck();
+    await page.getByRole('checkbox', { name: 'Match entire cell' }).check();
+    await expect(page.getByTestId('find-count')).toHaveText('No results');
+    await page.getByRole('checkbox', { name: 'Match entire cell' }).uncheck();
+    await page.getByLabel('Search in', { exact: true }).selectOption('sheet');
+    await expect(page.getByLabel('Search in', { exact: true }).locator('option[value=selection]')).toHaveAttribute('disabled', ''); // a single cell is selected
+  });
+
+  test('the toolbar button opens it, and it is usable in Vietnamese', async ({ page }) => {
+    await page.getByLabel('Language').selectOption('vi');
+    await page.getByRole('button', { name: 'Tìm và thay thế' }).click();
+    await expect(page.getByRole('dialog', { name: 'Tìm và thay thế' })).toBeVisible();
+    await expect(page.getByRole('textbox', { name: 'Tìm', exact: true })).toBeFocused();
+  });
+
+  test('on a read-only sheet find works but replace is disabled', async ({ page }) => {
+    await seed(page);
+    await page.evaluate(() => (window.__sheet!.readOnly = true));
+    await clickCell(page, 0, 0);
+    await page.keyboard.press(`${mod}+h`);
+    await findBox(page).fill('apple');
+    await expect(page.getByRole('button', { name: 'Replace all' })).toBeDisabled();
+    await expect(page.getByTestId('find-count')).toHaveText(/of 3$/);
+  });
+});

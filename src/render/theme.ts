@@ -10,6 +10,8 @@ export interface Palette {
   accent: string;
   selectionFill: string;
   freezeLine: string;
+  findMatch: string;
+  findCurrent: string;
 }
 
 const LIGHT: Palette = {
@@ -24,6 +26,8 @@ const LIGHT: Palette = {
   accent: '#1a73e8',
   selectionFill: 'rgba(26, 115, 232, 0.12)',
   freezeLine: '#9aa0a6',
+  findMatch: 'rgba(255, 213, 0, 0.38)',
+  findCurrent: 'rgba(255, 140, 0, 0.55)',
 };
 
 const DARK: Palette = {
@@ -38,6 +42,8 @@ const DARK: Palette = {
   accent: '#8ab4f8',
   selectionFill: 'rgba(138, 180, 248, 0.18)',
   freezeLine: '#6b7280',
+  findMatch: 'rgba(255, 213, 0, 0.28)',
+  findCurrent: 'rgba(255, 140, 0, 0.5)',
 };
 
 /**

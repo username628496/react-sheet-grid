@@ -24,6 +24,7 @@ import {
 } from './commands/StructureCommand';
 import { ResizeCommand } from './commands/ResizeCommand';
 import { ViewStateCommand } from './commands/ViewStateCommand';
+import { findInText, replaceInText, type TextSearchOptions } from './find';
 import { type CsvDelimiter, neutralizeFormula, parseCsv, toCsv } from './csv';
 import { fillCells, type FillDirection } from './fill';
 import { History } from './history/History';
@@ -78,6 +79,23 @@ const MAX_READ_CELLS = 100_000;
  */
 /** Something the user should be told about but that is not an error of the host app. Localised by the UI layer. */
 export type SheetNotice = { code: 'pasteTooLarge'; cells: number; limit: number } | { code: 'exportTooLarge'; cells: number; limit: number };
+
+export interface FindOptions extends TextSearchOptions {
+  query: string;
+  /** Also look in the text of formulas (`=SUM(A1:A5)`), not only in what cells display. */
+  inFormulas?: boolean;
+  /** Only look inside this view range (default: the whole sheet). */
+  range?: ViewRange | null;
+}
+
+export interface FindResult {
+  /** View positions in reading order (row by row). */
+  matches: Array<{ row: number; col: number }>;
+  /** More matches exist than were collected. */
+  truncated: boolean;
+}
+
+export const MAX_FIND_MATCHES = 100_000;
 
 export interface SizeChange {
   /** Row or column count after the change. */
@@ -487,6 +505,70 @@ export class Spreadsheet {
       this.pasteText(matrix);
     });
     return { rows, cols };
+  }
+
+  /**
+   * Cells whose displayed text (and, with `inFormulas`, formula text) contains the query. Only stored cells are visited,
+   * so searching a huge sparse sheet costs what it holds. Hidden rows/columns and rows filtered out are skipped.
+   */
+  findCells(options: FindOptions): FindResult {
+    const matches: FindResult['matches'] = [];
+    let truncated = false;
+    if (options.query === '') return { matches, truncated };
+    const range = options.range ?? null;
+    // Real sheets repeat their texts (categories, statuses): decide each distinct text once.
+    const verdicts = new Map<string, boolean>();
+    const contains = (text: string): boolean => {
+      let hit = verdicts.get(text);
+      if (hit === undefined) {
+        hit = findInText(text, options.query, options).length > 0;
+        if (verdicts.size < 50_000) verdicts.set(text, hit);
+      }
+      return hit;
+    };
+    this.model.forEachCell((dataRow, dataCol, cell) => {
+      if (truncated) return;
+      const row = this.mapping.toViewRow(dataRow);
+      const col = this.mapping.toViewCol(dataCol);
+      if (row < 0 || this.rows.getSize(row) === 0 || this.cols.getSize(col) === 0) return;
+      if (range !== null && (row < range.startRow || row > range.endRow || col < range.startCol || col > range.endCol)) return;
+      let hit = contains(this.getDisplayText(row, col));
+      if (!hit && options.inFormulas === true && cell.formula !== undefined) hit = contains(this.getEditText(row, col));
+      if (!hit) return;
+      if (matches.length >= MAX_FIND_MATCHES) truncated = true;
+      else matches.push({ row, col });
+    });
+    matches.sort((a, b) => a.row - b.row || a.col - b.col);
+    return { matches, truncated };
+  }
+
+  /**
+   * Replaces `query` with `replacement` in the *content* of the given cells (every cell found by `findCells` when
+   * `cells` is omitted), as one undo step. Content means what you would edit: the typed text, or the formula source. A
+   * cell that matched only through its display (for example "1,234.50" for 1234.5) has no such text and is left alone.
+   * The new text is read the way typing it would be, so replacing in "12" can produce a number. Returns the cells
+   * changed and the replacements made.
+   */
+  replaceInCells(
+    options: FindOptions,
+    replacement: string,
+    cells?: ReadonlyArray<{ row: number; col: number }>,
+  ): { cells: number; occurrences: number } {
+    if (this.readOnlyFlag || options.query === '') return { cells: 0, occurrences: 0 };
+    const targets = cells ?? this.findCells(options).matches;
+    const changes: CellChange[] = [];
+    let occurrences = 0;
+    for (const { row, col } of targets) {
+      const old = this.getCellByView(row, col);
+      const result = replaceInText(this.getEditText(row, col), options.query, replacement, options);
+      if (result.count === 0) continue;
+      occurrences += result.count;
+      const dataRow = this.mapping.toDataRow(row);
+      const dataCol = this.mapping.toDataCol(col);
+      changes.push({ dataRow, dataCol, cell: this.cellFromInput(result.text, dataRow, dataCol, old.styleId) });
+    }
+    if (changes.length > 0) this.execute(new SetCellsCommand('Replace', changes));
+    return { cells: changes.length, occurrences };
   }
 
   /** "Increase/decrease decimal places": the active cell decides the new pattern, the whole selection gets it. */

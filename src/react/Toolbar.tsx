@@ -249,6 +249,7 @@ export function Toolbar({ sheet, grid = null, onAction }: ToolbarProps) {
       <div role="toolbar" aria-label={m.toolbar} aria-orientation="horizontal" className="rdg-toolbar" data-testid="toolbar" onKeyDown={onKeyDown}>
         <div className="rdg-group" role="group" aria-label={m.file}>
           {menuButton('file', 'file', m.file, undefined)}
+          {button('search', m.findAndReplace, 'Mod+F', undefined, () => grid?.onOpenFind?.(false), noGrid)}
           <input
             ref={fileInput}
             type="file"

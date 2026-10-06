@@ -129,6 +129,18 @@ const CSS = `
 .rdg-kbd { font: inherit; background: var(--rdg-hover); border-radius: 4px; padding: 1px 6px; white-space: nowrap; }
 .rdg-muted { color: var(--rdg-muted); }
 
+.rdg-find { padding: 8px 10px 6px; font-size: 13px; }
+.rdg-find-row { display: flex; align-items: center; gap: 4px; margin-bottom: 6px; }
+.rdg-find-row .rdg-search { margin: 0; flex: 1; min-width: 0; }
+.rdg-find-gutter { width: 30px; flex: none; }
+.rdg-find-count { min-width: 56px; text-align: right; color: var(--rdg-muted); font-size: 12px; white-space: nowrap; }
+.rdg-find-toggle svg { transition: transform .12s; }
+.rdg-find-toggle[aria-expanded='false'] svg { transform: rotate(-90deg); }
+.rdg-find-options { display: flex; flex-wrap: wrap; gap: 2px 14px; padding: 2px 4px 2px 34px; }
+.rdg-check { display: inline-flex; align-items: center; gap: 6px; cursor: pointer; color: var(--rdg-text); }
+.rdg-find-result { min-height: 18px; padding: 2px 4px 0 34px; font-size: 12px; color: var(--rdg-muted); }
+.rdg-textbtn:disabled { opacity: .45; cursor: default; }
+
 .rdg-sr-only { position: absolute; width: 1px; height: 1px; margin: -1px; padding: 0; overflow: hidden; clip: rect(0 0 0 0); clip-path: inset(50%); white-space: nowrap; border: 0; }
 @media (prefers-reduced-motion: reduce) {
   .rdg-chrome * { transition: none !important; animation: none !important; }

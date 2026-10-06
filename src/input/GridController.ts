@@ -1,9 +1,10 @@
 import type { Spreadsheet } from '../core/Spreadsheet';
 import { drawSelection } from '../render/layers/selectionLayer';
 import type { GridSurface } from '../render/GridSurface';
-import { drawCopyMarquee, drawFormulaRef } from '../render/layers/selectionLayer';
+import { drawCopyMarquee, drawFindMatches, drawFormulaRef } from '../render/layers/selectionLayer';
 import { ClipboardController } from './ClipboardController';
 import { EditorController } from './EditorController';
+import { FindSession } from './FindSession';
 import { FormatPainter } from './FormatPainter';
 import { KeyboardController } from './KeyboardController';
 import { MouseController } from './MouseController';
@@ -15,9 +16,12 @@ export class GridController {
   readonly keyboard: KeyboardController;
   readonly clipboard: ClipboardController;
   readonly painter: FormatPainter;
+  readonly find: FindSession;
   /** Set by the host to show its shortcut help (Mod+/). */
   onShowShortcuts: (() => void) | null = null;
   /** Set by the host to open its "filter by values" dialog for a column, anchored at viewport coordinates. */
+  /** Set by the host to show the Find / Replace panel (Mod+F, Mod+H). */
+  onOpenFind: ((replace: boolean) => void) | null = null;
   onOpenFilter: ((viewCol: number, x: number, y: number) => void) | null = null;
   private readonly unsubscribe: Array<() => void> = [];
 
@@ -30,7 +34,8 @@ export class GridController {
     this.mouse = new MouseController({ sheet, surface, editor: this.editor });
     this.clipboard = new ClipboardController(sheet, this.editor);
     this.painter = new FormatPainter(sheet, surface);
-    this.keyboard = new KeyboardController({ sheet, surface, editor: this.editor, clipboard: this.clipboard, showShortcuts: () => this.onShowShortcuts?.() });
+    this.find = new FindSession(sheet, surface);
+    this.keyboard = new KeyboardController({ sheet, surface, editor: this.editor, clipboard: this.clipboard, showShortcuts: () => this.onShowShortcuts?.(), openFind: (replace) => this.onOpenFind?.(replace) });
 
     surface.renderer.highlight = {
       isRowSelected: (r) => sheet.selection.isRowSelected(r),
@@ -54,6 +59,7 @@ export class GridController {
         if (startRow < 0 || endRow < 0) continue;
         drawFormulaRef(ctx, sheet, { startRow, endRow, startCol: mapping.toViewCol(ref.c1), endCol: mapping.toViewCol(ref.c2) }, ref.color, rowSeg, colSeg);
       }
+      if (this.find.isOpen) drawFindMatches(ctx, sheet, this.find, rowSeg, colSeg);
       const fill = this.mouse.fillPreview;
       if (fill !== null) drawCopyMarquee(ctx, sheet, fill, rowSeg, colSeg);
     };
@@ -70,6 +76,7 @@ export class GridController {
     this.keyboard.destroy();
     this.clipboard.destroy();
     this.painter.destroy();
+    this.find.destroy();
     this.surface.renderer.overlay = null;
     this.surface.renderer.highlight = null;
   }

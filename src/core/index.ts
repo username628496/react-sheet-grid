@@ -7,3 +7,4 @@ export * from './model';
 export * from './selection';
 export * from './snapshot';
 export * from './csv';
+export * from './find';

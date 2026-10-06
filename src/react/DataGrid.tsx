@@ -9,6 +9,7 @@ import { ChromeStyles } from './chrome';
 import { useMessages, useTheme } from './GridProvider';
 import { ContextMenu } from './ContextMenu';
 import { FilterDialog } from './FilterDialog';
+import { FindDialog } from './FindDialog';
 import { ShortcutsDialog } from './ShortcutsDialog';
 
 export interface DataGridProps {
@@ -42,6 +43,7 @@ export function DataGrid({ sheet, frozenRows, frozenCols, className, style, zoom
   const [menu, setMenu] = useState<{ x: number; y: number } | null>(null);
   const [filter, setFilter] = useState<{ col: number; x: number; y: number } | null>(null);
   const [help, setHelp] = useState(false);
+  const [find, setFind] = useState<{ anchor: DOMRect; token: number } | null>(null);
   const closeHelp = useCallback(() => {
     setHelp(false);
     editorRef.current?.focus({ preventScroll: true });
@@ -100,6 +102,10 @@ export function DataGrid({ sheet, frozenRows, frozenCols, className, style, zoom
     ctrl.mouse.onContext = (x, y) => setMenu({ x, y });
     ctrl.onShowShortcuts = () => setHelp(true);
     ctrl.onOpenFilter = (col, x, y) => setFilter({ col, x, y });
+    ctrl.onOpenFind = (replace) => {
+      ctrl.find.show(replace);
+      setFind((current) => ({ anchor: mount.getBoundingClientRect(), token: (current?.token ?? 0) + 1 }));
+    };
     setController(ctrl);
     onReady?.(ctrl);
     return () => {
@@ -107,6 +113,7 @@ export function DataGrid({ sheet, frozenRows, frozenCols, className, style, zoom
       surface.destroy();
       setController(null);
       setMenu(null);
+      setFind(null);
     };
     // onReady is intentionally not a dependency: a new callback identity must not rebuild the grid.
   }, [sheet, frozenRows, frozenCols]);
@@ -139,6 +146,17 @@ export function DataGrid({ sheet, frozenRows, frozenCols, className, style, zoom
           y={menu.y}
           onClose={closeMenu}
           onFilter={(col, x, y) => setFilter({ col, x, y })}
+        />
+      )}
+      {controller !== null && find !== null && (
+        <FindDialog
+          controller={controller}
+          anchor={find.anchor}
+          focusToken={find.token}
+          onClose={() => {
+            controller.find.hide();
+            setFind(null);
+          }}
         />
       )}
       {help && <ShortcutsDialog onClose={closeHelp} />}

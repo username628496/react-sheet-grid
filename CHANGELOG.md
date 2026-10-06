@@ -6,6 +6,7 @@ and the project follows [Semantic Versioning](https://semver.org/). Before 1.0.0
 ## [Unreleased]
 
 ### Added
+- Find and replace (panel, highlighting, accent-insensitive search, `sheet.findCells` / `replaceInCells`, `findInText`).
 - CSV import/export (File menu, `sheet.exportCsv`/`importCsv`, `parseCsv`/`toCsv`), `sheet.transaction` to group commands into one undo step.
 - Accessibility: named `application` region with usage hint, live region announcing the active cell/selection/editing,
   keyboard way out of the grid (Ctrl/⌘+Alt+Shift+↓/↑), canvas and scroller hidden from the accessibility tree,

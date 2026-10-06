@@ -88,6 +88,24 @@ export interface Messages {
   colCount: string;
   removedCells: (n: number) => string;
   pasteTooLarge: (limit: number) => string;
+  findAndReplace: string;
+  find: string;
+  replaceWith: string;
+  matchCase: string;
+  matchWholeCell: string;
+  searchInFormulas: string;
+  ignoreAccents: string;
+  searchIn: string;
+  scopeSheet: string;
+  scopeSelection: string;
+  previousMatch: string;
+  nextMatch: string;
+  replace: string;
+  replaceAll: string;
+  showReplace: string;
+  findCount: (current: number, total: number, more: boolean) => string;
+  findNoResults: string;
+  replacedSummary: (occurrences: number, cells: number) => string;
   exportTooLarge: (limit: number) => string;
   file: string;
   importCsv: string;
@@ -219,6 +237,24 @@ const en: Messages = {
   colCount: 'Column count',
   removedCells: (n) => `Removed ${plural(n, 'filled cell', 'filled cells')}. Undo to restore.`,
   pasteTooLarge: (limit) => `That is too much to paste at once (over ${limit.toLocaleString('en-US')} cells). Nothing was pasted.`,
+  findAndReplace: 'Find and replace',
+  find: 'Find',
+  replaceWith: 'Replace with',
+  matchCase: 'Match case',
+  matchWholeCell: 'Match entire cell',
+  searchInFormulas: 'Also search in formulas',
+  ignoreAccents: 'Ignore accents (viet finds Việt)',
+  searchIn: 'Search in',
+  scopeSheet: 'This sheet',
+  scopeSelection: 'Selected range',
+  previousMatch: 'Previous result',
+  nextMatch: 'Next result',
+  replace: 'Replace',
+  replaceAll: 'Replace all',
+  showReplace: 'Show replace options',
+  findCount: (current, total, more) => `${current} of ${total.toLocaleString('en-US')}${more ? '+' : ''}`,
+  findNoResults: 'No results',
+  replacedSummary: (occurrences, cells) => `Replaced ${plural(occurrences, 'occurrence', 'occurrences')} in ${plural(cells, 'cell', 'cells')}`,
   exportTooLarge: (limit) => `That is too large to export (over ${limit.toLocaleString('en-US')} cells). Select a smaller range.`,
   file: 'File',
   importCsv: 'Import CSV…',
@@ -290,6 +326,7 @@ const en: Messages = {
         ['Delete', 'Clear contents'],
         ['Mod+Z / Mod+Y', 'Undo / redo'],
         ['Mod+D / Mod+R', 'Fill down / fill right'],
+        ['Mod+F / Ctrl+H (Cmd+Shift+H)', 'Find / find and replace'],
         ['Mod+Alt+9 / Mod+Alt+0', 'Hide rows / hide columns'],
         ['Mod+Shift+9 / Mod+Shift+0', 'Show hidden rows / columns'],
       ],
@@ -401,6 +438,24 @@ const vi: Messages = {
   colCount: 'Số cột',
   removedCells: (n) => `Đã xóa ${n} ô có dữ liệu. Nhấn hoàn tác để khôi phục.`,
   pasteTooLarge: (limit) => `Dữ liệu dán quá lớn (hơn ${limit.toLocaleString('vi-VN')} ô). Chưa dán gì cả.`,
+  findAndReplace: 'Tìm và thay thế',
+  find: 'Tìm',
+  replaceWith: 'Thay bằng',
+  matchCase: 'Phân biệt hoa thường',
+  matchWholeCell: 'Khớp toàn bộ ô',
+  searchInFormulas: 'Tìm cả trong công thức',
+  ignoreAccents: 'Bỏ qua dấu (viet tìm ra Việt)',
+  searchIn: 'Tìm trong',
+  scopeSheet: 'Toàn bộ bảng',
+  scopeSelection: 'Vùng đang chọn',
+  previousMatch: 'Kết quả trước',
+  nextMatch: 'Kết quả sau',
+  replace: 'Thay thế',
+  replaceAll: 'Thay tất cả',
+  showReplace: 'Hiện tùy chọn thay thế',
+  findCount: (current, total, more) => `${current} / ${total.toLocaleString('vi-VN')}${more ? '+' : ''}`,
+  findNoResults: 'Không có kết quả',
+  replacedSummary: (occurrences, cells) => `Đã thay ${occurrences} chỗ trong ${cells} ô`,
   exportTooLarge: (limit) => `Vùng này quá lớn để xuất (hơn ${limit.toLocaleString('vi-VN')} ô). Hãy chọn vùng nhỏ hơn.`,
   file: 'Tệp',
   importCsv: 'Nhập CSV…',
@@ -472,6 +527,7 @@ const vi: Messages = {
         ['Delete', 'Xóa nội dung'],
         ['Mod+Z / Mod+Y', 'Hoàn tác / làm lại'],
         ['Mod+D / Mod+R', 'Điền xuống / điền sang phải'],
+        ['Mod+F / Ctrl+H (Cmd+Shift+H)', 'Tìm / tìm và thay thế'],
         ['Mod+Alt+9 / Mod+Alt+0', 'Ẩn dòng / ẩn cột'],
         ['Mod+Shift+9 / Mod+Shift+0', 'Hiện dòng đã ẩn / cột đã ẩn'],
       ],
