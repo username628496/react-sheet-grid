@@ -121,11 +121,11 @@ docs/
 - [x] Canvas renderer: lưới, header, nội dung ô, hỗ trợ DPR
 - [x] Virtualization + cuộn mượt với 1.000.000 × 100 ô (dữ liệu demo sinh ngẫu nhiên)
 - [x] Freeze dòng tiêu đề và cột đầu
-- [ ] Chọn ô, kéo chọn vùng, Shift+click, chọn cả dòng/cột qua header
-- [ ] Di chuyển bằng phím: mũi tên, Tab, Enter, Ctrl+mũi tên, Home/End, PageUp/PageDown
-- [ ] Edit ô: gõ đè, F2, double-click, Enter/Esc, Delete, **IME tiếng Việt**
-- [ ] Command pattern + undo/redo
-- [ ] Resize cột/dòng bằng kéo chuột
+- [x] Chọn ô, kéo chọn vùng, Shift+click, chọn cả dòng/cột qua header
+- [x] Di chuyển bằng phím: mũi tên, Tab, Enter, Ctrl+mũi tên, Home/End, PageUp/PageDown
+- [x] Edit ô: gõ đè, F2, double-click, Enter/Esc, Delete, **IME tiếng Việt**
+- [x] Command pattern + undo/redo
+- [x] Resize cột/dòng bằng kéo chuột
 
 ### Tuần 2: Tính năng spreadsheet
 - [ ] Copy/cut/paste trong grid và với Excel/Google Sheets

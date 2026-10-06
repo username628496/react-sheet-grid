@@ -7,7 +7,7 @@ import type { Cell } from './model/Cell';
 import { formatValue } from './model/format';
 import { parseInput } from './model/parseInput';
 import { SheetModel } from './model/SheetModel';
-import { StyleTable } from './model/StyleTable';
+import { type Style, StyleTable } from './model/StyleTable';
 import { SelectionModel, type ViewRange } from './selection/SelectionModel';
 
 export interface SpreadsheetOptions {
@@ -18,6 +18,8 @@ export interface SpreadsheetOptions {
 }
 
 type Listener = () => void;
+
+const FORMAT_FILL_LIMIT = 50_000;
 
 /**
  * Headless spreadsheet: model, styles, view mapping, layout, selection and
@@ -125,6 +127,56 @@ export class Spreadsheet {
     const old = this.model.getCell(dataRow, dataCol);
     const change: CellChange = { dataRow, dataCol, cell: { value: parseInput(text), styleId: old.styleId } };
     this.execute(new SetCellsCommand('Edit cell', [change]));
+  }
+
+  /**
+   * Cells a format change applies to. Small ranges include empty cells so
+   * formatting a blank block works; huge ranges (whole columns, select-all)
+   * only touch stored cells, otherwise one click would allocate millions of cells.
+   */
+  private formatTargets(): Array<{ dataRow: number; dataCol: number; cell: Cell }> {
+    const targets: Array<{ dataRow: number; dataCol: number; cell: Cell }> = [];
+    for (const range of this.selection.allRanges) {
+      const area = (range.endRow - range.startRow + 1) * (range.endCol - range.startCol + 1);
+      if (area > FORMAT_FILL_LIMIT) {
+        this.forEachStoredCellInViewRange(range, (dataRow, dataCol, cell) => targets.push({ dataRow, dataCol, cell }));
+        continue;
+      }
+      for (let r = range.startRow; r <= range.endRow; r++) {
+        const dataRow = this.mapping.toDataRow(r);
+        for (let c = range.startCol; c <= range.endCol; c++) {
+          const dataCol = this.mapping.toDataCol(c);
+          targets.push({ dataRow, dataCol, cell: this.model.getCell(dataRow, dataCol) });
+        }
+      }
+    }
+    return targets;
+  }
+
+  /** Ctrl+B / Ctrl+I: if every selected cell already has the style it is removed, otherwise it is applied to all. */
+  toggleStyle(key: 'bold' | 'italic'): void {
+    const targets = this.formatTargets();
+    const allOn = targets.length > 0 && targets.every((t) => this.styles.get(t.cell.styleId)[key] === true);
+    this.applyStyle(targets, { [key]: allOn ? undefined : true }, key === 'bold' ? 'Bold' : 'Italic');
+  }
+
+  /** Applies a style patch (color, background, align, numberFormat...) to the selection. */
+  formatSelection(patch: Partial<Style>, label = 'Format'): void {
+    this.applyStyle(this.formatTargets(), patch, label);
+  }
+
+  private applyStyle(
+    targets: ReadonlyArray<{ dataRow: number; dataCol: number; cell: Cell }>,
+    patch: Partial<Style>,
+    label: string,
+  ): void {
+    if (targets.length === 0) return;
+    const changes: CellChange[] = targets.map((t) => ({
+      dataRow: t.dataRow,
+      dataCol: t.dataCol,
+      cell: { value: t.cell.value, styleId: this.styles.derive(t.cell.styleId, patch) },
+    }));
+    this.execute(new SetCellsCommand(label, changes));
   }
 
   /** Delete key: removes contents of every selected range but keeps formatting. */

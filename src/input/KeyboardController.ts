@@ -1,0 +1,170 @@
+import {
+  advanceActive,
+  moveByArrow,
+  moveByPage,
+  moveToEdge,
+  type NavContext,
+} from '../core/selection/navigation';
+import type { Spreadsheet } from '../core/Spreadsheet';
+import type { GridSurface } from '../render/GridSurface';
+import type { EditorController } from './EditorController';
+import { type Action, type CommitMove, isMacPlatform, type KeyContext, resolveKey, toKeyInput } from './keymap';
+
+export interface KeyboardDeps {
+  sheet: Spreadsheet;
+  surface: GridSurface;
+  editor: EditorController;
+}
+
+export class KeyboardController {
+  private readonly isMac = isMacPlatform();
+  private readonly textarea: HTMLTextAreaElement;
+  private readonly nav: NavContext;
+
+  constructor(private readonly deps: KeyboardDeps) {
+    this.textarea = deps.editor.textarea;
+    const { sheet } = deps;
+    this.nav = {
+      get rowCount() {
+        return sheet.rowCount;
+      },
+      get colCount() {
+        return sheet.colCount;
+      },
+      isEmpty: (r, c) => sheet.getCellByView(r, c).value === null,
+      usedEnd: () => {
+        const used = sheet.model.getUsedRange();
+        if (used === null) return null;
+        const row = sheet.mapping.toViewRow(used.endRow);
+        return { row: row < 0 ? sheet.rowCount - 1 : row, col: sheet.mapping.toViewCol(used.endCol) };
+      },
+    };
+    this.textarea.addEventListener('keydown', this.onKeyDown);
+    this.textarea.addEventListener('compositionstart', this.onCompositionStart);
+    this.textarea.addEventListener('input', this.onInput);
+    this.textarea.addEventListener('blur', this.onBlur);
+  }
+
+  destroy(): void {
+    this.textarea.removeEventListener('keydown', this.onKeyDown);
+    this.textarea.removeEventListener('compositionstart', this.onCompositionStart);
+    this.textarea.removeEventListener('input', this.onInput);
+    this.textarea.removeEventListener('blur', this.onBlur);
+  }
+
+  get context(): KeyContext {
+    const { editor } = this.deps;
+    if (!editor.editing) return 'navigating';
+    return editor.text.startsWith('=') ? 'editingFormula' : 'editing';
+  }
+
+  private readonly onKeyDown = (e: KeyboardEvent): void => {
+    const { editor } = this.deps;
+    const action = resolveKey(this.context, toKeyInput(e, this.isMac), {
+      arrowsCommit: editor.mode === 'typing',
+    });
+    if (action === null) return;
+    // startTyping must not be prevented: the browser's default inserts the character into the textarea.
+    if (action.type !== 'startTyping') e.preventDefault();
+    this.run(action);
+  };
+
+  // IME input starts with composition events rather than a printable keydown.
+  private readonly onCompositionStart = (): void => {
+    const { editor } = this.deps;
+    if (!editor.editing) editor.begin('typing', '');
+  };
+
+  private readonly onInput = (): void => {
+    if (this.deps.editor.editing) this.deps.editor.reposition();
+  };
+
+  private readonly onBlur = (): void => {
+    // Switching windows should not end an edit; clicking elsewhere on the page should.
+    if (this.deps.editor.editing && document.hasFocus()) this.deps.editor.commit();
+  };
+
+  private run(action: Action): void {
+    const { sheet, editor } = this.deps;
+    const { selection } = sheet;
+    switch (action.type) {
+      case 'move':
+        moveByArrow(selection, action.dir, { extend: action.extend, jump: action.jump }, this.nav);
+        break;
+      case 'page':
+        moveByPage(selection, action.dir, this.pageRows(), action.extend);
+        break;
+      case 'edge':
+        moveToEdge(selection, action.edge, { ctrl: action.ctrl, extend: action.extend }, this.nav);
+        break;
+      case 'advance':
+        advanceActive(selection, { horizontal: action.horizontal, backward: action.backward });
+        break;
+      case 'selectAll':
+        selection.selectAll();
+        break;
+      case 'selectRow':
+        selection.selectRow(selection.activeRow);
+        break;
+      case 'selectColumn':
+        selection.selectCol(selection.activeCol);
+        break;
+      case 'clear':
+        sheet.clearSelection();
+        break;
+      case 'startEdit':
+        editor.begin('caret', sheet.getEditText(selection.activeRow, selection.activeCol));
+        return;
+      case 'startTyping':
+        editor.begin('typing', '');
+        return;
+      case 'commit':
+        editor.commit();
+        this.moveAfterCommit(action.move);
+        break;
+      case 'cancel':
+        editor.cancel();
+        break;
+      case 'newline':
+        editor.insertNewline();
+        return;
+      case 'undo':
+        sheet.undo();
+        break;
+      case 'redo':
+        sheet.redo();
+        break;
+      case 'bold':
+      case 'italic':
+        sheet.toggleStyle(action.type);
+        break;
+    }
+    this.deps.surface.scrollCellIntoView(selection.focusRow, selection.focusCol);
+    editor.reposition();
+  }
+
+  private moveAfterCommit(move: CommitMove): void {
+    const { selection } = this.deps.sheet;
+    switch (move) {
+      case 'down':
+        advanceActive(selection, { horizontal: false, backward: false });
+        break;
+      case 'up':
+        advanceActive(selection, { horizontal: false, backward: true });
+        break;
+      case 'right':
+        advanceActive(selection, { horizontal: true, backward: false });
+        break;
+      case 'left':
+        advanceActive(selection, { horizontal: true, backward: true });
+        break;
+      case 'none':
+        break;
+    }
+  }
+
+  private pageRows(): number {
+    const vp = this.deps.surface.viewport;
+    return Math.max(1, Math.floor(vp.scrollAreaHeight / this.deps.sheet.rows.defaultSize));
+  }
+}

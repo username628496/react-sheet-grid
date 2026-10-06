@@ -1,5 +1,5 @@
 import { createRoot } from 'react-dom/client';
-import { DataGrid, Spreadsheet } from '../src/index';
+import { DataGrid, type GridController, Spreadsheet } from '../src/index';
 
 const ROWS = 1_000_000;
 const COLS = 100;
@@ -25,11 +25,28 @@ function seed(sheet: Spreadsheet): void {
   for (let i = 0; i < 300_000; i++) put(Math.floor(rand() * ROWS), Math.floor(rand() * COLS));
 }
 
-const sheet = new Spreadsheet({ rowCount: ROWS, colCount: COLS });
-seed(sheet);
+// ?mode=empty gives a small blank sheet so e2e tests are deterministic.
+const empty = new URLSearchParams(location.search).get('mode') === 'empty';
+const sheet = empty ? new Spreadsheet({ rowCount: 1000, colCount: 26 }) : new Spreadsheet({ rowCount: ROWS, colCount: COLS });
+if (!empty) seed(sheet);
+
+declare global {
+  interface Window {
+    __grid?: GridController;
+    __sheet?: Spreadsheet;
+  }
+}
+window.__sheet = sheet;
 
 createRoot(document.getElementById('root')!).render(
   <div style={{ height: '100%' }}>
-    <DataGrid sheet={sheet} frozenRows={1} frozenCols={1} />
+    <DataGrid
+      sheet={sheet}
+      frozenRows={empty ? 0 : 1}
+      frozenCols={empty ? 0 : 1}
+      onReady={(controller) => {
+        window.__grid = controller;
+      }}
+    />
   </div>,
 );

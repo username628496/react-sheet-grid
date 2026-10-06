@@ -1,0 +1,40 @@
+import type { Spreadsheet } from '../core/Spreadsheet';
+import { drawSelection } from '../render/layers/selectionLayer';
+import type { GridSurface } from '../render/GridSurface';
+import { EditorController } from './EditorController';
+import { KeyboardController } from './KeyboardController';
+import { MouseController } from './MouseController';
+
+/** Wires the surface, the hidden editor textarea and the mouse/keyboard controllers together. */
+export class GridController {
+  readonly editor: EditorController;
+  readonly mouse: MouseController;
+  readonly keyboard: KeyboardController;
+  private readonly unsubscribe: Array<() => void> = [];
+
+  constructor(
+    readonly surface: GridSurface,
+    readonly sheet: Spreadsheet,
+    textarea: HTMLTextAreaElement,
+  ) {
+    this.editor = new EditorController(textarea, sheet, surface);
+    this.mouse = new MouseController({ sheet, surface, editor: this.editor });
+    this.keyboard = new KeyboardController({ sheet, surface, editor: this.editor });
+
+    surface.renderer.highlight = sheet.selection;
+    surface.renderer.overlay = (ctx, rowSeg, colSeg) =>
+      drawSelection(ctx, sheet, sheet.selection, rowSeg, colSeg, !this.editor.editing);
+
+    // The textarea follows the active cell through selection changes, resizes and scrolling.
+    const reposition = (): void => this.editor.reposition();
+    this.unsubscribe.push(sheet.subscribe(reposition), surface.subscribeView(reposition));
+  }
+
+  destroy(): void {
+    for (const off of this.unsubscribe) off();
+    this.mouse.destroy();
+    this.keyboard.destroy();
+    this.surface.renderer.overlay = null;
+    this.surface.renderer.highlight = null;
+  }
+}
