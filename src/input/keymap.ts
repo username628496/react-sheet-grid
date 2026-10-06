@@ -44,6 +44,8 @@ export type Action =
   | { type: 'align'; align: HorizontalAlign }
   | { type: 'numberFormat'; format: string }
   | { type: 'pasteValues' }
+  | { type: 'pasteFormat' }
+  | { type: 'showShortcuts' }
   | { type: 'scrollToActive' }
   | { type: 'pointMove'; dir: Direction; extend: boolean }
   | { type: 'toggleAbsolute' };
@@ -102,6 +104,8 @@ function navigatingKey(k: KeyInput): Action | null {
     if (k.alt) return null;
     return { type: 'move', dir: arrow, extend: k.shift, jump: k.mod };
   }
+  // Option+V types a symbol on a Mac, so paste-format is recognized by the physical key.
+  if (k.mod && k.alt && k.code === 'KeyV') return { type: 'pasteFormat' };
   switch (k.key) {
     case 'Tab':
       return { type: 'advance', horizontal: true, backward: k.shift };
@@ -170,6 +174,8 @@ function navigatingKey(k: KeyInput): Action | null {
         return { type: 'clearFormat' };
       case ' ':
         return { type: 'selectColumn' };
+      case '/':
+        return { type: 'showShortcuts' };
       default:
         return null; // Mod+C/X/V arrive as clipboard events, not keys.
     }

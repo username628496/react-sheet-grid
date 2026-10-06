@@ -239,3 +239,29 @@ describe('fillSelectionWithInput (Mod+Enter) and clearFormatting', () => {
     expect(s.styles.get(s.getCellByView(0, 0).styleId)).toEqual({ strike: true });
   });
 });
+
+describe('autoFillExtent (double-click on the fill handle)', () => {
+  it('follows the neighbouring column on the left, from the row after the source', () => {
+    const s = makeSheet({ A1: 'x', A2: 'x', A3: 'x', A4: 'x', B1: 1 });
+    const source = { startRow: 0, startCol: 1, endRow: 0, endCol: 1 };
+    expect(s.autoFillExtent(source)).toBe(3);
+  });
+
+  it('uses the right-hand neighbour when the left one has nothing beside the source', () => {
+    const s = makeSheet({ B1: 1, C1: 'a', C2: 'b' });
+    expect(s.autoFillExtent({ startRow: 0, startCol: 1, endRow: 0, endCol: 1 })).toBe(1);
+  });
+
+  it('is 0 without a guide, and stops at the first gap', () => {
+    const s = makeSheet({ A1: 'x', A2: 'x', A4: 'x', B1: 1, D1: 1 });
+    expect(s.autoFillExtent({ startRow: 0, startCol: 1, endRow: 0, endCol: 1 })).toBe(1);
+    expect(s.autoFillExtent({ startRow: 0, startCol: 3, endRow: 0, endCol: 3 })).toBe(0);
+    const empty = makeSheet({ B1: 1 });
+    expect(empty.autoFillExtent({ startRow: 0, startCol: 1, endRow: 0, endCol: 1 })).toBe(0);
+  });
+
+  it('for a block, counts from its last row', () => {
+    const s = makeSheet({ A1: 1, A2: 1, A3: 1, A4: 1, A5: 1, B1: 1, B2: 2 });
+    expect(s.autoFillExtent({ startRow: 0, startCol: 1, endRow: 1, endCol: 1 })).toBe(3);
+  });
+});

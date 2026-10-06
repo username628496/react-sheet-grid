@@ -349,6 +349,13 @@ export class MouseController {
       this.autoFitColumns(hit.col);
       return;
     }
+    if (hit.zone === 'fillHandle') {
+      // Double-click on the handle fills down as far as the neighbouring column has data.
+      const source = this.deps.sheet.selection.primary;
+      const count = this.deps.sheet.autoFillExtent(source);
+      if (count > 0) this.deps.sheet.fillRange(source, 'down', count);
+      return;
+    }
     const zone = hit.zone;
     if (zone !== 'cell') return;
     const { sheet, editor } = this.deps;

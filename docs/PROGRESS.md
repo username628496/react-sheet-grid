@@ -59,6 +59,8 @@ Toàn bộ lộ trình MVP trong CLAUDE.md (tuần 1 và tuần 2) đã xong.
 - Double-click viền cột tự fit độ rộng: đo tối đa 100 chuỗi dài nhất của cột (đo là phần chậm), giới hạn 20–600px; chọn nhiều cột nguyên thì mỗi cột tự fit theo nội dung của nó.
 - Định dạng lên vùng quá lớn (> 50.000 ô, ví dụ cả cột) chỉ áp dụng cho ô đã có dữ liệu để không sinh hàng triệu ô.
 
+**Hiển thị chữ tràn**: chữ dài căn trái tràn sang phải, căn phải tràn sang trái, căn giữa tràn hai bên, qua các ô trống liền kề (`computeOverflow`, hàm thuần, dò tối đa 60 ô mỗi phía); số không tràn mà bị cắt. Double-click fill handle điền xuống theo độ dài dữ liệu của cột kề bên (`autoFillExtent`).
+
 **Soạn công thức**: khi gõ `=SUM(` rồi nhấn mũi tên hoặc click/kéo ô, tham chiếu được chèn vào công thức (mũi tên chỉ trỏ ô ở "enter mode", tức là text đã gõ; sau khi tự dời con trỏ hoặc mở bằng F2 là "edit mode" và mũi tên dịch con trỏ). Mỗi tham chiếu một màu, vừa trong chữ (textarea trong suốt đè lên một div nền vẽ chữ màu, tắt khi đang gõ IME để thấy gạch chân của IME) vừa viền màu trên lưới.
 
 ## Phím tắt (Mod = Cmd trên Mac, Ctrl trên Windows/Linux)
@@ -74,7 +76,7 @@ Toàn bộ lộ trình MVP trong CLAUDE.md (tuần 1 và tuần 2) đã xong.
 | Mod+Enter (khi đang sửa) | Điền nội dung đang gõ vào cả vùng chọn (công thức dịch tham chiếu) |
 | Delete, Backspace | Xóa nội dung |
 | Mod+C / X / V | Copy / cut / paste |
-| Mod+Shift+V | Dán chỉ giá trị |
+| Mod+Shift+V, Mod+Alt+V | Dán chỉ giá trị, dán chỉ định dạng |
 | Mod+D / Mod+R | Điền xuống / sang phải từ hàng/cột đầu của vùng chọn (một ô: lấy từ ô trên/trái) |
 | Mod+Z, Mod+Y, Mod+Shift+Z | Hoàn tác, làm lại |
 | Mod+B / I / U, Mod+Shift+X | Đậm, nghiêng, gạch chân, gạch ngang |
@@ -82,10 +84,11 @@ Toàn bộ lộ trình MVP trong CLAUDE.md (tuần 1 và tuần 2) đã xong.
 | Mod+Shift+1 / 4 / 5 | Định dạng số `#,##0.00` / tiền tệ / phần trăm |
 | Mod+\ | Xóa định dạng |
 | Mod+Backspace | Cuộn tới ô đang chọn |
+| Mod+/ | Hộp thoại danh sách phím tắt |
 | Mũi tên, Shift+mũi tên, click, kéo (khi gõ công thức sau `=`, `(`, `,` hoặc toán tử) | Chèn/di chuyển tham chiếu ô, Shift hoặc kéo để thành range |
 | F4 (khi gõ công thức) | Đổi tham chiếu dưới con trỏ: `A1` → `$A$1` → `A$1` → `$A1` |
 
-Chưa có: Mod+; (ngày hiện tại), Mod+K (liên kết), Mod+T (trình duyệt giữ phím này nên chỉ dùng F4), Mod+Alt+V (dán chỉ định dạng), Mod+/ (danh sách phím tắt), Mod+Alt+= và Mod+Alt+- (chèn/xóa), Mod+Shift+L bật bộ lọc.
+Chưa có: Mod+; (ngày hiện tại), Mod+K (liên kết), Mod+T (trình duyệt giữ phím này nên chỉ dùng F4), Mod+Alt+= và Mod+Alt+- (chèn/xóa), bật bộ lọc bằng phím.
 
 ## Lỗi đã biết / giới hạn
 
@@ -93,9 +96,9 @@ Chưa có: Mod+; (ngày hiện tại), Mod+K (liên kết), Mod+T (trình duyệ
 - Khi đang sort/filter, cut-paste chưa cập nhật tham chiếu từ ô khác tới vùng bị cắt (chỉ làm khi thứ tự dòng tự nhiên).
 - Công thức tham chiếu theo tọa độ dữ liệu: khi đang sort, nhãn A1 trong công thức là vị trí dữ liệu gốc, không phải vị trí đang hiển thị.
 - Chiều cao dòng gắn với vị trí hiển thị, không đi theo dữ liệu khi sort.
-- Double-click fill handle chưa tự điền; ngày tháng chưa có chuỗi; double-click viền dòng chưa tự fit chiều cao.
+- Ngày tháng chưa có chuỗi; double-click viền dòng chưa tự fit chiều cao.
 - Một số đơn lẻ khi fill được copy (không tăng) như Sheets.
-- Chữ chưa tràn sang ô trống bên cạnh; ô gộp, nhiều sheet, xlsx, find & replace... nằm ngoài MVP.
+- Chữ tràn sang ô trống chỉ tính từ các cột đang hiển thị (chữ dài ở cột đã cuộn khuất không tràn vào cột đang thấy); đường kẻ ô vẫn vẽ xuyên qua chữ tràn. Ô gộp, nhiều sheet, xlsx, find & replace... nằm ngoài MVP.
 - Paste từ menu chuột phải dùng `navigator.clipboard.read()` nên trình duyệt có thể hỏi quyền (Firefox chỉ đọc được text).
 
 ## Kiểm tra thủ công cho bạn (nhất là IME, clipboard, Safari)
@@ -113,6 +116,6 @@ Chạy `pnpm dev` rồi mở http://localhost:5173/demo/ (thêm `?mode=empty` đ
 ## Việc tiếp theo (ngoài MVP, chỉ làm khi bạn yêu cầu)
 
 - Chạy e2e trên Firefox/WebKit và sửa nếu có khác biệt.
-- Chữ tràn sang ô trống, fill ngày tháng.
+- Fill ngày tháng.
 - Công thức theo vị trí hiển thị khi sort.
 - Tính toán trong Web Worker cho bảng rất lớn.

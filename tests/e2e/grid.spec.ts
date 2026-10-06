@@ -952,3 +952,96 @@ test.describe('auto-fit column width', () => {
     expect(widths[1]).toBeGreaterThan(widths[0] as number);
   });
 });
+
+test.describe('fill handle double-click, shortcut help, paste format', () => {
+  test('double-clicking the fill handle fills down as far as the neighbouring column goes', async ({ page }) => {
+    await page.evaluate(() => {
+      const s = window.__sheet!;
+      ['a', 'b', 'c', 'd'].forEach((v, r) => s.setCellInput(r, 0, v));
+      s.setCellInput(0, 1, '1');
+      s.setCellInput(1, 1, '2');
+    });
+    await clickCell(page, 0, 1);
+    await clickCell(page, 1, 1, { modifiers: ['Shift'] });
+    const h = await page.evaluate(() => {
+      const g = window.__grid!;
+      const v = g.surface.viewport;
+      const p = g.sheet.selection.primary;
+      const r = g.surface.host.getBoundingClientRect();
+      return { x: r.left + v.colLeft(p.endCol) + g.sheet.cols.getSize(p.endCol), y: r.top + v.rowTop(p.endRow) + g.sheet.rows.getSize(p.endRow) };
+    });
+    await page.mouse.dblclick(h.x, h.y);
+    expect(await cellValue(page, 2, 1)).toBe(3);
+    expect(await cellValue(page, 3, 1)).toBe(4);
+    expect(await cellValue(page, 4, 1)).toBeNull();
+    await page.keyboard.press(`${mod}+z`);
+    expect(await cellValue(page, 3, 1)).toBeNull();
+  });
+
+  test('Mod+/ opens the shortcut list and Escape closes it, returning focus to the grid', async ({ page }) => {
+    await clickCell(page, 0, 0);
+    await page.keyboard.press(`${mod}+/`);
+    const dialog = page.getByTestId('shortcuts-dialog');
+    await expect(dialog).toBeVisible();
+    await expect(dialog.getByText('Fill down / fill right')).toBeVisible();
+    await page.keyboard.press('Escape');
+    await expect(dialog).toBeHidden();
+    await page.keyboard.type('z');
+    await page.keyboard.press('Enter');
+    expect(await cellValue(page, 0, 0)).toBe('z');
+  });
+
+  test('Mod+Alt+V pastes only the formatting of the copied cells', async ({ page, browserName }) => {
+    test.skip(browserName !== 'chromium', 'needs real clipboard shortcuts');
+    await page.context().grantPermissions(['clipboard-read', 'clipboard-write']);
+    await page.evaluate(() => {
+      const s = window.__sheet!;
+      s.setCellInput(0, 0, 'source');
+      s.selection.selectCell(0, 0);
+      s.toggleStyle('bold');
+      s.setCellInput(3, 3, 'target');
+    });
+    await clickCell(page, 0, 0);
+    await page.keyboard.press(`${mod}+c`);
+    await clickCell(page, 3, 3);
+    await page.keyboard.press(`${mod}+Alt+v`);
+    await expect.poll(() => page.evaluate(() => {
+      const s = window.__sheet!;
+      return s.styles.get(s.getCellByView(3, 3).styleId).bold ?? false;
+    })).toBe(true);
+    expect(await cellValue(page, 3, 3)).toBe('target');
+  });
+
+  test('long text spills into empty neighbours but is clipped by a filled one', async ({ page }) => {
+    // Counts dark pixels inside a cell of the canvas to see what was really drawn there.
+    const darkPixels = (row: number, col: number): Promise<number> =>
+      page.evaluate(async ([r, c]) => {
+        await new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)));
+        const g = window.__grid!;
+        const vp = g.surface.viewport;
+        const canvas = document.querySelector('[data-testid=grid] canvas') as HTMLCanvasElement;
+        const dpr = window.devicePixelRatio || 1;
+        const x = Math.round((vp.colLeft(c as number) + 3) * dpr);
+        const y = Math.round((vp.rowTop(r as number) + 3) * dpr);
+        const w = Math.round((g.sheet.cols.getSize(c as number) - 6) * dpr);
+        const h = Math.round((g.sheet.rows.getSize(r as number) - 6) * dpr);
+        const data = canvas.getContext('2d')!.getImageData(x, y, w, h).data;
+        let dark = 0;
+        for (let i = 0; i < data.length; i += 4) if ((data[i] as number) < 110) dark++;
+        return dark;
+      }, [row, col]);
+
+    await page.evaluate(() => window.__sheet!.setCellInput(0, 0, 'A rather long piece of text that cannot fit in one cell at all'));
+    expect(await darkPixels(0, 1)).toBeGreaterThan(20); // spilled into B
+    expect(await darkPixels(0, 2)).toBeGreaterThan(20); // and into C
+    await page.evaluate(() => window.__sheet!.setCellInput(0, 1, 'x'));
+    expect(await darkPixels(0, 2)).toBe(0); // B is now filled: the text stops before it
+    await page.evaluate(() => {
+      const sheet = window.__sheet!;
+      sheet.setCellInput(2, 0, '123456789012');
+      sheet.selection.selectCell(2, 0);
+      sheet.formatSelection({ numberFormat: '$#,##0.00' }); // "$123,456,789,012.00" is wider than the cell
+    });
+    expect(await darkPixels(2, 1)).toBe(0); // numbers are clipped, never spilled
+  });
+});

@@ -168,3 +168,14 @@ describe('keymap: pointing at cells while typing a formula', () => {
     expect(resolveKey('editingFormula', key('ArrowDown', { isComposing: true }), { arrowsCommit: false, canPoint: true })).toBeNull();
   });
 });
+
+describe('keymap: help and paste format', () => {
+  it('Mod+/ shows the shortcut list', () => {
+    expect(resolveKey('navigating', key('/', { mod: true }))).toEqual({ type: 'showShortcuts' });
+  });
+
+  it('Mod+Alt+V is recognized by the physical key, since Option+V types a symbol on a Mac', () => {
+    expect(resolveKey('navigating', key('√', { mod: true, alt: true, code: 'KeyV' }))).toEqual({ type: 'pasteFormat' });
+    expect(resolveKey('navigating', key('v', { mod: true, alt: true }))).toBeNull();
+  });
+});

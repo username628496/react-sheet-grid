@@ -13,6 +13,8 @@ export class GridController {
   readonly mouse: MouseController;
   readonly keyboard: KeyboardController;
   readonly clipboard: ClipboardController;
+  /** Set by the host to show its shortcut help (Mod+/). */
+  onShowShortcuts: (() => void) | null = null;
   private readonly unsubscribe: Array<() => void> = [];
 
   constructor(
@@ -23,7 +25,7 @@ export class GridController {
     this.editor = new EditorController(textarea, sheet, surface);
     this.mouse = new MouseController({ sheet, surface, editor: this.editor });
     this.clipboard = new ClipboardController(sheet, this.editor);
-    this.keyboard = new KeyboardController({ sheet, surface, editor: this.editor, clipboard: this.clipboard });
+    this.keyboard = new KeyboardController({ sheet, surface, editor: this.editor, clipboard: this.clipboard, showShortcuts: () => this.onShowShortcuts?.() });
 
     surface.renderer.highlight = {
       isRowSelected: (r) => sheet.selection.isRowSelected(r),

@@ -2,6 +2,7 @@ import { DEFAULT_STYLE_ID } from '../../core/model/StyleTable';
 import { defaultAlign, formatValue } from '../../core/model/format';
 import type { Spreadsheet } from '../../core/Spreadsheet';
 import { fontFor, theme } from '../theme';
+import { computeOverflow, type Overflow } from '../overflow';
 import type { TextMeasurer } from '../textMeasure';
 import type { Segment } from '../viewport';
 
@@ -49,6 +50,8 @@ export function drawCellBackgrounds(
   }
 }
 
+const overflow: Overflow = { left: 0, right: 0 }; // reused: no allocation per cell
+
 export function drawCellText(
   ctx: CanvasRenderingContext2D,
   sheet: Spreadsheet,
@@ -77,27 +80,32 @@ export function drawCellText(
         const align = style.align ?? defaultAlign(cell.value);
         ctx.font = font;
         ctx.fillStyle = style.color ?? theme.text;
-        const overflow = textWidth > available;
-        if (overflow) {
-          // Only overflowing text pays for a clip; text overflow into empty neighbours is post-MVP.
+        // Text wider than its cell spills into empty neighbours (to the right for left-aligned text, to the
+        // left for right-aligned, both ways for centered), as in Sheets. Only text does; numbers are clipped.
+        const spills = textWidth > available && typeof cell.value === 'string';
+        const extra = spills ? computeOverflow(sheet, dataRow, c, align, textWidth, available, overflow) : null;
+        const clipped = textWidth > available && (extra === null || textWidth > available + extra.left + extra.right);
+        if (clipped) {
           ctx.save();
           ctx.beginPath();
-          ctx.rect(x, y, w, h);
+          ctx.rect(x - (extra?.left ?? 0), y, w + (extra?.left ?? 0) + (extra?.right ?? 0), h);
           ctx.clip();
         }
         let tx = x + pad;
         ctx.textAlign = 'left';
-        if (!overflow && align === 'right') tx = x + w - pad - textWidth;
-        else if (!overflow && align === 'center') tx = x + (w - textWidth) / 2;
+        if (align === 'right') tx = x + w - pad - textWidth;
+        else if (align === 'center') tx = x + (w - textWidth) / 2;
+        // Numbers that do not fit keep the old behaviour: start at the left edge and get clipped.
+        if (textWidth > available && !spills) tx = x + pad;
         ctx.fillText(text, tx, y + h / 2 + 0.5);
         if (style.underline === true || style.strike === true) {
           // Canvas has no text-decoration, so the lines are drawn by hand across the visible part of the text.
-          const lineWidth = Math.min(textWidth, available);
+          const lineWidth = spills ? textWidth : Math.min(textWidth, available);
           const mid = Math.round(y + h / 2);
           if (style.underline === true) ctx.fillRect(tx, mid + 7, lineWidth, 1);
           if (style.strike === true) ctx.fillRect(tx, mid, lineWidth, 1);
         }
-        if (overflow) ctx.restore();
+        if (clipped) ctx.restore();
       }
       x += w;
     }

@@ -16,6 +16,7 @@ export interface KeyboardDeps {
   surface: GridSurface;
   editor: EditorController;
   clipboard: ClipboardController;
+  showShortcuts: () => void;
 }
 
 export class KeyboardController {
@@ -73,7 +74,7 @@ export class KeyboardController {
     }
     // startTyping must not be prevented: the browser's default inserts the character into the textarea.
     // pasteValues likewise lets the browser's paste event through; it only marks the next paste as values-only.
-    if (action.type !== 'startTyping' && action.type !== 'pasteValues') e.preventDefault();
+    if (action.type !== 'startTyping' && action.type !== 'pasteValues' && action.type !== 'pasteFormat') e.preventDefault();
     this.run(action);
   };
 
@@ -171,7 +172,13 @@ export class KeyboardController {
         sheet.formatSelection({ numberFormat: action.format }, 'Number format');
         break;
       case 'pasteValues':
-        this.deps.clipboard.armValuesOnly();
+        this.deps.clipboard.armPaste('values');
+        return;
+      case 'pasteFormat':
+        this.deps.clipboard.armPaste('format');
+        return;
+      case 'showShortcuts':
+        this.deps.showShortcuts();
         return;
       case 'pointMove':
         editor.pointMove(action.dir, action.extend);

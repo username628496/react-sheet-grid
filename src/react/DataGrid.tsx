@@ -5,6 +5,7 @@ import { GridSurface } from '../render/GridSurface';
 import { CellEditor } from './CellEditor';
 import { ContextMenu } from './ContextMenu';
 import { FilterDialog } from './FilterDialog';
+import { ShortcutsDialog } from './ShortcutsDialog';
 
 export interface DataGridProps {
   sheet: Spreadsheet;
@@ -26,6 +27,11 @@ export function DataGrid({ sheet, frozenRows = 0, frozenCols = 0, className, sty
   const [controller, setController] = useState<GridController | null>(null);
   const [menu, setMenu] = useState<{ x: number; y: number } | null>(null);
   const [filter, setFilter] = useState<{ col: number; x: number; y: number } | null>(null);
+  const [help, setHelp] = useState(false);
+  const closeHelp = useCallback(() => {
+    setHelp(false);
+    editorRef.current?.focus({ preventScroll: true });
+  }, []);
   const closeMenu = useCallback(() => setMenu(null), []);
   const closeFilter = useCallback(() => {
     setFilter(null);
@@ -44,6 +50,7 @@ export function DataGrid({ sheet, frozenRows = 0, frozenCols = 0, className, sty
     const surface = new GridSurface(mount, sheet, { frozenRows, frozenCols });
     const ctrl = new GridController(surface, sheet, textarea);
     ctrl.mouse.onContext = (x, y) => setMenu({ x, y });
+    ctrl.onShowShortcuts = () => setHelp(true);
     setController(ctrl);
     onReady?.(ctrl);
     return () => {
@@ -69,6 +76,7 @@ export function DataGrid({ sheet, frozenRows = 0, frozenCols = 0, className, sty
           onFilter={(col, x, y) => setFilter({ col, x, y })}
         />
       )}
+      {help && <ShortcutsDialog onClose={closeHelp} />}
       {filter !== null && <FilterDialog sheet={sheet} viewCol={filter.col} x={filter.x} y={filter.y} onClose={closeFilter} />}
     </>
   );

@@ -28,7 +28,7 @@ export class ClipboardController {
   /** Range drawn with a dashed outline after copy/cut; cleared by Escape or any edit. */
   marquee: ViewRange | null = null;
   private clip: InternalClip | null = null;
-  private valuesOnly = false;
+  private pasteMode: 'normal' | 'values' | 'format' = 'normal';
   private valuesOnlyTimer: ReturnType<typeof setTimeout> | null = null;
   private marqueeVersion = 0;
   private readonly textarea: HTMLTextAreaElement;
@@ -50,15 +50,16 @@ export class ClipboardController {
   }
 
   /**
-   * Cmd/Ctrl+Shift+V. Some browsers fire a normal paste event for this shortcut and some do not, so the
-   * next paste is marked values-only and, if no paste event shows up shortly, the system clipboard is read.
+   * Cmd/Ctrl+Shift+V (values only) and Cmd/Ctrl+Alt+V (format only). Some browsers fire a normal paste event
+   * for these shortcuts and some do not, so the next paste is marked and, if no paste event shows up shortly,
+   * the system clipboard is read.
    */
-  armValuesOnly(): void {
-    this.valuesOnly = true;
+  armPaste(mode: 'values' | 'format'): void {
+    this.pasteMode = mode;
     if (this.valuesOnlyTimer !== null) clearTimeout(this.valuesOnlyTimer);
     this.valuesOnlyTimer = setTimeout(() => {
       this.valuesOnlyTimer = null;
-      if (this.valuesOnly) void this.pasteFromSystem();
+      if (this.pasteMode !== 'normal') void this.pasteFromSystem();
     }, 150);
   }
 
@@ -161,10 +162,12 @@ export class ClipboardController {
   private paste(html: string, text: string): void {
     const { sheet } = this;
     const clip = this.clip;
-    const valuesOnly = this.valuesOnly;
-    this.valuesOnly = false;
+    const mode = this.pasteMode;
+    this.pasteMode = 'normal';
+    const valuesOnly = mode === 'values';
     if (this.valuesOnlyTimer !== null) clearTimeout(this.valuesOnlyTimer);
     this.valuesOnlyTimer = null;
+    if (mode === 'format' && (clip === null || text !== clip.text)) return; // formats only exist in our own copies
     if (clip !== null && text !== '' && text === clip.text) {
       // Our own copy: keep formulas and formatting instead of round-tripping through text.
       sheet.pasteMatrix(
@@ -174,15 +177,17 @@ export class ClipboardController {
           const cell = clip.cells[i]?.[j] as Cell;
           // Values only: the computed result, in the target's own formatting.
           if (valuesOnly) return { value: cell.value, styleId: existing.styleId };
+          // Format only: the target keeps its content (and formula) and takes the source's formatting.
+          if (mode === 'format') return { ...existing, styleId: cell.styleId };
           if (!clip.cut || cell.formula === undefined) return cell; // a copied formula adapts to its new place via relative refs
           // A moved formula keeps pointing at the same cells, so it is rebased rather than shifted.
           const fromRow = sheet.mapping.toDataRow(clip.source.startRow + i);
           const fromCol = sheet.mapping.toDataCol(clip.source.startCol + j);
           return { ...cell, formula: rebaseFormula(cell.formula, fromRow, fromCol, dataRow, dataCol) };
         },
-        clip.cut && !valuesOnly ? clip.source : null,
+        clip.cut && mode === 'normal' ? clip.source : null,
       );
-      if (clip.cut && !valuesOnly) {
+      if (clip.cut && mode === 'normal') {
         this.clip = null;
         this.marquee = null;
       }

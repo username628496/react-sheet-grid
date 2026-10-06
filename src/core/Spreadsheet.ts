@@ -235,6 +235,22 @@ export class Spreadsheet {
     this.applyStyle(targets, { [key]: allOn ? undefined : true }, labels[key]);
   }
 
+  /**
+   * How many rows a double-click on the fill handle should fill downwards: as many as the neighbouring column
+   * (left first, then right) has data in, continuing from the last row of `source`. 0 when no neighbour guides it.
+   */
+  autoFillExtent(source: ViewRange): number {
+    for (const col of [source.startCol - 1, source.endCol + 1]) {
+      if (col < 0 || col >= this.colCount) continue;
+      // The guide column must have data next to the source's last row, otherwise it says nothing about this block.
+      if (this.getCellByView(source.endRow, col).value === null) continue;
+      let n = 0;
+      for (let r = source.endRow + 1; r < this.rowCount && this.getCellByView(r, col).value !== null; r++) n++;
+      return n;
+    }
+    return 0;
+  }
+
   /** Mod+\: back to the default look; values and formulas stay. */
   clearFormatting(): void {
     const targets = this.formatTargets().filter((t) => t.cell.styleId !== 0);
