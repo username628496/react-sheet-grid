@@ -56,7 +56,7 @@ function Editor({ saved }: { saved?: unknown }) {
 A snapshot is plain JSON: cells (values and formulas as text), formatting, sizes, sort/filter, frozen panes. Formulas are
 recalculated when it is loaded. The undo history and the selection are not saved.
 
-`onChange` fires after the document changed (edits, paste, formatting, undo, freezing), never for selection or scrolling.
+`onChange` fires after the document changed (edits, paste, formatting, undo, freezing), never for selection or scrolling and never while `readOnly` is on.
 Calls are batched (`changeDelay`, 300 ms by default) and one more call is made on unmount if changes are still pending.
 `getSnapshot()` walks every filled cell, so call it when you save, not on every render.
 

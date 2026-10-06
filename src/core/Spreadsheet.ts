@@ -63,6 +63,8 @@ const FORMAT_FILL_LIMIT = 50_000;
 const MAX_SCATTERED_MOVE = 200_000; // cut-paste cells followed one by one in a sorted/filtered view
 const MAX_RANGE_CHECK = 10_000; // largest range inspected cell by cell for the same move
 const MAX_TILED_CELLS = 1_000_000;
+/** One paste is one undo step holding every cell, so an absurdly large one would freeze the tab and eat memory. */
+export const MAX_PASTE_CELLS = 1_000_000;
 const MAX_READ_CELLS = 100_000;
 
 /**
@@ -70,6 +72,9 @@ const MAX_READ_CELLS = 100_000;
  * history in one place. Pure TypeScript with no DOM, so it runs in Node and
  * in a Web Worker. UI code reads from here and mutates only via `execute`.
  */
+/** Something the user should be told about but that is not an error of the host app. Localised by the UI layer. */
+export type SheetNotice = { code: 'pasteTooLarge'; cells: number; limit: number };
+
 export interface SizeChange {
   /** Row or column count after the change. */
   count: number;
@@ -87,6 +92,7 @@ export class Spreadsheet {
   readonly history = new History();
   readonly selection: SelectionModel;
   private readonly listeners = new Set<Listener>();
+  private readonly noticeListeners = new Set<(notice: SheetNotice) => void>();
   private state: ViewState = EMPTY_VIEW_STATE;
   /** Rows and columns kept in view while scrolling. Frozen rows are the header: sorting and filtering never touch them. */
   frozenRows = 0;
@@ -151,6 +157,12 @@ export class Spreadsheet {
 
   get colCount(): number {
     return this.mapping.colCount;
+  }
+
+  /** Messages for the user about something the sheet refused to do (the toolbar shows them). */
+  subscribeNotices(listener: (notice: SheetNotice) => void): () => void {
+    this.noticeListeners.add(listener);
+    return () => this.noticeListeners.delete(listener);
   }
 
   subscribe(listener: Listener): () => void {
@@ -851,6 +863,10 @@ export class Spreadsheet {
     cutFrom: ViewRange | null = null,
   ): ViewRange | null {
     if (rows === 0 || cols === 0 || this.readOnlyFlag) return null;
+    if (rows * cols > MAX_PASTE_CELLS) {
+      for (const listener of this.noticeListeners) listener({ code: 'pasteTooLarge', cells: rows * cols, limit: MAX_PASTE_CELLS });
+      return null;
+    }
     const target = this.selection.primary;
     const th = target.endRow - target.startRow + 1;
     const tw = target.endCol - target.startCol + 1;

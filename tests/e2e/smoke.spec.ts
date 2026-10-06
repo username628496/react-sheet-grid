@@ -242,3 +242,197 @@ test.describe('SheetGrid (the host-facing component)', () => {
     expect(await page.evaluate(() => (window as unknown as { __changes: unknown[] }).__changes.length)).toBe(0);
   });
 });
+
+test.describe('robustness', () => {
+  type Handle = import('../../src/index').SheetGridHandle;
+  type W = { __handle?: Handle; __handles?: Array<Handle | null>; __mount: () => void; __unmount: () => void; __leaks: () => Record<string, number> };
+
+  test('mounting and unmounting repeatedly leaves no listeners, observers or timers behind', async ({ page }) => {
+    // Counts what outlives a grid: listeners on window/document, ResizeObservers, intervals. Element listeners go away
+    // with their element, so they are not counted.
+    await page.addInitScript(() => {
+      const open: Record<string, number> = {};
+      const bump = (key: string, by: number): void => {
+        open[key] = (open[key] ?? 0) + by;
+      };
+      const name = (t: unknown): string | null => (t === window ? 'window' : t === document ? 'document' : t === document.documentElement ? 'html' : t === document.body ? 'body' : null);
+      const add = EventTarget.prototype.addEventListener;
+      const remove = EventTarget.prototype.removeEventListener;
+      const key = (t: unknown, type: string, o: unknown): string | null => {
+        const n = name(t);
+        const capture = typeof o === 'boolean' ? o : typeof o === 'object' && o !== null && (o as { capture?: boolean }).capture === true;
+        return n === null ? null : `${n}:${type}:${capture}`;
+      };
+      const seen = new WeakMap<object, Set<string>>();
+      EventTarget.prototype.addEventListener = function (type: string, listener: unknown, options?: unknown) {
+        const k = key(this, type, options);
+        if (k !== null && typeof listener === 'function') {
+          const set = seen.get(listener as object) ?? new Set<string>();
+          if (!set.has(k)) {
+            set.add(k);
+            seen.set(listener as object, set);
+            bump(k, 1);
+          }
+        }
+        return add.call(this, type, listener as EventListener, options as AddEventListenerOptions);
+      };
+      EventTarget.prototype.removeEventListener = function (type: string, listener: unknown, options?: unknown) {
+        const k = key(this, type, options);
+        if (k !== null && typeof listener === 'function') {
+          const set = seen.get(listener as object);
+          if (set?.delete(k) === true) bump(k, -1);
+        }
+        return remove.call(this, type, listener as EventListener, options as EventListenerOptions);
+      };
+      const OriginalObserver = window.ResizeObserver;
+      window.ResizeObserver = class extends OriginalObserver {
+        constructor(callback: ResizeObserverCallback) {
+          super(callback);
+          bump('resizeObserver', 1);
+        }
+        override disconnect(): void {
+          bump('resizeObserver', -1);
+          super.disconnect();
+        }
+      };
+      const setIv = window.setInterval.bind(window);
+      const clearIv = window.clearInterval.bind(window);
+      const live = new Set<number>();
+      window.setInterval = ((fn: TimerHandler, ms?: number, ...args: unknown[]) => {
+        const id = setIv(fn, ms, ...args);
+        live.add(id);
+        return id;
+      }) as typeof window.setInterval;
+      window.clearInterval = ((id?: number) => {
+        if (id !== undefined) live.delete(id);
+        clearIv(id);
+      }) as typeof window.clearInterval;
+      (window as unknown as { __leaks: () => Record<string, number> }).__leaks = () => {
+        const out: Record<string, number> = {};
+        for (const [k, v] of Object.entries(open)) if (v !== 0) out[k] = v;
+        if (live.size > 0) out.intervals = live.size;
+        return out;
+      };
+    });
+    await page.goto('/demo/simple.html');
+    await page.waitForFunction(() => (window as unknown as W).__handle?.controller != null);
+    await page.evaluate(() => (window as unknown as W).__unmount());
+    await expect(page.getByTestId('grid')).toHaveCount(0);
+    // React attaches its own (permanent) listeners to document.body the first time a portal is used, and Playwright
+    // adds some too; those appear once. A leak is anything that keeps growing, so the baseline is taken after one
+    // complete use-and-unmount cycle.
+    let baseline: Record<string, number> = {};
+
+    for (let i = 0; i < 5; i++) {
+      await page.evaluate(() => (window as unknown as W).__mount());
+      await page.waitForFunction(() => (window as unknown as W).__handle?.controller != null);
+      // Use it: select, drag a selection past the edge (auto-scroll timer), open a menu, arm the painter, edit.
+      const a = await page.evaluate(() => {
+        const g = (window as unknown as W).__handle!.controller!;
+        const r = g.surface.host.getBoundingClientRect();
+        return { x: r.left + 80, y: r.top + 50, w: r.width, h: r.height };
+      });
+      await page.mouse.click(a.x, a.y);
+      await page.keyboard.type('x');
+      await page.keyboard.press('Enter');
+      await page.mouse.move(a.x, a.y);
+      await page.mouse.down();
+      await page.mouse.move(a.x + 100, a.y + a.h, { steps: 3 }); // past the bottom edge: the auto-scroll timer starts
+      await page.waitForTimeout(80);
+      await page.mouse.up();
+      await page.getByRole('button', { name: 'Insert', exact: true }).click(); // a menu is open
+      await page.getByRole('button', { name: 'Paint format' }).click(); // closes it and arms the painter
+      if (i === 4) {
+        // The worst case: unmounted in the middle of a drag.
+        await page.mouse.move(a.x, a.y);
+        await page.mouse.down();
+        await page.mouse.move(a.x + 100, a.y + a.h, { steps: 3 });
+        await page.waitForTimeout(80);
+      }
+      await page.evaluate(() => (window as unknown as W).__unmount());
+      await expect(page.getByTestId('grid')).toHaveCount(0);
+      // Still holding the button after an unmount mid-drag: nothing may be left waiting for the release (the
+      // release itself would let a leaked handler clean up after itself and hide the leak).
+      if (i === 4) expect(await page.evaluate(() => (window as unknown as W).__leaks())).toEqual(baseline);
+      await page.mouse.up();
+      if (i === 0) baseline = await page.evaluate(() => (window as unknown as W).__leaks());
+    }
+    expect(await page.evaluate(() => (window as unknown as W).__leaks())).toEqual(baseline);
+  });
+
+  test('two grids on one page keep separate data, selection and editing', async ({ page }) => {
+    await page.goto('/demo/simple.html?count=2');
+    await page.waitForFunction(() => (window as unknown as W).__handles?.filter((h) => h?.controller != null).length === 2);
+    const first = page.getByTestId('sheet-0').getByTestId('grid');
+    const second = page.getByTestId('sheet-1').getByTestId('grid');
+    await first.click({ position: { x: 120, y: 60 } });
+    await page.keyboard.type('one');
+    await page.keyboard.press('Enter');
+    await second.click({ position: { x: 120, y: 60 } });
+    await page.keyboard.type('two');
+    await page.keyboard.press('Enter');
+    const values = await page.evaluate(() => {
+      const [a, b] = (window as unknown as W).__handles as Handle[];
+      return {
+        a: a!.sheet.getCellByView(1, 0).value,
+        b: b!.sheet.getCellByView(1, 0).value,
+        aSelection: [a!.sheet.selection.activeRow, a!.sheet.selection.activeCol],
+        bSelection: [b!.sheet.selection.activeRow, b!.sheet.selection.activeCol],
+        aCells: a!.sheet.model.cellCount,
+        bCells: b!.sheet.model.cellCount,
+      };
+    });
+    expect(values).toEqual({ a: 'one', b: 'two', aSelection: [2, 0], bSelection: [2, 0], aCells: 1, bCells: 1 });
+    expect(await page.getByTestId('toolbar').count()).toBe(2);
+  });
+
+  test('React StrictMode (double mount) leaves a working grid', async ({ page }) => {
+    await page.goto('/demo/simple.html');
+    await page.waitForFunction(() => (window as unknown as W).__handle?.controller != null);
+    // Remount quickly and use the grid: it must not be half torn down.
+    await page.evaluate(() => {
+      const w = window as unknown as W;
+      w.__unmount();
+      w.__mount();
+    });
+    await page.waitForFunction(() => (window as unknown as W).__handle?.controller != null);
+    await page.getByTestId('grid').click({ position: { x: 120, y: 60 } });
+    await page.keyboard.type('ok');
+    await page.keyboard.press('Enter');
+    expect(await page.evaluate(() => (window as unknown as W).__handle!.sheet.getCellByView(1, 0).value)).toBe('ok');
+  });
+});
+
+test.describe('failures stay contained', () => {
+  type Handle = import('../../src/index').SheetGridHandle;
+  type W = { __handle?: Handle; __crash?: boolean; __errors?: string[] };
+
+  test('a render error shows a fallback with Try again, reports it, and the page survives', async ({ page }) => {
+    await page.goto('/demo/simple.html');
+    await page.waitForFunction(() => (window as unknown as W).__handle?.controller != null);
+    await page.evaluate(() => {
+      (window as unknown as W).__crash = true;
+      const sheet = (window as unknown as W).__handle!.sheet;
+      sheet.selection.selectCell(0, 0);
+      sheet.formatSelection({ color: '#ff0000' }); // makes the toolbar render the "reset color" string, which now throws
+    });
+    await expect(page.getByRole('alert')).toContainText('Something went wrong');
+    expect(await page.evaluate(() => (window as unknown as W).__errors)).toContain('boom');
+    await page.evaluate(() => {
+      (window as unknown as W).__crash = false;
+    });
+    await page.getByRole('button', { name: 'Try again' }).click();
+    await expect(page.getByTestId('toolbar')).toBeVisible();
+    await expect(page.getByTestId('grid')).toBeVisible();
+  });
+
+  test('an oversized paste is refused and the toolbar says so', async ({ page }) => {
+    await page.goto('/demo/simple.html');
+    await page.waitForFunction(() => (window as unknown as W).__handle?.controller != null);
+    await page.evaluate(() => {
+      (window as unknown as W).__handle!.sheet.pasteMatrix(3000, 1000, () => ({ value: 1, styleId: 0 }));
+    });
+    await expect(page.getByRole('status').filter({ hasText: 'Nothing was pasted' })).toBeVisible();
+    expect(await page.evaluate(() => (window as unknown as W).__handle!.sheet.model.cellCount)).toBe(0);
+  });
+});

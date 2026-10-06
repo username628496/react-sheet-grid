@@ -5,7 +5,11 @@ import { SheetGrid, type SheetGridHandle, type SheetSnapshot } from '../src/inde
 // ?readonly=1 shows a read-only sheet, ?value=<json> starts from a saved sheet.
 declare global {
   interface Window {
+    __crash?: boolean;
+    __mount?: () => void;
+    __unmount?: () => void;
     __handle?: SheetGridHandle | null;
+    __handles?: Array<SheetGridHandle | null>;
     __changes?: SheetSnapshot[];
     __errors?: string[];
   }
@@ -16,16 +20,25 @@ const raw = params.get('value');
 window.__changes = [];
 window.__errors = [];
 
-function App() {
+function Grid({ index }: { index: number }) {
   return (
     <SheetGrid
       ref={(handle) => {
-        window.__handle = handle;
+        if (index === 0) window.__handle = handle;
+        window.__handles ??= [];
+        window.__handles[index] = handle;
       }}
       rowCount={50}
       colCount={26}
       defaultValue={raw === null ? undefined : (JSON.parse(raw) as unknown)}
       readOnly={params.get('readonly') === '1'}
+      // Lets a test make rendering fail on demand: this string is built while the toolbar renders.
+      messages={{
+        resetColor: (what) => {
+          if (window.__crash === true) throw new Error('boom');
+          return `Reset ${what.toLowerCase()}`;
+        },
+      }}
       changeDelay={50}
       onChange={({ getSnapshot }) => window.__changes?.push(getSnapshot())}
       onError={(e) => window.__errors?.push(e.message)}
@@ -33,4 +46,22 @@ function App() {
   );
 }
 
-createRoot(document.getElementById('root')!).render(<App />);
+// ?count=2 puts two independent grids on the page (to check they do not interfere).
+const count = Math.max(1, Math.min(4, Number(params.get('count') ?? 1)));
+
+function App() {
+  return (
+    <div style={{ height: '100%', display: 'grid', gridTemplateRows: `repeat(${count}, 1fr)` }}>
+      {Array.from({ length: count }, (_, i) => (
+        <div key={i} style={{ minHeight: 0 }} data-testid={`sheet-${i}`}>
+          <Grid index={i} />
+        </div>
+      ))}
+    </div>
+  );
+}
+
+const root = createRoot(document.getElementById('root')!);
+window.__mount = () => root.render(<App />);
+window.__unmount = () => root.render(null);
+window.__mount();

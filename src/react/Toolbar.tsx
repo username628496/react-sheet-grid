@@ -94,6 +94,11 @@ export function Toolbar({ sheet, grid = null, onAction }: ToolbarProps) {
   const [notice, setNotice] = useState<string | null>(null);
   const [menu, setMenu] = useState<OpenMenu | null>(null);
   const lastClosed = useRef<{ id: MenuId; at: number } | null>(null);
+  // Things the sheet refused to do (an oversized paste) are announced in the same place as the size notice.
+  useEffect(
+    () => sheet.subscribeNotices((n) => setNotice(m.pasteTooLarge(n.limit))),
+    [sheet, m],
+  );
   useEffect(() => {
     if (notice === null) return;
     const timer = setTimeout(() => setNotice(null), 8000);

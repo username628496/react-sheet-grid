@@ -47,6 +47,8 @@ export class ClipboardController {
     this.textarea.removeEventListener('copy', this.onCopy);
     this.textarea.removeEventListener('cut', this.onCut);
     this.textarea.removeEventListener('paste', this.onPaste);
+    if (this.valuesOnlyTimer !== null) clearTimeout(this.valuesOnlyTimer);
+    this.valuesOnlyTimer = null;
   }
 
   /**

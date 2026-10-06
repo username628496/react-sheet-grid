@@ -110,3 +110,20 @@ describe('revision and subscribeChanges', () => {
     expect(calls).toBe(3);
   });
 });
+
+describe('oversized paste', () => {
+  it('is refused with a notice, changes nothing and leaves no undo step', async () => {
+    const { MAX_PASTE_CELLS } = await import('../../src/core/Spreadsheet');
+    const s = makeSheet({ A1: 'keep' });
+    const notices: unknown[] = [];
+    s.subscribeNotices((n) => notices.push(n));
+    const before = s.revision;
+    const result = s.pasteMatrix(2000, 1000, () => ({ value: 1, styleId: 0 }));
+    expect(result).toBeNull();
+    expect(notices).toEqual([{ code: 'pasteTooLarge', cells: 2_000_000, limit: MAX_PASTE_CELLS }]);
+    expect(s.revision).toBe(before);
+    expect(value(s, 'A1')).toBe('keep');
+    expect(s.pasteMatrix(10, 10, () => ({ value: 1, styleId: 0 }))).not.toBeNull(); // normal pastes are unaffected
+    expect(notices).toHaveLength(1);
+  });
+});

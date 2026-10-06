@@ -79,6 +79,9 @@ export interface Messages {
   rowCount: string;
   colCount: string;
   removedCells: (n: number) => string;
+  pasteTooLarge: (limit: number) => string;
+  errorTitle: string;
+  errorRetry: string;
   // formula bar
   nameBox: string;
   formulaBar: string;
@@ -193,6 +196,9 @@ const en: Messages = {
   rowCount: 'Row count',
   colCount: 'Column count',
   removedCells: (n) => `Removed ${plural(n, 'filled cell', 'filled cells')}. Undo to restore.`,
+  pasteTooLarge: (limit) => `That is too much to paste at once (over ${limit.toLocaleString('en-US')} cells). Nothing was pasted.`,
+  errorTitle: 'Something went wrong in the spreadsheet.',
+  errorRetry: 'Try again',
   nameBox: 'Name box',
   formulaBar: 'Formula bar',
   selectionSummary: 'Selection summary',
@@ -358,6 +364,9 @@ const vi: Messages = {
   rowCount: 'Số dòng',
   colCount: 'Số cột',
   removedCells: (n) => `Đã xóa ${n} ô có dữ liệu. Nhấn hoàn tác để khôi phục.`,
+  pasteTooLarge: (limit) => `Dữ liệu dán quá lớn (hơn ${limit.toLocaleString('vi-VN')} ô). Chưa dán gì cả.`,
+  errorTitle: 'Bảng tính gặp sự cố.',
+  errorRetry: 'Thử lại',
   nameBox: 'Ô tên',
   formulaBar: 'Thanh công thức',
   selectionSummary: 'Tóm tắt vùng chọn',

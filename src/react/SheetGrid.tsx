@@ -13,6 +13,7 @@ import { Spreadsheet } from '../core/Spreadsheet';
 import type { GridController } from '../input/GridController';
 import { DataGrid } from './DataGrid';
 import { FormulaBar } from './FormulaBar';
+import { GridErrorBoundary } from './GridErrorBoundary';
 import { GridProvider, type ThemeSetting } from './GridProvider';
 import type { Locale, Messages } from './messages';
 import { StatusBar } from './StatusBar';
@@ -57,14 +58,15 @@ export interface SheetGridProps {
   zoom?: number;
   onZoomChange?: (zoom: number) => void;
   /**
-   * Called after the document changed (an edit, paste, format, undo, freeze…), never for selection or scroll.
+   * Called after the document changed (an edit, paste, format, undo, freeze…), never for selection or scroll, and
+   * never while `readOnly` is on.
    * Calls are batched: it fires once, `changeDelay` ms after the last change, and once more when the component unmounts
    * with changes still pending.
    */
   onChange?: (event: SheetChangeEvent) => void;
   /** Milliseconds to wait after the last change before `onChange`. Default 300. */
   changeDelay?: number;
-  /** Called when `defaultValue` cannot be read; the grid then starts blank. */
+  /** Called when `defaultValue` cannot be read (the grid then starts blank) and when rendering fails (a fallback with a retry button is shown). */
   onError?: (error: Error) => void;
   className?: string;
   /** Applied to the outer box, which is a flex column filling its parent (height: 100%) unless overridden. */
@@ -130,6 +132,8 @@ export const SheetGrid = forwardRef<SheetGridHandle, SheetGridProps>(function Sh
       handlers.current.onChange?.({ sheet, getSnapshot: () => serializeSheet(sheet) });
     };
     const off = sheet.subscribeChanges(() => {
+      // Sorting, filtering or resizing a read-only sheet changes how it is viewed, not the document: nothing to save.
+      if (sheet.readOnly) return;
       clearTimeout(timer);
       timer = setTimeout(fire, changeDelay);
     });
@@ -159,19 +163,21 @@ export const SheetGrid = forwardRef<SheetGridHandle, SheetGridProps>(function Sh
   return (
     <GridProvider locale={locale} messages={messages} theme={theme}>
       <div className={className} style={{ ...ROOT, ...style }}>
-        {toolbar && <Toolbar sheet={sheet} grid={controller} onAction={focus} />}
-        {formulaBar && <FormulaBar sheet={sheet} grid={controller} />}
-        <div style={{ flex: 1, minHeight: 0 }}>
-          <DataGrid
-            sheet={sheet}
-            frozenRows={frozenRows}
-            frozenCols={frozenCols}
-            zoom={zoom}
-            onZoomChange={onZoomChange}
-            onReady={setController}
-          />
-        </div>
-        {statusBar && <StatusBar sheet={sheet} />}
+        <GridErrorBoundary onError={(e) => handlers.current.onError?.(e)}>
+          {toolbar && <Toolbar sheet={sheet} grid={controller} onAction={focus} />}
+          {formulaBar && <FormulaBar sheet={sheet} grid={controller} />}
+          <div style={{ flex: 1, minHeight: 0 }}>
+            <DataGrid
+              sheet={sheet}
+              frozenRows={frozenRows}
+              frozenCols={frozenCols}
+              zoom={zoom}
+              onZoomChange={onZoomChange}
+              onReady={setController}
+            />
+          </div>
+          {statusBar && <StatusBar sheet={sheet} />}
+        </GridErrorBoundary>
       </div>
     </GridProvider>
   );
