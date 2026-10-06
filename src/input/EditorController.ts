@@ -1,3 +1,4 @@
+import { DEFAULT_FONT_SIZE, lineHeightFor } from '../core/model/font';
 import type { Spreadsheet } from '../core/Spreadsheet';
 import type { Direction } from '../core/selection/navigation';
 import { canInsertReference, cycleReference, findReferences, refToText, type RefMatch } from '../formula/refText';
@@ -244,7 +245,7 @@ export class EditorController {
     const cellW = cols.getSize(c) * z;
     const cellH = rows.getSize(r) * z;
     const style = styles.get(this.sheet.getCellByView(r, c).styleId);
-    const font = fontFor(style.bold, style.italic, z);
+    const font = fontFor(style, z);
     const t = this.textarea;
 
     this.refs = this.editing ? this.colorRefs(findReferences(t.value)) : [];
@@ -263,7 +264,7 @@ export class EditorController {
       this.measureCtx.font = font;
       for (const line of lines) width = Math.max(width, this.measureCtx.measureText(line).width);
     }
-    const lineHeight = Math.max(14, rows.defaultSize - 4) * z;
+    const lineHeight = Math.max(14, lineHeightFor(style.fontSize ?? DEFAULT_FONT_SIZE)) * z;
     const maxWidth = Math.max(cellW, vp.width * z - left);
     const w = Math.min(maxWidth, Math.max(cellW, Math.ceil(width) + 16 * z));
     const h = Math.max(cellH, lines.length * lineHeight + 4 * z);

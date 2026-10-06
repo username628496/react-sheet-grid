@@ -1,3 +1,6 @@
+import { CELL_HORIZONTAL_PADDING, DEFAULT_FONT_SIZE, FONT_FAMILY, fontString } from '../core/model/font';
+import type { Style } from '../core/model/StyleTable';
+
 export interface Palette {
   background: string;
   text: string;
@@ -51,9 +54,9 @@ const DARK: Palette = {
  * switching it and invalidating the surfaces is all a theme change takes.
  */
 export const theme: { fontFamily: string; fontSize: number; cellPadding: number } & Palette = {
-  fontFamily: 'Arial, "Helvetica Neue", sans-serif',
-  fontSize: 13,
-  cellPadding: 4,
+  fontFamily: FONT_FAMILY,
+  fontSize: DEFAULT_FONT_SIZE,
+  cellPadding: CELL_HORIZONTAL_PADDING,
   ...LIGHT,
 };
 
@@ -61,9 +64,9 @@ export function applyCanvasTheme(name: 'light' | 'dark'): void {
   Object.assign(theme, name === 'dark' ? DARK : LIGHT);
 }
 
-/** `scale` is for DOM boxes that sit on top of the canvas (the editor) and so need screen pixels; the canvas itself scales by transform. */
-export function fontFor(bold: boolean | undefined, italic: boolean | undefined, scale = 1): string {
-  return `${italic === true ? 'italic ' : ''}${bold === true ? 'bold ' : ''}${theme.fontSize * scale}px ${theme.fontFamily}`;
+/** The CSS font for a style. `scale` is for DOM boxes that sit on top of the canvas (the editor) and so need screen pixels; the canvas itself scales by transform. */
+export function fontFor(style: Pick<Style, 'bold' | 'italic' | 'fontSize'>, scale = 1): string {
+  return fontString(style, scale);
 }
 
 /** Colors given to the references of a formula being edited, in order of first appearance (as in Sheets). */

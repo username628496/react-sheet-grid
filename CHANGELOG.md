@@ -6,6 +6,7 @@ and the project follows [Semantic Versioning](https://semver.org/). Before 1.0.0
 ## [Unreleased]
 
 ### Added
+- Font size (toolbar box, +/- buttons, Ctrl/⌘+Shift+, and .), text wrapping (overflow / wrap / clip), vertical alignment; rows are fitted to their content when the font size or wrapping changes and on a double-click of the row border.
 - Find and replace (panel, highlighting, accent-insensitive search, `sheet.findCells` / `replaceInCells`, `findInText`).
 - CSV import/export (File menu, `sheet.exportCsv`/`importCsv`, `parseCsv`/`toCsv`), `sheet.transaction` to group commands into one undo step.
 - Accessibility: named `application` region with usage hint, live region announcing the active cell/selection/editing,

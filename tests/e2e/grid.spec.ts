@@ -1786,3 +1786,141 @@ test.describe('find and replace', () => {
     await expect(page.getByTestId('find-count')).toHaveText(/of 3$/);
   });
 });
+
+test.describe('font size, wrapping and vertical alignment', () => {
+  type Page = import('@playwright/test').Page;
+  /** Counts dark pixels in a horizontal band of a cell, to see where text was really drawn. */
+  const ink = (page: Page, row: number, col: number, fromY: number, toY: number): Promise<number> =>
+    page.evaluate(
+      async ([r, c, a, b]) => {
+        await new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)));
+        const g = window.__grid!;
+        const vp = g.surface.viewport;
+        const canvas = document.querySelector('[data-testid=grid] canvas') as HTMLCanvasElement;
+        const dpr = window.devicePixelRatio || 1;
+        const x = Math.round((vp.colLeft(c as number) + 2) * dpr);
+        const top = vp.rowTop(r as number);
+        const w = Math.round((g.sheet.cols.getSize(c as number) - 6) * dpr);
+        const y = Math.round((top + (a as number)) * dpr);
+        const h = Math.max(1, Math.round(((b as number) - (a as number)) * dpr));
+        const data = canvas.getContext('2d')!.getImageData(x, y, w, h).data;
+        let dark = 0;
+        for (let i = 0; i < data.length; i += 4) if ((data[i] as number) < 110) dark++;
+        return dark;
+      },
+      [row, col, fromY, toY],
+    );
+
+  test('the font size box and the +/- buttons resize text and fit the row', async ({ page }) => {
+    await page.evaluate(() => window.__sheet!.setCellInput(0, 0, 'Big'));
+    await clickCell(page, 0, 0);
+    await expect(page.getByRole('textbox', { name: 'Font size' })).toHaveValue('13');
+    await page.getByRole('textbox', { name: 'Font size' }).fill('30');
+    await page.getByRole('textbox', { name: 'Font size' }).press('Enter');
+    expect(await page.evaluate(() => window.__sheet!.styles.get(window.__sheet!.getCellByView(0, 0).styleId).fontSize)).toBe(30);
+    expect(await page.evaluate(() => window.__sheet!.rows.getSize(0))).toBe(42); // 38 for the line + 4
+    await page.getByRole('button', { name: 'Decrease font size' }).click();
+    await expect(page.getByRole('textbox', { name: 'Font size' })).toHaveValue('28'); // 30 is between steps: the next one down
+    await page.getByRole('button', { name: 'Increase font size' }).click();
+    await page.getByRole('button', { name: 'Increase font size' }).click();
+    await expect(page.getByRole('textbox', { name: 'Font size' })).toHaveValue('36'); // 28 -> 32 -> 36
+    await page.keyboard.press(`${mod}+Shift+Comma`);
+    await expect(page.getByRole('textbox', { name: 'Font size' })).toHaveValue('32');
+  });
+
+  test('typing a size outside the range is clamped and garbage is ignored', async ({ page }) => {
+    await page.evaluate(() => window.__sheet!.setCellInput(0, 0, 'x'));
+    await clickCell(page, 0, 0);
+    const box = page.getByRole('textbox', { name: 'Font size' });
+    await box.fill('500');
+    await box.press('Enter');
+    await expect(box).toHaveValue('96');
+    await box.fill('abc');
+    await box.press('Enter');
+    await expect(box).toHaveValue('96');
+  });
+
+  test('wrap draws text over several lines, and Clip stops it spilling', async ({ page }) => {
+    await page.evaluate(() => {
+      window.__sheet!.setCellInput(0, 0, 'alpha beta gamma delta epsilon zeta');
+      window.__sheet!.selection.selectCell(9, 9);
+    });
+    // Overflow (default): one line, drawn in the top band only; the second line band is empty.
+    expect(await ink(page, 0, 0, 4, 17)).toBeGreaterThan(20);
+    await clickCell(page, 0, 0);
+    await page.getByRole('button', { name: 'Text wrapping' }).click();
+    await page.getByRole('menuitemradio', { name: 'Wrap' }).click();
+    const height = await page.evaluate(() => window.__sheet!.rows.getSize(0));
+    expect(height).toBeGreaterThan(40); // several wrapped lines in a 100px column
+    await page.evaluate(() => window.__sheet!.selection.selectCell(9, 9));
+    expect(await ink(page, 0, 0, height - 20, height - 3)).toBeGreaterThan(20); // text reaches the last line
+    // The row is only as tall as needed; widening the column and double-clicking the border fits it back.
+    await page.evaluate(() => window.__sheet!.cols.setSize(0, 400));
+    const pos = await page.evaluate(() => {
+      const g = window.__grid!;
+      const vp = g.surface.viewport;
+      const r = g.surface.host.getBoundingClientRect();
+      return { x: r.left + vp.headerWidth / 2, y: r.top + vp.rowTop(0) + g.sheet.rows.getSize(0) };
+    });
+    await page.mouse.dblclick(pos.x, pos.y);
+    expect(await page.evaluate(() => window.__sheet!.rows.getSize(0))).toBe(21);
+    // Clip: with a narrow column the text is cut at the cell edge and nothing spills into the neighbour.
+    await page.evaluate(() => {
+      window.__sheet!.cols.setSize(0, 60);
+      window.__sheet!.setCellInput(2, 0, 'a very long text that would spill');
+    });
+    await clickCell(page, 2, 0);
+    expect(await ink(page, 2, 1, 4, 17)).toBeGreaterThan(5); // spills into B3 by default
+    await page.getByRole('button', { name: 'Text wrapping' }).click();
+    await page.getByRole('menuitemradio', { name: 'Clip' }).click();
+    await page.evaluate(() => window.__sheet!.selection.selectCell(9, 9));
+    expect(await ink(page, 2, 1, 4, 17)).toBe(0);
+  });
+
+  test('vertical align puts the text at the top or the bottom of a tall row', async ({ page }) => {
+    await page.evaluate(() => {
+      window.__sheet!.rows.setSize(0, 80);
+      window.__sheet!.setCellInput(0, 0, 'Hello');
+      window.__sheet!.selection.selectCell(9, 9);
+    });
+    const bands = async () => ({ top: await ink(page, 0, 0, 0, 25), middle: await ink(page, 0, 0, 30, 52), bottom: await ink(page, 0, 0, 55, 79) });
+    let b = await bands();
+    expect(b.middle).toBeGreaterThan(20);
+    expect(b.top + b.bottom).toBe(0);
+    await clickCell(page, 0, 0);
+    await page.getByRole('button', { name: 'Vertical align' }).click();
+    await page.getByRole('menuitemradio', { name: 'Top' }).click();
+    await page.evaluate(() => window.__sheet!.selection.selectCell(9, 9));
+    b = await bands();
+    expect(b.top).toBeGreaterThan(20);
+    expect(b.middle + b.bottom).toBe(0);
+    await clickCell(page, 0, 0);
+    await page.getByRole('button', { name: 'Vertical align' }).click();
+    await page.getByRole('menuitemradio', { name: 'Bottom' }).click();
+    await page.evaluate(() => window.__sheet!.selection.selectCell(9, 9));
+    b = await bands();
+    expect(b.bottom).toBeGreaterThan(20);
+    expect(b.top + b.middle).toBe(0);
+  });
+
+  test('the editor box follows the font size', async ({ page }) => {
+    await page.evaluate(() => {
+      window.__sheet!.setCellInput(0, 0, 'x');
+      window.__sheet!.selection.selectCell(0, 0);
+      window.__sheet!.formatSelection({ fontSize: 24 });
+    });
+    await clickCell(page, 0, 0);
+    await page.keyboard.press('F2');
+    const size = await page.evaluate(() => parseFloat(getComputedStyle(window.__grid!.editor.textarea).fontSize));
+    expect(size).toBe(24);
+    await page.keyboard.press('Escape');
+  });
+
+  test('on a read-only sheet the controls are disabled', async ({ page }) => {
+    await page.evaluate(() => (window.__sheet!.readOnly = true));
+    await expect(page.getByRole('textbox', { name: 'Font size' })).toBeDisabled();
+    await expect(page.getByRole('button', { name: 'Increase font size' })).toBeDisabled();
+    await expect(page.getByRole('button', { name: 'Text wrapping' })).toBeDisabled();
+    await expect(page.getByRole('button', { name: 'Vertical align' })).toBeDisabled();
+  });
+});

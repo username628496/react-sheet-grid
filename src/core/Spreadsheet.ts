@@ -31,7 +31,9 @@ import { History } from './history/History';
 import { AxisLayout } from './layout/AxisLayout';
 import { ViewMapping } from './mapping/ViewMapping';
 import type { Cell, CellValue } from './model/Cell';
+import { CELL_HORIZONTAL_PADDING, CELL_VERTICAL_PADDING, DEFAULT_FONT_SIZE, fontString, lineHeightFor, stepFontSize } from './model/font';
 import { formatValue, shiftDecimals } from './model/format';
+import { wrapLines } from './layout/wrap';
 import { parseInput } from './model/parseInput';
 import { cellKey, MAX_COLS, MAX_ROWS, SheetModel } from './model/SheetModel';
 import { type Style, StyleTable } from './model/StyleTable';
@@ -66,6 +68,8 @@ const FORMAT_FILL_LIMIT = 50_000;
 const MAX_SCATTERED_MOVE = 200_000; // cut-paste cells followed one by one in a sorted/filtered view
 const MAX_RANGE_CHECK = 10_000; // largest range inspected cell by cell for the same move
 const MAX_TILED_CELLS = 1_000_000;
+/** Fitting row heights measures every cell of each row, so a huge selection is left alone. */
+const MAX_FIT_ROWS = 5_000;
 /** One paste is one undo step holding every cell, so an absurdly large one would freeze the tab and eat memory. */
 export const MAX_PASTE_CELLS = 1_000_000;
 /** A CSV of this many fields is already hundreds of megabytes of text; beyond it the export is refused. */
@@ -119,6 +123,11 @@ export class Spreadsheet {
   /** Rows and columns kept in view while scrolling. Frozen rows are the header: sorting and filtering never touch them. */
   frozenRows = 0;
   frozenCols = 0;
+  /**
+   * Width of a string in a CSS font. Only the renderer can measure real text, so it installs this; without one (Node,
+   * tests) wrapped cells count as a single line when rows are fitted to their content.
+   */
+  measureText: ((font: string, text: string) => number) | null = null;
   /** Data keys written since the last recalculation. Only tracked while formulas exist (or one is being added). */
   private readonly dirty = new Set<number>();
   private readOnlyFlag = false;
@@ -678,7 +687,71 @@ export class Spreadsheet {
 
   /** Applies a style patch (color, background, align, numberFormat...) to the selection. */
   formatSelection(patch: Partial<Style>, label = 'Format'): void {
-    this.applyStyle(this.formatTargets(), patch, label);
+    const targets = this.formatTargets();
+    // Bigger text or wrapping changes how tall a row has to be: fit the rows in the same undo step.
+    if ('fontSize' in patch || 'wrap' in patch) {
+      this.transaction(label, () => {
+        this.applyStyle(targets, patch, label);
+        const rows = new Set<number>();
+        for (const t of targets) {
+          const viewRow = this.mapping.toViewRow(t.dataRow);
+          if (viewRow >= 0) rows.add(viewRow);
+          if (rows.size > MAX_FIT_ROWS) return;
+        }
+        this.fitRows([...rows]);
+      });
+      return;
+    }
+    this.applyStyle(targets, patch, label);
+  }
+
+  /** "Increase / decrease font size": the active cell's size moves one step and the whole selection gets it. */
+  stepSelectionFontSize(direction: 1 | -1): void {
+    const { activeRow, activeCol } = this.selection;
+    const current = this.styles.get(this.getCellByView(activeRow, activeCol).styleId).fontSize ?? DEFAULT_FONT_SIZE;
+    const next = stepFontSize(current, direction);
+    if (next !== current) this.formatSelection({ fontSize: next }, 'Font size');
+  }
+
+  /**
+   * The height a row needs to show its content: the tallest cell, counting wrapped lines at the column's current
+   * width. Never less than the default row height.
+   */
+  computeFitHeight(viewRow: number): number {
+    const used = this.model.getUsedRange();
+    let needed = 0;
+    if (used !== null) {
+      for (let c = 0; c <= Math.min(used.endCol, this.colCount - 1); c++) {
+        const cell = this.getCellByView(viewRow, c);
+        if (cell.value === null) continue;
+        const style = this.styles.get(cell.styleId);
+        const lh = lineHeightFor(style.fontSize ?? DEFAULT_FONT_SIZE);
+        let lines = 1;
+        const width = this.cols.getSize(c) - CELL_HORIZONTAL_PADDING * 2;
+        if (style.wrap === 'wrap' && typeof cell.value === 'string' && width > 0) {
+          const measure = this.measureText;
+          const font = fontString(style);
+          lines = measure === null ? cell.value.split(/\r\n|\r|\n/).length : wrapLines(cell.value, width, (t) => measure(font, t)).length;
+        }
+        needed = Math.max(needed, lines * lh + CELL_VERTICAL_PADDING);
+      }
+    }
+    return Math.max(this.rows.defaultSize, needed);
+  }
+
+  /** Sets each of `viewRows` to the height its content needs (one undo step). Returns how many rows changed. */
+  fitRows(viewRows: readonly number[]): number {
+    const changed: number[] = [];
+    const heights: number[] = [];
+    for (const row of viewRows) {
+      const height = this.computeFitHeight(row);
+      if (height !== this.rows.getSize(row) && this.rows.getSize(row) !== 0) {
+        changed.push(row);
+        heights.push(height);
+      }
+    }
+    if (changed.length > 0) this.execute(new ResizeCommand('row', changed, heights));
+    return changed.length;
   }
 
   private applyStyle(

@@ -1,5 +1,8 @@
 export type HorizontalAlign = 'left' | 'center' | 'right';
 
+export type TextWrap = 'overflow' | 'wrap' | 'clip';
+export type VerticalAlign = 'top' | 'middle' | 'bottom';
+
 export interface Style {
   readonly bold?: boolean;
   readonly italic?: boolean;
@@ -9,6 +12,12 @@ export interface Style {
   readonly background?: string;
   readonly align?: HorizontalAlign;
   readonly numberFormat?: string;
+  /** Pixels; omitted means the default size. */
+  readonly fontSize?: number;
+  /** What happens to text wider than its cell: spill into empty neighbours (default), wrap onto more lines, or be cut off. */
+  readonly wrap?: TextWrap;
+  /** Where the text sits in a taller cell (default middle). */
+  readonly valign?: VerticalAlign;
 }
 
 export const DEFAULT_STYLE_ID = 0;

@@ -1,5 +1,6 @@
 import { type KeyboardEvent, type ReactNode, useEffect, useRef, useState, useSyncExternalStore } from 'react';
 import type { Spreadsheet } from '../core/Spreadsheet';
+import { DEFAULT_FONT_SIZE, MAX_FONT_SIZE, MIN_FONT_SIZE } from '../core/model/font';
 import { parseNumberFormat } from '../core/model/format';
 import type { HorizontalAlign, Style } from '../core/model/StyleTable';
 import type { GridController } from '../input/GridController';
@@ -15,6 +16,8 @@ import {
   insertEntries,
   fileEntries,
   type MenuId,
+  valignEntries,
+  wrapEntries,
   zoomEntries,
   visibilityEntries,
   numberFormatEntries,
@@ -134,9 +137,9 @@ export function Toolbar({ sheet, grid = null, onAction }: ToolbarProps) {
   // In a read-only sheet everything that would change the document is disabled; viewing controls stay usable.
   const mutating = new Set([
     m.undo, m.redo, m.paintFormat, m.clearFormatting, m.cut, m.formatCurrencyButton, m.formatPercentButton, m.decreaseDecimals,
-    m.increaseDecimals, m.bold, m.italic, m.underline, m.strike, m.alignLeft, m.alignCenter, m.alignRight,
+    m.increaseDecimals, m.decreaseFontSize, m.increaseFontSize, m.bold, m.italic, m.underline, m.strike, m.alignLeft, m.alignCenter, m.alignRight,
   ]);
-  const mutatingMenus: ReadonlySet<MenuId> = new Set<MenuId>(['paste', 'numberFormat', 'insert', 'delete', 'functions']);
+  const mutatingMenus: ReadonlySet<MenuId> = new Set<MenuId>(['paste', 'numberFormat', 'insert', 'delete', 'functions', 'wrap', 'valign']);
 
   const button = (
     icon: IconName | ReactNode,
@@ -197,6 +200,10 @@ export function Toolbar({ sheet, grid = null, onAction }: ToolbarProps) {
         return deleteEntries(sheet, m);
       case 'zoom':
         return grid === null ? [] : zoomEntries(grid);
+      case 'wrap':
+        return wrapEntries(sheet, m);
+      case 'valign':
+        return valignEntries(sheet, m);
       case 'file':
         return fileEntries(sheet, m, { chooseFile: () => fileInput.current?.click(), download: (text) => downloadText('sheet.csv', text) });
       case 'visibility':
@@ -217,6 +224,8 @@ export function Toolbar({ sheet, grid = null, onAction }: ToolbarProps) {
     functions: m.functions,
     zoom: m.zoom,
     file: m.file,
+    wrap: m.textWrapping,
+    valign: m.verticalAlign,
   };
 
   const importFile = async (file: File): Promise<void> => {
@@ -309,6 +318,12 @@ export function Toolbar({ sheet, grid = null, onAction }: ToolbarProps) {
           {menuButton('numberFormat', text('123'), m.moreFormats, undefined)}
         </div>
         <span className="rdg-sep" aria-hidden />
+        <div className="rdg-group" role="group" aria-label={m.groupFont}>
+          {button(text('−'), m.decreaseFontSize, 'Mod+Shift+,', undefined, () => sheet.stepSelectionFontSize(-1))}
+          <FontSizeField label={m.fontSize} value={style.fontSize ?? DEFAULT_FONT_SIZE} disabled={readOnly} onApply={(size) => run(() => sheet.formatSelection({ fontSize: size }, 'Font size'))} onDone={() => onAction?.()} />
+          {button(text('+'), m.increaseFontSize, 'Mod+Shift+.', undefined, () => sheet.stepSelectionFontSize(1))}
+        </div>
+        <span className="rdg-sep" aria-hidden />
         <div className="rdg-group" role="group" aria-label={m.groupTextStyle}>
           {button('bold', m.bold, 'Mod+B', style.bold === true, () => sheet.toggleStyle('bold'))}
           {button('italic', m.italic, 'Mod+I', style.italic === true, () => sheet.toggleStyle('italic'))}
@@ -338,6 +353,8 @@ export function Toolbar({ sheet, grid = null, onAction }: ToolbarProps) {
           {button('alignLeft', m.alignLeft, 'Mod+Shift+L', style.align === 'left', () => align('left'))}
           {button('alignCenter', m.alignCenter, 'Mod+Shift+E', style.align === 'center', () => align('center'))}
           {button('alignRight', m.alignRight, 'Mod+Shift+R', style.align === 'right', () => align('right'))}
+          {menuButton('valign', 'valign', m.verticalAlign, undefined)}
+          {menuButton('wrap', 'wrap', m.textWrapping, undefined)}
         </div>
         <span className="rdg-sep" aria-hidden />
         <div className="rdg-group" role="group" aria-label={m.groupStructure}>
@@ -513,5 +530,58 @@ function ColorButton({ icon, title, disabled = false, value, active, onPick, onC
         </button>
       )}
     </span>
+  );
+}
+
+interface FontSizeFieldProps {
+  label: string;
+  value: number;
+  disabled: boolean;
+  onApply(size: number): void;
+  onDone(): void;
+}
+
+/** The size box between the − and + buttons: Enter or leaving the box applies it, Esc or a non-number restores it. */
+function FontSizeField({ label, value, disabled, onApply, onDone }: FontSizeFieldProps) {
+  const [draft, setDraftState] = useState<string | null>(null);
+  // Enter applies and then moves focus, which fires blur before React re-renders; the ref keeps that blur from applying twice.
+  const pending = useRef<string | null>(null);
+  const setDraft = (text: string | null): void => {
+    pending.current = text;
+    setDraftState(text);
+  };
+  const apply = (): void => {
+    const text = (pending.current ?? '').trim();
+    setDraft(null);
+    if (!/^\d+$/.test(text)) return;
+    const size = Math.max(MIN_FONT_SIZE, Math.min(MAX_FONT_SIZE, Number(text)));
+    if (size !== value) onApply(size);
+  };
+  return (
+    <input
+      className="rdg-count-input rdg-fontsize"
+      aria-label={label}
+      title={label}
+      inputMode="numeric"
+      autoComplete="off"
+      spellCheck={false}
+      disabled={disabled}
+      value={draft ?? String(value)}
+      onFocus={(e) => e.currentTarget.select()}
+      onChange={(e) => setDraft(e.target.value)}
+      onBlur={apply}
+      onKeyDown={(e) => {
+        if (e.nativeEvent.isComposing || e.keyCode === 229) return;
+        if (e.key === 'Enter') {
+          e.preventDefault();
+          apply();
+          onDone();
+        } else if (e.key === 'Escape') {
+          e.preventDefault();
+          setDraft(null);
+          onDone();
+        }
+      }}
+    />
   );
 }

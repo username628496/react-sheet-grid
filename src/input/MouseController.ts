@@ -379,13 +379,9 @@ export class MouseController {
     sheet.execute(new ResizeCommand('col', indices, sizes));
   }
 
-  /** Cells neither wrap nor vary in font size, so the height that fits any row's content is the default height. */
+  /** Double-click on a row border: each affected row gets the height its content needs (wrapped lines, bigger fonts). */
   private autoFitRows(viewRow: number): void {
-    const { sheet } = this.deps;
-    const indices = this.resizeTargets('row', viewRow);
-    const size = sheet.rows.defaultSize;
-    if (indices.every((r) => sheet.rows.getSize(r) === size)) return;
-    sheet.execute(new ResizeCommand('row', indices, size));
+    this.deps.sheet.fitRows(this.resizeTargets('row', viewRow));
   }
 
   private fitWidth(viewCol: number): number {
@@ -402,7 +398,7 @@ export class MouseController {
     let widest = 0;
     for (const { text, styleId } of candidates.slice(0, 100)) {
       const style = sheet.styles.get(styleId);
-      widest = Math.max(widest, surface.renderer.measure(fontFor(style.bold, style.italic), text));
+      widest = Math.max(widest, surface.renderer.measure(fontFor(style), text));
     }
     return Math.min(600, Math.max(MIN_COL_WIDTH, Math.ceil(widest) + theme.cellPadding * 2 + 2));
   }

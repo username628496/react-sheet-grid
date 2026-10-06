@@ -31,6 +31,7 @@ export class GridSurface {
   private hostLeft = 0;
   private hostTop = 0;
   private zoomLevel = 1;
+  private readonly measureText: (font: string, text: string) => number;
   private readonly zoomListeners = new Set<(zoom: number) => void>();
 
   constructor(
@@ -65,6 +66,8 @@ export class GridSurface {
     mount.append(this.canvas, this.host);
 
     this.renderer = new CanvasRenderer(this.canvas, sheet, this.viewport);
+    this.measureText = (font, text) => this.renderer.measure(font, text);
+    sheet.measureText = this.measureText;
     this.host.addEventListener('scroll', this.onHostScroll, { passive: true });
     this.resizeObserver = new ResizeObserver(() => this.measure());
     this.resizeObserver.observe(mount);
@@ -144,6 +147,7 @@ export class GridSurface {
   destroy(): void {
     this.resizeObserver.disconnect();
     this.unsubscribeSheet();
+    if (this.sheet.measureText === this.measureText) this.sheet.measureText = null;
     this.renderer.dispose();
     this.host.removeEventListener('scroll', this.onHostScroll);
     this.canvas.remove();

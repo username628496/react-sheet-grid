@@ -94,6 +94,7 @@ const CSS = `
   width: 64px; height: 26px; padding: 0 8px; text-align: right; font: inherit; color: var(--rdg-text);
   font-variant-numeric: tabular-nums; border: 1px solid var(--rdg-border); border-radius: 6px; background: var(--rdg-field);
 }
+.rdg-fontsize { width: 40px; margin: 0 2px; text-align: center; padding: 0 2px; }
 .rdg-count-input:hover { border-color: var(--rdg-muted); }
 .rdg-count-input:focus { outline: 2px solid var(--rdg-accent); outline-offset: -1px; border-color: transparent; }
 

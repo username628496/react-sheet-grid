@@ -185,6 +185,9 @@ export class KeyboardController {
       case 'showShortcuts':
         this.deps.showShortcuts();
         return;
+      case 'fontSize':
+        sheet.stepSelectionFontSize(action.direction);
+        break;
       case 'find':
         this.deps.openFind(action.replace);
         return;

@@ -1,4 +1,6 @@
-import { DEFAULT_STYLE_ID } from '../../core/model/StyleTable';
+import { DEFAULT_FONT_SIZE, lineHeightFor } from '../../core/model/font';
+import { wrapLines } from '../../core/layout/wrap';
+import { DEFAULT_STYLE_ID, type Style, type VerticalAlign } from '../../core/model/StyleTable';
 import { defaultAlign, formatValue } from '../../core/model/format';
 import type { Spreadsheet } from '../../core/Spreadsheet';
 import { fontFor, theme } from '../theme';
@@ -15,7 +17,7 @@ export class FontCache {
     let font = this.byStyle.get(styleId);
     if (font === undefined) {
       const style = this.sheet.styles.get(styleId);
-      font = fontFor(style.bold, style.italic);
+      font = fontFor(style);
       this.byStyle.set(styleId, font);
     }
     return font;
@@ -52,6 +54,37 @@ export function drawCellBackgrounds(
 
 const overflow: Overflow = { left: 0, right: 0 }; // reused: no allocation per cell
 
+// Wrapping a string means measuring several candidate lines; the result only depends on font, width and text, so it is
+// remembered. The map is emptied when it grows large instead of tracking recency: cheap, and a miss just recomputes.
+const WRAP_CACHE_LIMIT = 5000;
+const wrapCache = new Map<string, string[]>();
+
+function wrappedLines(measurer: TextMeasurer, font: string, available: number, text: string): string[] {
+  const key = `${font}|${available}|${text}`;
+  let lines = wrapCache.get(key);
+  if (lines === undefined) {
+    if (wrapCache.size >= WRAP_CACHE_LIMIT) wrapCache.clear();
+    lines = wrapLines(text, available, (candidate) => measurer.measure(font, candidate));
+    wrapCache.set(key, lines);
+  }
+  return lines;
+}
+
+/** Underline and strikethrough: canvas has no text-decoration, so they are drawn by hand across `width`. */
+function drawDecorations(ctx: CanvasRenderingContext2D, style: Style, x: number, centerY: number, width: number, size: number): void {
+  if (style.underline !== true && style.strike !== true) return;
+  const thickness = Math.max(1, Math.round(size / 13));
+  if (style.underline === true) ctx.fillRect(x, Math.round(centerY + size * 0.54), width, thickness);
+  if (style.strike === true) ctx.fillRect(x, Math.round(centerY), width, thickness);
+}
+
+/** Vertical position of the centre of a line of height `lh` in a cell of height `h`, for the style's vertical alignment. */
+function lineCentre(y: number, h: number, lh: number, valign: VerticalAlign | undefined): number {
+  if (valign === 'top') return y + 2 + lh / 2;
+  if (valign === 'bottom') return y + h - 2 - lh / 2;
+  return y + h / 2;
+}
+
 export function drawCellText(
   ctx: CanvasRenderingContext2D,
   sheet: Spreadsheet,
@@ -75,41 +108,62 @@ export function drawCellText(
         const style = styles.get(cell.styleId);
         const text = formatValue(cell.value, style.numberFormat);
         const font = fonts.get(cell.styleId);
-        const textWidth = measurer.measure(font, text);
+        const size = style.fontSize ?? DEFAULT_FONT_SIZE;
+        const lh = lineHeightFor(size);
         const available = w - pad * 2;
         const align = style.align ?? defaultAlign(cell.value);
         ctx.font = font;
         ctx.fillStyle = style.color ?? theme.text;
-        // Text wider than its cell spills into empty neighbours (to the right for left-aligned text, to the
-        // left for right-aligned, both ways for centered), as in Sheets. Only text does; numbers are clipped.
-        const spills = textWidth > available && typeof cell.value === 'string';
-        const extra = spills ? computeOverflow(sheet, dataRow, c, align, textWidth, available, overflow) : null;
-        const clipped = textWidth > available && (extra === null || textWidth > available + extra.left + extra.right);
-        if (clipped) {
+
+        if (style.wrap === 'wrap' && typeof cell.value === 'string') {
+          // Wrapped text: several lines inside the cell, clipped to it. Numbers never wrap.
+          const lines = wrappedLines(measurer, font, available, text);
+          const block = lines.length * lh;
+          const top = style.valign === 'top' ? y + 2 : style.valign === 'bottom' ? y + h - block - 2 : y + (h - block) / 2;
           ctx.save();
           ctx.beginPath();
-          ctx.rect(x - (extra?.left ?? 0), y, w + (extra?.left ?? 0) + (extra?.right ?? 0), h);
+          ctx.rect(x, y, w, h);
           ctx.clip();
+          ctx.textAlign = 'left';
+          for (let i = 0; i < lines.length; i++) {
+            const line = lines[i] as string;
+            const lineWidth = measurer.measure(font, line);
+            const tx = align === 'right' ? x + w - pad - lineWidth : align === 'center' ? x + (w - lineWidth) / 2 : x + pad;
+            const cy = top + i * lh + lh / 2;
+            ctx.fillText(line, tx, cy + 0.5);
+            drawDecorations(ctx, style, tx, cy, lineWidth, size);
+          }
+          ctx.restore();
+        } else {
+          const textWidth = measurer.measure(font, text);
+          // Text wider than its cell spills into empty neighbours (to the right for left-aligned text, to the
+          // left for right-aligned, both ways for centered), as in Sheets. Only text does, and only when the cell
+          // is not set to clip; numbers are clipped.
+          const spills = textWidth > available && typeof cell.value === 'string' && style.wrap !== 'clip';
+          const extra = spills ? computeOverflow(sheet, dataRow, c, align, textWidth, available, overflow) : null;
+          // A line taller than its row is cut as well.
+          const clipped = (textWidth > available && (extra === null || textWidth > available + extra.left + extra.right)) || lh > h;
+          if (clipped) {
+            ctx.save();
+            ctx.beginPath();
+            ctx.rect(x - (extra?.left ?? 0), y, w + (extra?.left ?? 0) + (extra?.right ?? 0), h);
+            ctx.clip();
+          }
+          let tx = x + pad;
+          ctx.textAlign = 'left';
+          if (align === 'right') tx = x + w - pad - textWidth;
+          else if (align === 'center') tx = x + (w - textWidth) / 2;
+          // Text that does not fit and does not spill starts at the left edge and gets clipped.
+          if (textWidth > available && !spills) tx = x + pad;
+          if (extra !== null && (extra.left > 0 || extra.right > 0)) {
+            eraseSpillLines(ctx, sheet, dataRow, c, x, y, w, h, tx, tx + textWidth, extra);
+            ctx.fillStyle = style.color ?? theme.text;
+          }
+          const cy = lineCentre(y, h, lh, style.valign);
+          ctx.fillText(text, tx, cy + 0.5);
+          drawDecorations(ctx, style, tx, Math.round(cy), spills ? textWidth : Math.min(textWidth, available), size);
+          if (clipped) ctx.restore();
         }
-        let tx = x + pad;
-        ctx.textAlign = 'left';
-        if (align === 'right') tx = x + w - pad - textWidth;
-        else if (align === 'center') tx = x + (w - textWidth) / 2;
-        // Numbers that do not fit keep the old behaviour: start at the left edge and get clipped.
-        if (textWidth > available && !spills) tx = x + pad;
-        if (extra !== null && (extra.left > 0 || extra.right > 0)) {
-          eraseSpillLines(ctx, sheet, dataRow, c, x, y, w, h, tx, tx + textWidth, extra);
-          ctx.fillStyle = style.color ?? theme.text;
-        }
-        ctx.fillText(text, tx, y + h / 2 + 0.5);
-        if (style.underline === true || style.strike === true) {
-          // Canvas has no text-decoration, so the lines are drawn by hand across the visible part of the text.
-          const lineWidth = spills ? textWidth : Math.min(textWidth, available);
-          const mid = Math.round(y + h / 2);
-          if (style.underline === true) ctx.fillRect(tx, mid + 7, lineWidth, 1);
-          if (style.strike === true) ctx.fillRect(tx, mid, lineWidth, 1);
-        }
-        if (clipped) ctx.restore();
       }
       x += w;
     }

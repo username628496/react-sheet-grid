@@ -24,6 +24,18 @@ export interface Messages {
   groupSort: string;
   groupTextStyle: string;
   groupAlignment: string;
+  groupFont: string;
+  fontSize: string;
+  decreaseFontSize: string;
+  increaseFontSize: string;
+  textWrapping: string;
+  wrapOverflow: string;
+  wrapWrap: string;
+  wrapClip: string;
+  verticalAlign: string;
+  alignTop: string;
+  alignMiddle: string;
+  alignBottom: string;
   groupSheetSize: string;
   undo: string;
   redo: string;
@@ -173,6 +185,18 @@ const en: Messages = {
   groupSort: 'Sort',
   groupTextStyle: 'Text style',
   groupAlignment: 'Alignment',
+  groupFont: 'Font',
+  fontSize: 'Font size',
+  decreaseFontSize: 'Decrease font size',
+  increaseFontSize: 'Increase font size',
+  textWrapping: 'Text wrapping',
+  wrapOverflow: 'Overflow into empty cells',
+  wrapWrap: 'Wrap',
+  wrapClip: 'Clip',
+  verticalAlign: 'Vertical align',
+  alignTop: 'Top',
+  alignMiddle: 'Middle',
+  alignBottom: 'Bottom',
   groupSheetSize: 'Sheet size',
   undo: 'Undo',
   redo: 'Redo',
@@ -351,6 +375,7 @@ const en: Messages = {
       title: 'Format',
       items: [
         ['Mod+B / Mod+I / Mod+U', 'Bold / italic / underline'],
+        ['Mod+Shift+, / Mod+Shift+.', 'Decrease / increase font size'],
         ['Mod+Shift+X', 'Strikethrough'],
         ['Mod+Shift+L / E / R', 'Align left / center / right'],
         ['Mod+Shift+1 / 4 / 5', 'Number / currency / percent'],
@@ -374,6 +399,18 @@ const vi: Messages = {
   groupSort: 'Sắp xếp',
   groupTextStyle: 'Kiểu chữ',
   groupAlignment: 'Căn lề',
+  groupFont: 'Phông chữ',
+  fontSize: 'Cỡ chữ',
+  decreaseFontSize: 'Giảm cỡ chữ',
+  increaseFontSize: 'Tăng cỡ chữ',
+  textWrapping: 'Xuống dòng',
+  wrapOverflow: 'Tràn sang ô trống',
+  wrapWrap: 'Xuống dòng tự động',
+  wrapClip: 'Cắt bớt',
+  verticalAlign: 'Căn dọc',
+  alignTop: 'Trên',
+  alignMiddle: 'Giữa',
+  alignBottom: 'Dưới',
   groupSheetSize: 'Kích thước bảng',
   undo: 'Hoàn tác',
   redo: 'Làm lại',
@@ -552,6 +589,7 @@ const vi: Messages = {
       title: 'Định dạng',
       items: [
         ['Mod+B / Mod+I / Mod+U', 'Đậm / nghiêng / gạch chân'],
+        ['Mod+Shift+, / Mod+Shift+.', 'Giảm / tăng cỡ chữ'],
         ['Mod+Shift+X', 'Gạch ngang'],
         ['Mod+Shift+L / E / R', 'Căn trái / giữa / phải'],
         ['Mod+Shift+1 / 4 / 5', 'Số / tiền tệ / phần trăm'],

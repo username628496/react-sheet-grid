@@ -4,7 +4,7 @@ import type { GridController } from '../input/GridController';
 import type { MenuEntry } from './Menu';
 import type { Messages } from './messages';
 
-export type MenuId = 'paste' | 'numberFormat' | 'insert' | 'delete' | 'visibility' | 'freeze' | 'functions' | 'zoom' | 'file';
+export type MenuId = 'paste' | 'numberFormat' | 'insert' | 'delete' | 'visibility' | 'freeze' | 'functions' | 'zoom' | 'file' | 'wrap' | 'valign';
 
 /** Number patterns offered by the "More formats" menu, in display order; '' is the automatic format. */
 export function numberFormatEntries(sheet: Spreadsheet, m: Messages): MenuEntry[] {
@@ -136,4 +136,26 @@ export function fileEntries(sheet: Spreadsheet, m: Messages, actions: { chooseFi
     { label: m.exportCsvDisplayed, run: exportAs('displayed') },
     { label: m.exportCsvRaw, run: exportAs('raw') },
   ];
+}
+
+export function wrapEntries(sheet: Spreadsheet, m: Messages): MenuEntry[] {
+  const { activeRow, activeCol } = sheet.selection;
+  const current = sheet.styles.get(sheet.getCellByView(activeRow, activeCol).styleId).wrap ?? 'overflow';
+  const item = (value: 'overflow' | 'wrap' | 'clip', label: string): MenuEntry => ({
+    label,
+    checked: current === value,
+    run: () => sheet.formatSelection({ wrap: value === 'overflow' ? undefined : value }, 'Text wrapping'),
+  });
+  return [item('overflow', m.wrapOverflow), item('wrap', m.wrapWrap), item('clip', m.wrapClip)];
+}
+
+export function valignEntries(sheet: Spreadsheet, m: Messages): MenuEntry[] {
+  const { activeRow, activeCol } = sheet.selection;
+  const current = sheet.styles.get(sheet.getCellByView(activeRow, activeCol).styleId).valign ?? 'middle';
+  const item = (value: 'top' | 'middle' | 'bottom', label: string): MenuEntry => ({
+    label,
+    checked: current === value,
+    run: () => sheet.formatSelection({ valign: value === 'middle' ? undefined : value }, 'Vertical align'),
+  });
+  return [item('top', m.alignTop), item('middle', m.alignMiddle), item('bottom', m.alignBottom)];
 }

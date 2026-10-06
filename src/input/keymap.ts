@@ -46,6 +46,7 @@ export type Action =
   | { type: 'pasteValues' }
   | { type: 'pasteFormat' }
   | { type: 'showShortcuts' }
+  | { type: 'fontSize'; direction: 1 | -1 }
   | { type: 'find'; replace: boolean }
   | { type: 'leaveGrid'; backward: boolean }
   | { type: 'hide'; axis: 'row' | 'col' }
@@ -147,6 +148,8 @@ function navigatingKey(k: KeyInput): Action | null {
       const numberFormats: Record<string, string> = { Digit1: '#,##0.00', Digit4: '$#,##0.00', Digit5: '0%' };
       const format = k.code === undefined ? undefined : numberFormats[k.code];
       if (format !== undefined) return { type: 'numberFormat', format };
+      if (k.code === 'Period') return { type: 'fontSize', direction: 1 };
+      if (k.code === 'Comma') return { type: 'fontSize', direction: -1 };
       switch (key) {
         case 'z':
           return { type: 'redo' };

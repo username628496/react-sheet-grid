@@ -31,6 +31,10 @@ function styleAttr(style: Style | undefined): string {
   if (style.color !== undefined) css.push(`color:${style.color}`);
   if (style.background !== undefined) css.push(`background-color:${style.background}`);
   if (style.align !== undefined) css.push(`text-align:${style.align}`);
+  if (style.fontSize !== undefined) css.push(`font-size:${style.fontSize}px`);
+  if (style.valign !== undefined) css.push(`vertical-align:${style.valign}`);
+  if (style.wrap === 'wrap') css.push('white-space:pre-wrap');
+  else if (style.wrap === 'clip') css.push('white-space:nowrap;overflow:hidden');
   return css.length === 0 ? '' : ` style="${css.join(';')}"`;
 }
 

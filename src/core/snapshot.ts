@@ -4,7 +4,8 @@ import { Spreadsheet, type SpreadsheetOptions } from './Spreadsheet';
 import type { Cell, CellValue, ErrorCode } from './model/Cell';
 import { isCellError } from './model/Cell';
 import { MAX_COLS, MAX_ROWS } from './model/SheetModel';
-import type { HorizontalAlign, Style } from './model/StyleTable';
+import { clampFontSize } from './model/font';
+import type { HorizontalAlign, Style, TextWrap, VerticalAlign } from './model/StyleTable';
 
 export const SNAPSHOT_VERSION = 1;
 
@@ -136,6 +137,8 @@ export function deserializeSheet(data: unknown, options: Omit<SpreadsheetOptions
 
 const ERROR_CODES: ReadonlySet<string> = new Set<ErrorCode>(['#DIV/0!', '#VALUE!', '#REF!', '#N/A', '#NAME?', '#NUM!', '#ERROR!']);
 const ALIGNS: ReadonlySet<string> = new Set<HorizontalAlign>(['left', 'center', 'right']);
+const WRAPS: ReadonlySet<string> = new Set<TextWrap>(['overflow', 'wrap', 'clip']);
+const VALIGNS: ReadonlySet<string> = new Set<VerticalAlign>(['top', 'middle', 'bottom']);
 
 function record(v: unknown, what: string): Record<string, unknown> {
   if (typeof v !== 'object' || v === null || Array.isArray(v)) throw new SnapshotError(`${what} must be an object`);
@@ -174,6 +177,9 @@ function readStyle(v: unknown): Style {
   if (typeof s.background === 'string') out.background = s.background;
   if (typeof s.numberFormat === 'string') out.numberFormat = s.numberFormat;
   if (typeof s.align === 'string' && ALIGNS.has(s.align)) out.align = s.align as HorizontalAlign;
+  if (typeof s.fontSize === 'number' && Number.isFinite(s.fontSize)) out.fontSize = clampFontSize(s.fontSize);
+  if (typeof s.wrap === 'string' && WRAPS.has(s.wrap)) out.wrap = s.wrap as TextWrap;
+  if (typeof s.valign === 'string' && VALIGNS.has(s.valign)) out.valign = s.valign as VerticalAlign;
   return out;
 }
 
