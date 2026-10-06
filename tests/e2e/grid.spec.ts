@@ -1067,3 +1067,26 @@ test.describe('auto-fit row height', () => {
     expect(await page.evaluate(() => window.__sheet!.rows.getSize(2))).toBe(80);
   });
 });
+
+test('grid lines are hidden under spilled text but kept where the spill stops', async ({ page }) => {
+  const pixel = (row: number, col: number): Promise<number[]> =>
+    page.evaluate(async ([r, c]) => {
+      await new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)));
+      const g = window.__grid!;
+      const vp = g.surface.viewport;
+      const canvas = document.querySelector('[data-testid=grid] canvas') as HTMLCanvasElement;
+      const dpr = window.devicePixelRatio || 1;
+      // One pixel left of the cell's right edge is where its vertical grid line is drawn; sample near the top
+      // of the row where no glyph pixels can be.
+      const x = Math.round((vp.colLeft(c as number) + g.sheet.cols.getSize(c as number) - 1) * dpr);
+      const y = Math.round((vp.rowTop(r as number) + 1) * dpr);
+      return Array.from(canvas.getContext('2d')!.getImageData(x, y, 1, 1).data);
+    }, [row, col]);
+
+  await page.evaluate(() => window.__sheet!.selection.selectCell(8, 8));
+  await page.evaluate(() => window.__sheet!.setCellInput(0, 0, 'A rather long piece of text that cannot fit in one cell at all'));
+  expect((await pixel(0, 0)).slice(0, 3)).toEqual([255, 255, 255]); // crossed by the text: line hidden
+  expect((await pixel(1, 0)).slice(0, 3)).not.toEqual([255, 255, 255]); // an ordinary row keeps its line
+  await page.evaluate(() => window.__sheet!.setCellInput(0, 2, 'x'));
+  expect((await pixel(0, 1)).slice(0, 3)).not.toEqual([255, 255, 255]); // the edge before a filled cell stays
+});

@@ -97,6 +97,10 @@ export function drawCellText(
         else if (align === 'center') tx = x + (w - textWidth) / 2;
         // Numbers that do not fit keep the old behaviour: start at the left edge and get clipped.
         if (textWidth > available && !spills) tx = x + pad;
+        if (extra !== null && (extra.left > 0 || extra.right > 0)) {
+          eraseSpillLines(ctx, sheet, dataRow, c, x, y, w, h, tx, tx + textWidth, extra);
+          ctx.fillStyle = style.color ?? theme.text;
+        }
         ctx.fillText(text, tx, y + h / 2 + 0.5);
         if (style.underline === true || style.strike === true) {
           // Canvas has no text-decoration, so the lines are drawn by hand across the visible part of the text.
@@ -110,5 +114,46 @@ export function drawCellText(
       x += w;
     }
     y += h;
+  }
+}
+
+/**
+ * Grid lines are drawn before the text, so a spilled string would be struck through by the vertical lines of the
+ * empty cells it crosses. Sheets hides those lines; we paint them over in the background colour. Boundaries next to
+ * a coloured cell are kept, and so is the edge where the spill stops (it is the clip edge, not crossed by text).
+ */
+function eraseSpillLines(
+  ctx: CanvasRenderingContext2D,
+  sheet: Spreadsheet,
+  dataRow: number,
+  viewCol: number,
+  x: number,
+  y: number,
+  w: number,
+  h: number,
+  textLeft: number,
+  textRight: number,
+  extra: Overflow,
+): void {
+  const { cols, model, mapping, styles } = sheet;
+  const top = Math.floor(y);
+  const height = Math.floor(y + h) - 1 - top; // the bottom pixel row is the horizontal grid line
+  const hasBackground = (c: number): boolean => {
+    const id = model.getCell(dataRow, mapping.toDataCol(c)).styleId;
+    return id !== DEFAULT_STYLE_ID && styles.get(id).background !== undefined;
+  };
+  ctx.fillStyle = theme.background;
+  if (hasBackground(viewCol)) return;
+  let edge = x + w;
+  for (let c = viewCol + 1; edge < x + w + extra.right - 0.5 && edge < textRight && c < cols.count; c++) {
+    if (hasBackground(c)) break;
+    ctx.fillRect(Math.floor(edge) - 1, top, 1, height);
+    edge += cols.getSize(c);
+  }
+  edge = x;
+  for (let c = viewCol - 1; edge > x - extra.left + 0.5 && edge > textLeft && c >= 0; c--) {
+    if (hasBackground(c)) break;
+    ctx.fillRect(Math.floor(edge) - 1, top, 1, height);
+    edge -= cols.getSize(c);
   }
 }

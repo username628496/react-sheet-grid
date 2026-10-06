@@ -15,7 +15,7 @@ Toàn bộ lộ trình MVP trong CLAUDE.md (tuần 1 và tuần 2) đã xong.
 **Tính năng spreadsheet**
 - Copy/cut/paste (TSV + HTML, tương thích Excel/Sheets), dán lặp ô, cut = di chuyển.
 - Fill handle: chuỗi số, chuỗi chữ-số (`Item 1` → `Item 2`), lặp ô, công thức dịch tham chiếu.
-- Formula engine: tokenizer, parser, printer, evaluator, dependency graph, tính lại theo thứ tự topo, phát hiện vòng. Hàm: `SUM`, `AVERAGE`, `COUNT`, `MIN`, `MAX`, `IF`, `ROUND`, `CONCAT`, `SUMIF`, `COUNTIF`, `VLOOKUP`; tham chiếu `A1`, `$A$1`, `A:A`, `1:1`; dấu `;` làm phân cách tham số.
+- Formula engine: tokenizer, parser, printer, evaluator, dependency graph, tính lại theo thứ tự topo, phát hiện vòng. Hàm: `SUM`, `AVERAGE`, `COUNT`, `MIN`, `MAX`, `IF`, `ROUND`, `CONCAT`, `SUMIF`, `COUNTIF`, `VLOOKUP`, cùng `AND`, `OR`, `NOT`, `IFERROR` (lười), `ABS`, `INT`, `SQRT`, `MOD`, `POWER`, `COUNTA`, `LEN`, `UPPER`, `LOWER`, `TRIM`, `LEFT`, `RIGHT`, `MID`, `INDEX`, `MATCH`; tham chiếu `A1`, `$A$1`, `A:A`, `1:1`; dấu `;` làm phân cách tham số.
 - Định dạng: đậm, nghiêng, màu chữ, màu nền, căn lề, định dạng số; toolbar phản ánh ô đang chọn.
 - Sort theo cột, filter theo giá trị (hộp thoại có tìm kiếm); ký hiệu ↑ ↓ ▾ trên header.
 - Chèn/xóa dòng và cột, có cập nhật tham chiếu công thức.
@@ -96,9 +96,9 @@ Chưa có: Mod+; (ngày hiện tại), Mod+K (liên kết), Mod+T (trình duyệ
 - Khi đang sort/filter, cut-paste chưa cập nhật tham chiếu từ ô khác tới vùng bị cắt (chỉ làm khi thứ tự dòng tự nhiên).
 - Công thức tham chiếu theo tọa độ dữ liệu: khi đang sort, nhãn A1 trong công thức là vị trí dữ liệu gốc, không phải vị trí đang hiển thị.
 - Chiều cao dòng gắn với vị trí hiển thị, không đi theo dữ liệu khi sort.
-- Ngày tháng chưa có chuỗi; double-click viền dòng chưa tự fit chiều cao.
+- Ngày tháng chưa có chuỗi. Double-click viền dòng đưa chiều cao về mặc định (ô không wrap và không đổi cỡ chữ nên đó là chiều cao vừa nội dung).
 - Một số đơn lẻ khi fill được copy (không tăng) như Sheets.
-- Chữ tràn sang ô trống chỉ tính từ các cột đang hiển thị (chữ dài ở cột đã cuộn khuất không tràn vào cột đang thấy); đường kẻ ô vẫn vẽ xuyên qua chữ tràn. Ô gộp, nhiều sheet, xlsx, find & replace... nằm ngoài MVP.
+- Chữ tràn sang ô trống chỉ tính từ các cột đang hiển thị (chữ dài ở cột đã cuộn khuất không tràn vào cột đang thấy); đường kẻ dọc qua chữ tràn được xóa (trừ khi ô kề có màu nền). Ô gộp, nhiều sheet, xlsx, find & replace... nằm ngoài MVP.
 - Paste từ menu chuột phải dùng `navigator.clipboard.read()` nên trình duyệt có thể hỏi quyền (Firefox chỉ đọc được text).
 
 ## Kiểm tra thủ công cho bạn (nhất là IME, clipboard, Safari)
