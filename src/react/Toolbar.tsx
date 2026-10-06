@@ -1,4 +1,4 @@
-import { type KeyboardEvent, type ReactNode, useEffect, useRef, useSyncExternalStore } from 'react';
+import { type KeyboardEvent, type ReactNode, useEffect, useRef, useState, useSyncExternalStore } from 'react';
 import type { Spreadsheet } from '../core/Spreadsheet';
 import type { HorizontalAlign, Style } from '../core/model/StyleTable';
 import { ChromeStyles } from './chrome';
@@ -31,12 +31,12 @@ function tip(label: string, shortcut?: string): string {
 function snapshot(sheet: Spreadsheet): string {
   const { selection, history } = sheet;
   const style = sheet.styles.get(sheet.getCellByView(selection.activeRow, selection.activeCol).styleId);
-  return JSON.stringify([history.canUndo, history.canRedo, style]);
+  return JSON.stringify([history.canUndo, history.canRedo, style, sheet.rowCount, sheet.colCount]);
 }
 
-function parse(s: string): { canUndo: boolean; canRedo: boolean; style: Style } {
-  const [canUndo, canRedo, style] = JSON.parse(s) as [boolean, boolean, Style];
-  return { canUndo, canRedo, style };
+function parse(s: string): { canUndo: boolean; canRedo: boolean; style: Style; rows: number; cols: number } {
+  const [canUndo, canRedo, style, rows, cols] = JSON.parse(s) as [boolean, boolean, Style, number, number];
+  return { canUndo, canRedo, style, rows, cols };
 }
 
 interface ToolbarProps {
@@ -55,7 +55,13 @@ export function Toolbar({ sheet, onAction }: ToolbarProps) {
     (listener) => sheet.subscribe(listener),
     () => snapshot(sheet),
   );
-  const { canUndo, canRedo, style } = parse(raw);
+  const { canUndo, canRedo, style, rows, cols } = parse(raw);
+  const [notice, setNotice] = useState<string | null>(null);
+  useEffect(() => {
+    if (notice === null) return;
+    const timer = setTimeout(() => setNotice(null), 8000);
+    return () => clearTimeout(timer);
+  }, [notice]);
   const run = (fn: () => void): void => {
     fn();
     onAction?.();
@@ -69,8 +75,8 @@ export function Toolbar({ sheet, onAction }: ToolbarProps) {
     }
     const keys = ['ArrowLeft', 'ArrowRight', 'Home', 'End'];
     if (!keys.includes(e.key)) return;
-    if (e.target instanceof HTMLSelectElement) return; // arrows change the option there
-    const items = Array.from(e.currentTarget.querySelectorAll<HTMLElement>('button:not(:disabled), select'));
+    if (e.target instanceof HTMLSelectElement || e.target instanceof HTMLInputElement) return; // they use these keys themselves
+    const items = Array.from(e.currentTarget.querySelectorAll<HTMLElement>('button:not(:disabled), select, input.rdg-count-input'));
     const at = items.indexOf(document.activeElement as HTMLElement);
     if (items.length === 0 || at < 0) return;
     e.preventDefault();
@@ -95,8 +101,9 @@ export function Toolbar({ sheet, onAction }: ToolbarProps) {
   );
 
   return (
-    <div role="toolbar" aria-label="Formatting" aria-orientation="horizontal" className="rdg-chrome rdg-toolbar" data-testid="toolbar" onKeyDown={onKeyDown}>
-      <ChromeStyles />
+    <div className="rdg-chrome rdg-toolbar-wrap">
+    <ChromeStyles />
+    <div role="toolbar" aria-label="Formatting" aria-orientation="horizontal" className="rdg-toolbar" data-testid="toolbar" onKeyDown={onKeyDown}>
       <div className="rdg-group" role="group" aria-label="History">
         {button('undo', 'Undo', 'Mod+Z', undefined, () => sheet.undo(), !canUndo)}
         {button('redo', 'Redo', 'Mod+Y', undefined, () => sheet.redo(), !canRedo)}
@@ -154,7 +161,89 @@ export function Toolbar({ sheet, onAction }: ToolbarProps) {
           </option>
         ))}
       </select>
+      <span className="rdg-spacer" />
+      <div className="rdg-group" role="group" aria-label="Sheet size">
+        <CountField
+          label="Rows"
+          value={rows}
+          onApply={(n) => {
+            const { removedCells } = sheet.setRowCount(n);
+            setNotice(removedCells > 0 ? `Removed ${removedCells} filled cell${removedCells === 1 ? '' : 's'}. Undo to restore.` : null);
+          }}
+          onDone={() => onAction?.()}
+        />
+        <CountField
+          label="Cols"
+          value={cols}
+          onApply={(n) => {
+            const { removedCells } = sheet.setColCount(n);
+            setNotice(removedCells > 0 ? `Removed ${removedCells} filled cell${removedCells === 1 ? '' : 's'}. Undo to restore.` : null);
+          }}
+          onDone={() => onAction?.()}
+        />
+      </div>
     </div>
+    {notice !== null && (
+      <div className="rdg-notice" role="status">
+        {notice}
+      </div>
+    )}
+    </div>
+  );
+}
+
+interface CountFieldProps {
+  label: string;
+  value: number;
+  onApply(n: number): void;
+  /** After Enter or Esc, so the host can give focus back to the grid. */
+  onDone(): void;
+}
+
+/** A small "Rows [ 50 ]" field: Enter or leaving the field applies the number, Esc or garbage restores the old one. */
+function CountField({ label, value, onApply, onDone }: CountFieldProps) {
+  const [draft, setDraftState] = useState<string | null>(null);
+  // Enter applies and then moves focus, which fires blur in the same tick, before React re-renders: the ref makes
+  // that second apply see the draft is already consumed.
+  const pending = useRef<string | null>(null);
+  const setDraft = (text: string | null): void => {
+    pending.current = text;
+    setDraftState(text);
+  };
+  const apply = (): void => {
+    const text = (pending.current ?? '').trim();
+    setDraft(null);
+    if (!/^\d+$/.test(text)) return;
+    const n = Number(text);
+    if (n !== value) onApply(n);
+  };
+  return (
+    <label className="rdg-count">
+      <span>{label}</span>
+      <input
+        className="rdg-count-input"
+        aria-label={label === 'Rows' ? 'Row count' : 'Column count'}
+        inputMode="numeric"
+        autoComplete="off"
+        spellCheck={false}
+        value={draft ?? String(value)}
+        onFocus={(e) => e.currentTarget.select()}
+        onChange={(e) => setDraft(e.target.value)}
+        onBlur={apply}
+        onKeyDown={(e) => {
+          if (e.nativeEvent.isComposing || e.keyCode === 229) return;
+          if (e.key === 'Enter') {
+            e.preventDefault();
+            apply();
+            onDone();
+          } else if (e.key === 'Escape') {
+            e.preventDefault();
+            setDraft(null);
+            onDone();
+          }
+        }}
+      />
+    </label>
   );
 }
 

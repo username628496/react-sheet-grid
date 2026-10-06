@@ -26,10 +26,15 @@ function seed(sheet: Spreadsheet): void {
   for (let i = 0; i < 300_000; i++) put(Math.floor(rand() * ROWS), Math.floor(rand() * COLS));
 }
 
-// ?mode=empty gives a small blank sheet so e2e tests are deterministic.
-const empty = new URLSearchParams(location.search).get('mode') === 'empty';
-const sheet = empty ? new Spreadsheet({ rowCount: 1000, colCount: 26 }) : new Spreadsheet({ rowCount: ROWS, colCount: COLS });
-if (!empty) seed(sheet);
+// Default: a blank 50 x 26 sheet (resizable from the toolbar). ?mode=sample loads the 1M x 100 stress sheet,
+// ?mode=empty a blank 1000 x 26 one with no frozen panes, which keeps the e2e tests deterministic.
+const mode = new URLSearchParams(location.search).get('mode');
+const empty = mode === 'empty';
+const sample = mode === 'sample';
+const sheet = sample
+  ? new Spreadsheet({ rowCount: ROWS, colCount: COLS })
+  : new Spreadsheet(empty ? { rowCount: 1000, colCount: 26 } : { rowCount: 50, colCount: 26 });
+if (sample) seed(sheet);
 
 declare global {
   interface Window {
@@ -48,15 +53,24 @@ function App() {
       <div style={{ flex: 1, minHeight: 0 }}>
         <DataGrid
           sheet={sheet}
-          frozenRows={empty ? 0 : 1}
-          frozenCols={empty ? 0 : 1}
+          frozenRows={sample ? 1 : 0}
+          frozenCols={sample ? 1 : 0}
           onReady={(controller) => {
             window.__grid = controller;
             setGrid(controller);
           }}
         />
       </div>
-      <StatusBar sheet={sheet} />
+      <div style={{ display: 'flex', alignItems: 'stretch' }}>
+        <div style={{ flex: 1 }}>
+          <StatusBar sheet={sheet} />
+        </div>
+        {!sample && (
+          <a href="?mode=sample" style={{ font: '12px system-ui, sans-serif', padding: '6px 14px', color: '#1a73e8', borderTop: '1px solid #e1e4e8', background: '#f8f9fb', textDecoration: 'none' }}>
+            Load 1M × 100 sample
+          </a>
+        )}
+      </div>
     </div>
   );
 }

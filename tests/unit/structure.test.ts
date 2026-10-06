@@ -285,3 +285,88 @@ describe('insert and delete in a sorted or filtered view', () => {
     expect(s.deleteRows(0, 3)).toBe(false);
   });
 });
+
+describe('setRowCount / setColCount', () => {
+  it('grows by adding blank rows at the bottom and keeps the selection', () => {
+    const s = makeSheet({ A1: 'a', A1000: 'z' });
+    s.selection.selectCell(2, 1);
+    s.selection.extendTo(4, 3);
+    expect(s.setRowCount(1500)).toEqual({ count: 1500, removedCells: 0 });
+    expect(s.rowCount).toBe(1500);
+    expect(s.getCellByView(999, 0).value).toBe('z');
+    expect(s.getCellByView(1499, 0).value).toBeNull();
+    expect(s.selection.primary).toEqual({ startRow: 2, startCol: 1, endRow: 4, endCol: 3 });
+    expect([s.selection.activeRow, s.selection.activeCol]).toEqual([2, 1]);
+  });
+
+  it('shrinks and reports how many filled cells were cut off', () => {
+    const s = makeSheet({ A1: 'a', A10: 'b', B10: 'c', A11: 'd' });
+    expect(s.setRowCount(10)).toEqual({ count: 10, removedCells: 1 });
+    expect(s.rowCount).toBe(10);
+    expect(s.model.hasCell(10, 0)).toBe(false);
+    expect(s.getCellByView(9, 0).value).toBe('b');
+  });
+
+  it('shrinking over data is one undo step and formulas pointing there come back', () => {
+    const s = makeSheet({ A1: 1, A20: 5, B1: '=A20+1' });
+    expect(value(s, 'B1')).toBe(6);
+    s.setRowCount(10);
+    expect(value(s, 'B1')).toEqual(e('#REF!'));
+    s.undo();
+    expect(s.rowCount).toBe(1000);
+    expect(value(s, 'B1')).toBe(6);
+    s.redo();
+    expect(s.rowCount).toBe(10);
+  });
+
+  it('clamps to at least one row/column and to the maximum, and ignores nonsense', () => {
+    const s = makeSheet({ A1: 'a' });
+    expect(s.setRowCount(0).count).toBe(1);
+    expect(s.setRowCount(-5).count).toBe(1);
+    expect(s.setRowCount(2_000_000).count).toBe(1_048_576);
+    s.setRowCount(50);
+    expect(s.setRowCount(Number.NaN).count).toBe(50);
+    expect(s.setRowCount(12.9).count).toBe(12);
+    expect(s.setColCount(0).count).toBe(1);
+    expect(s.setColCount(99_999).count).toBe(16_384);
+  });
+
+  it('does nothing and records no history when the count is unchanged', () => {
+    const s = makeSheet();
+    const before = s.history.canUndo;
+    expect(s.setRowCount(1000)).toEqual({ count: 1000, removedCells: 0 });
+    expect(s.history.canUndo).toBe(before);
+  });
+
+  it('works for columns, with formulas and column widths', () => {
+    const s = makeSheet({ A1: 1, Z1: 9, B1: '=Z1' });
+    s.cols.setSize(3, 150);
+    expect(s.setColCount(10)).toEqual({ count: 10, removedCells: 1 });
+    expect(s.colCount).toBe(10);
+    expect(value(s, 'B1')).toEqual(e('#REF!'));
+    s.undo();
+    expect(s.colCount).toBe(26);
+    expect(value(s, 'B1')).toBe(9);
+    expect(s.cols.getSize(3)).toBe(150);
+    expect(s.setColCount(30).count).toBe(30);
+  });
+
+  it('keeps the selection inside a smaller sheet', () => {
+    const s = makeSheet();
+    s.selection.selectCell(900, 20);
+    s.setRowCount(50);
+    s.setColCount(5);
+    expect(s.selection.activeRow).toBeLessThan(50);
+    expect(s.selection.activeCol).toBeLessThan(5);
+  });
+
+  it('adds rows after the last visible row of a sorted view', () => {
+    const s = makeSheet({ A1: 3, A2: 1, A3: 2 });
+    s.sortByColumn(0, true);
+    s.setRowCount(1005);
+    expect([0, 1, 2].map((r) => s.getCellByView(r, 0).value)).toEqual([1, 2, 3]);
+    expect(s.rowCount).toBe(1005);
+    s.setRowCount(1000);
+    expect([0, 1, 2].map((r) => s.getCellByView(r, 0).value)).toEqual([1, 2, 3]);
+  });
+});

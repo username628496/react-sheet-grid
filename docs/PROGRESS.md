@@ -32,7 +32,8 @@ Toàn bộ lộ trình MVP trong CLAUDE.md (tuần 1 và tuần 2) đã xong.
 - `core/` và `formula/` không phụ thuộc DOM/React. `Spreadsheet` là engine headless: model, style, mapping, layout, selection, history, formula engine. UI chỉ đọc từ đó và chỉ ghi qua `execute(command)`.
 - Cuộn: một `div` cuộn native nằm trên canvas, canvas vẽ lại theo vị trí cuộn logic. Firefox giới hạn chiều cao phần tử ~17,9M px mà 1M dòng × 21px = 21M, nên host chỉ được tối đa 8M px vật lý và `logic = vật lý × scale`.
 - Vẽ theo "segment": mỗi trục có segment đóng băng và segment cuộn; vùng vẽ = tích hai trục, nên freeze không cần code riêng.
-- Dữ liệu demo là bản thưa (khối dày 5000×20 + 300k ô rải rác) vì 100M ô không thể lưu trong `Map`.
+- Số dòng/cột đổi được từ toolbar (ô `Rows`/`Cols`) qua `sheet.setRowCount/setColCount`: tăng thì thêm dòng trống ở cuối, giảm thì xóa dòng cuối (một bước undo, công thức trỏ vào vùng bị cắt thành `#REF!`, toolbar báo số ô có dữ liệu bị xóa). Giới hạn 1…1.048.576 dòng, 1…16.384 cột.
+- Dữ liệu demo `?mode=sample` là bản thưa (khối dày 5000×20 + 300k ô rải rác) vì 100M ô không thể lưu trong `Map`.
 - Chữ chỉ clip khi tràn ô; tràn sang ô trống bên cạnh để sau MVP.
 
 **Nhập liệu**
@@ -106,7 +107,7 @@ Chưa có: Mod+; (ngày hiện tại), Mod+K (liên kết), Mod+T (trình duyệ
 
 ## Kiểm tra thủ công cho bạn (nhất là IME, clipboard, Safari)
 
-Chạy `pnpm dev` rồi mở http://localhost:5173/demo/ (thêm `?mode=empty` để có trang trống nhỏ).
+Chạy `pnpm dev` rồi mở http://localhost:5173/demo/ (mặc định là trang trống 50 × 26; `?mode=sample` nạp bảng 1.000.000 × 100 để thử hiệu năng, `?mode=empty` là trang trống 1000 × 26 cho e2e).
 
 1. **IME tiếng Việt (Telex và VNI), cả Chrome, Safari, Firefox**: chọn một ô rồi gõ ngay `viet` + `e` + `j` (Telex) hoặc `vie6t5`; ký tự đầu không được mất, cửa sổ gợi ý phải hiện cạnh ô, Enter khi đang gõ dở (đang gạch chân) không được commit ô. Thử cả khi đang sửa ô (F2) và trong công thức (`=IF(A1>1;"có";"không")`). Thử Unikey/EVKey kiểu gửi Backspace.
 2. **Clipboard với Excel và Google Sheets**: copy một vùng từ Excel/Sheets rồi Ctrl/Cmd+V vào lưới (số phải thành số, ô có xuống dòng giữ nguyên); ngược lại copy từ lưới rồi dán vào Excel/Sheets (giữ đậm, nghiêng, màu). Thử cut + paste và menu chuột phải → Copy/Paste.

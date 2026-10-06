@@ -55,10 +55,22 @@ const CSS = `
 
 .rdg-select {
   height: 30px; padding: 0 26px 0 10px; border: 0; border-radius: 6px; color: inherit; font: inherit; cursor: pointer;
-  appearance: none; -webkit-appearance: none; flex: none; min-width: 150px;
+  appearance: none; -webkit-appearance: none; flex: none; min-width: 140px;
   background: transparent url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23656d76' stroke-width='2.4' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E") no-repeat right 8px center / 12px;
 }
 .rdg-select:hover { background-color: var(--rdg-hover); }
+
+.rdg-spacer { flex: 1; min-width: 12px; }
+.rdg-toolbar-wrap { position: relative; z-index: 5; }
+.rdg-toolbar-wrap > .rdg-toolbar { background: var(--rdg-surface); }
+.rdg-notice { position: absolute; right: 12px; top: calc(100% + 6px); padding: 5px 12px; border-radius: 14px; background: #fef3c7; color: #7a4b00; font-size: 12px; box-shadow: 0 2px 8px rgba(0,0,0,.15); }
+.rdg-count { display: inline-flex; align-items: center; gap: 6px; flex: none; margin-left: 6px; color: var(--rdg-muted); font-size: 12px; }
+.rdg-count-input {
+  width: 64px; height: 26px; padding: 0 8px; text-align: right; font: inherit; color: var(--rdg-text);
+  font-variant-numeric: tabular-nums; border: 1px solid var(--rdg-border); border-radius: 6px; background: var(--rdg-field);
+}
+.rdg-count-input:hover { border-color: #c4c9d0; }
+.rdg-count-input:focus { outline: 2px solid var(--rdg-accent); outline-offset: -1px; border-color: transparent; }
 
 .rdg-formulabar { display: flex; align-items: center; gap: 0; border-bottom: 1px solid var(--rdg-border); background: var(--rdg-field); height: 30px; }
 .rdg-field { height: 100%; border: 0; background: transparent; color: inherit; font: inherit; padding: 0 10px; min-width: 0; }

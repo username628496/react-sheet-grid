@@ -68,6 +68,13 @@ const MAX_READ_CELLS = 100_000;
  * history in one place. Pure TypeScript with no DOM, so it runs in Node and
  * in a Web Worker. UI code reads from here and mutates only via `execute`.
  */
+export interface SizeChange {
+  /** Row or column count after the change. */
+  count: number;
+  /** Filled cells that were in the rows/columns removed (0 when growing). */
+  removedCells: number;
+}
+
 export class Spreadsheet {
   readonly model = new SheetModel();
   readonly styles = new StyleTable();
@@ -504,6 +511,44 @@ export class Spreadsheet {
     if (n < 1 || viewCol < 0 || n >= this.colCount) return false;
     this.execute(new DeleteColsCommand(viewCol, n));
     return true;
+  }
+
+  /**
+   * Makes the sheet `count` rows tall by adding or removing rows at the bottom, as one undoable step. The count is
+   * clamped to [1, maximum]. Shrinking removes whatever is in the rows cut off; formulas pointing there become #REF!
+   * like after any row deletion, so `removedCells` reports how many filled cells went (the host can warn; undo restores).
+   */
+  setRowCount(count: number): SizeChange {
+    return this.resize('row', count);
+  }
+
+  setColCount(count: number): SizeChange {
+    return this.resize('col', count);
+  }
+
+  private resize(axis: Axis, requested: number): SizeChange {
+    const current = axis === 'row' ? this.rowCount : this.colCount;
+    const limit = axis === 'row' ? MAX_ROWS - (this.mapping.dataRowCount - this.rowCount) : MAX_COLS;
+    const target = Math.max(1, Math.min(limit, Math.trunc(Number.isFinite(requested) ? requested : current)));
+    if (target === current) return { count: current, removedCells: 0 };
+    const { activeRow, activeCol, primary } = this.selection;
+    if (target > current) {
+      this.execute(axis === 'row' ? new InsertRowsCommand(current, target - current) : new InsertColsCommand(current, target - current));
+      // Inserting selects the new lines; resizing should not move the user's selection.
+      this.selection.selectCell(primary.startRow, primary.startCol);
+      this.selection.extendTo(primary.endRow, primary.endCol);
+      this.selection.setActive(activeRow, activeCol);
+      return { count: target, removedCells: 0 };
+    }
+    let removedCells = 0;
+    this.model.forEachCell((dataRow, dataCol, cell) => {
+      if (cell.value === null && cell.formula === undefined) return;
+      const line = axis === 'row' ? this.mapping.toViewRow(dataRow) : this.mapping.toViewCol(dataCol);
+      if (line >= target) removedCells++;
+    });
+    const removed = current - target;
+    this.execute(axis === 'row' ? new DeleteRowsCommand(target, removed) : new DeleteColsCommand(target, removed));
+    return { count: target, removedCells };
   }
 
   /**

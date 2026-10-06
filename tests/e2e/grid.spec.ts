@@ -1194,3 +1194,54 @@ test.describe('formula bar', () => {
     expect(await page.evaluate(() => window.__sheet!.styles.get(window.__sheet!.getCellByView(0, 0).styleId).bold ?? false)).toBe(false);
   });
 });
+
+test.describe('sheet size fields', () => {
+  const rowsField = (page: import('@playwright/test').Page) => page.getByLabel('Row count');
+  const colsField = (page: import('@playwright/test').Page) => page.getByLabel('Column count');
+
+  test('Enter applies the row count and gives focus back to the grid', async ({ page }) => {
+    await expect(rowsField(page)).toHaveValue('1000');
+    await rowsField(page).fill('30');
+    await rowsField(page).press('Enter');
+    expect(await page.evaluate(() => window.__sheet!.rowCount)).toBe(30);
+    await expect(rowsField(page)).toHaveValue('30');
+    expect(await page.evaluate(() => document.activeElement === window.__grid!.editor.textarea)).toBe(true);
+  });
+
+  test('leaving the field applies it too, and columns work the same way', async ({ page }) => {
+    await colsField(page).fill('12');
+    await rowsField(page).click(); // moves focus out of the columns field
+    expect(await page.evaluate(() => window.__sheet!.colCount)).toBe(12);
+    await expect(colsField(page)).toHaveValue('12');
+  });
+
+  test('garbage and Escape restore the current number', async ({ page }) => {
+    await rowsField(page).fill('abc');
+    await rowsField(page).press('Enter');
+    await expect(rowsField(page)).toHaveValue('1000');
+    await rowsField(page).fill('5');
+    await rowsField(page).press('Escape');
+    await expect(rowsField(page)).toHaveValue('1000');
+    expect(await page.evaluate(() => window.__sheet!.rowCount)).toBe(1000);
+  });
+
+  test('shrinking over data warns, and undo restores the rows', async ({ page }) => {
+    await page.evaluate(() => window.__sheet!.setCellInput(40, 0, 'keep me'));
+    await rowsField(page).fill('20');
+    await rowsField(page).press('Enter');
+    await expect(page.getByRole('status').filter({ hasText: 'Removed 1 filled cell' })).toBeVisible();
+    await page.keyboard.press(`${mod}+z`);
+    expect(await page.evaluate(() => window.__sheet!.rowCount)).toBe(1000);
+    expect(await cellValue(page, 40, 0)).toBe('keep me');
+    await expect(rowsField(page)).toHaveValue('1000');
+  });
+
+  test('growing past the old end makes the new rows usable', async ({ page }) => {
+    await rowsField(page).fill('1200');
+    await rowsField(page).press('Enter');
+    await page.evaluate(() => window.__sheet!.selection.selectCell(1199, 0));
+    await page.keyboard.type('end');
+    await page.keyboard.press('Enter');
+    expect(await cellValue(page, 1199, 0)).toBe('end');
+  });
+});
