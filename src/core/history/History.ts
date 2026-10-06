@@ -6,6 +6,8 @@ const MAX_DEPTH = 500;
 export class History {
   private undoStack: Command[] = [];
   private redoStack: Command[] = [];
+  /** Bumps on every execute/undo/redo; lets UI state (copy marquee) notice that data changed. */
+  version = 0;
 
   get canUndo(): boolean {
     return this.undoStack.length > 0;
@@ -17,6 +19,7 @@ export class History {
 
   execute(command: Command, sheet: Spreadsheet): void {
     command.apply(sheet);
+    this.version++;
     this.undoStack.push(command);
     if (this.undoStack.length > MAX_DEPTH) this.undoStack.shift();
     this.redoStack = [];
@@ -26,6 +29,7 @@ export class History {
     const command = this.undoStack.pop();
     if (command === undefined) return false;
     command.invert(sheet);
+    this.version++;
     this.redoStack.push(command);
     return true;
   }
@@ -34,6 +38,7 @@ export class History {
     const command = this.redoStack.pop();
     if (command === undefined) return false;
     command.apply(sheet);
+    this.version++;
     this.undoStack.push(command);
     return true;
   }

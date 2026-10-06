@@ -11,6 +11,7 @@
 - Command pattern + `History` (undo/redo): `SetCellsCommand`, `ResizeCommand`.
 - Resize cột/dòng bằng kéo chuột (resize nhiều cột khi đang chọn cả cột).
 - 20 e2e test (Chromium) và 92 unit test.
+- Copy/cut/paste: ghi `text/plain` (TSV có quote) và `text/html` (`<table>` kèm style), paste ưu tiên `text/html` rồi `text/plain`. Dán lặp ô khi vùng chọn là bội số của vùng copy. Cut chỉ xóa nguồn khi paste (như Sheets), cả hai trong một bước undo. Viền đứt quanh vùng đã copy.
 
 ## Quyết định kỹ thuật
 - Một `<textarea>` ẩn giữ focus mọi lúc và đồng thời là editor ô (`CellEditor.tsx` render, `EditorController` điều khiển). Gõ ký tự khi đang chọn ô chỉ đổi style textarea rồi để trình duyệt chèn ký tự mặc định, nên không mất ký tự đầu. IME vào edit qua `compositionstart`. Textarea luôn nằm đè lên ô active để cửa sổ gợi ý IME hiện đúng chỗ.
@@ -32,6 +33,8 @@
 - Hàm ghi của `SheetModel` là mức thấp, chỉ command được gọi.
 - `AxisLayout` chỉ lưu kích thước khác mặc định + prefix sum dựng lại lười; kích thước 0 nghĩa là ẩn. Làm việc trên tọa độ hiển thị (`viewIndex`).
 - `visibleRange` ghi vào object do caller truyền để vòng vẽ không cấp phát.
+- Copy nội bộ giữ nguyên `Cell` (công thức + style) nhận biết qua so sánh `text/plain` với bản đã ghi; dữ liệu từ app khác đi qua parse HTML/TSV. Parse HTML bằng regex (không cần DOM) để chạy được trong Node; ô gộp (`colspan`) chưa được mở rộng.
+- `readCells` cắt theo vùng dữ liệu khi vùng chọn > 100.000 ô, để copy cả cột không tạo ma trận 1M dòng.
 
 ## Lỗi đã biết
 - Firefox và WebKit chưa chạy được e2e trong môi trường này (không tải được binary Playwright). Cần chạy `pnpm exec playwright install` rồi `pnpm test:e2e` trên máy bạn.
@@ -39,4 +42,4 @@
 - `setSize` đánh dấu prefix sum bẩn, mỗi lần truy vấn sau đó tốn O(k) (k = số override). Cần chú ý khi kéo resize với rất nhiều override.
 
 ## Việc tiếp theo
-- Copy/cut/paste với Excel/Google Sheets (clipboard TSV + HTML).
+- Formula engine: tokenizer, parser, evaluator, dependency graph.

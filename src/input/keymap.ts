@@ -91,6 +91,8 @@ function navigatingKey(k: KeyInput): Action | null {
       return k.shift ? { type: 'advance', horizontal: false, backward: true } : { type: 'startEdit' };
     case 'F2':
       return { type: 'startEdit' };
+    case 'Escape':
+      return { type: 'cancel' }; // clears the copy marquee
     case 'Home':
       return { type: 'edge', edge: 'home', ctrl: k.mod, extend: k.shift };
     case 'End':

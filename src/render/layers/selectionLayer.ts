@@ -1,4 +1,4 @@
-import type { SelectionModel } from '../../core/selection/SelectionModel';
+import type { SelectionModel, ViewRange } from '../../core/selection/SelectionModel';
 import type { Spreadsheet } from '../../core/Spreadsheet';
 import { theme } from '../theme';
 import type { Segment } from '../viewport';
@@ -52,4 +52,29 @@ export function drawSelection(
   ctx.strokeStyle = theme.accent;
   ctx.lineWidth = 2;
   ctx.strokeRect(ax, ay, cols.getSize(selection.activeCol), rows.getSize(selection.activeRow));
+}
+
+const DASH: number[] = [4, 3]; // module constant: the render loop must not allocate
+
+/** Dashed "marching ants" outline around the copied or cut range. */
+export function drawCopyMarquee(
+  ctx: CanvasRenderingContext2D,
+  sheet: Spreadsheet,
+  range: ViewRange,
+  rowSeg: Segment,
+  colSeg: Segment,
+): void {
+  if (range.endRow < rowSeg.first || range.startRow > rowSeg.last) return;
+  if (range.endCol < colSeg.first || range.startCol > colSeg.last) return;
+  const { rows, cols } = sheet;
+  const x = colSeg.origin + cols.offsetOf(range.startCol) - colSeg.base;
+  const y = rowSeg.origin + rows.offsetOf(range.startRow) - rowSeg.base;
+  const w = cols.offsetOf(range.endCol + 1) - cols.offsetOf(range.startCol);
+  const h = rows.offsetOf(range.endRow + 1) - rows.offsetOf(range.startRow);
+  ctx.save();
+  ctx.setLineDash(DASH);
+  ctx.strokeStyle = theme.accent;
+  ctx.lineWidth = 2;
+  ctx.strokeRect(x, y, w, h);
+  ctx.restore();
 }

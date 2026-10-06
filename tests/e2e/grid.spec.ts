@@ -238,3 +238,88 @@ test.describe('resize', () => {
     expect(await page.evaluate(() => window.__sheet!.rows.getSize(2))).toBe(40);
   });
 });
+
+test.describe('clipboard', () => {
+  async function copyEvent(page: import('@playwright/test').Page): Promise<{ text: string; html: string }> {
+    return page.evaluate(() => {
+      const dt = new DataTransfer();
+      window.__grid!.editor.textarea.dispatchEvent(new ClipboardEvent('copy', { clipboardData: dt, bubbles: true, cancelable: true }));
+      return { text: dt.getData('text/plain'), html: dt.getData('text/html') };
+    });
+  }
+
+  async function pasteEvent(page: import('@playwright/test').Page, data: { text?: string; html?: string }): Promise<void> {
+    await page.evaluate((d) => {
+      const dt = new DataTransfer();
+      if (d.text !== undefined) dt.setData('text/plain', d.text);
+      if (d.html !== undefined) dt.setData('text/html', d.html);
+      window.__grid!.editor.textarea.dispatchEvent(new ClipboardEvent('paste', { clipboardData: dt, bubbles: true, cancelable: true }));
+    }, data);
+  }
+
+  test('copy writes TSV and an HTML table', async ({ page }) => {
+    await page.evaluate(() => {
+      const s = window.__sheet!;
+      s.setCellInput(0, 0, 'a');
+      s.setCellInput(0, 1, '1.5');
+      s.setCellInput(1, 0, 'x"y');
+    });
+    await clickCell(page, 0, 0);
+    await clickCell(page, 1, 1, { modifiers: ['Shift'] });
+    const data = await copyEvent(page);
+    expect(data.text).toBe('a\t1.5\n"x""y"\t');
+    expect(data.html).toContain('<table>');
+    expect(data.html).toContain('<td>1.5</td>');
+  });
+
+  test('paste prefers HTML over plain text', async ({ page }) => {
+    await clickCell(page, 1, 1);
+    await pasteEvent(page, { html: '<table><tr><td>H1</td><td>7</td></tr></table>', text: 'ignored' });
+    expect(await cellValue(page, 1, 1)).toBe('H1');
+    expect(await cellValue(page, 1, 2)).toBe(7);
+  });
+
+  test('paste falls back to TSV text and undo reverts the whole paste', async ({ page }) => {
+    await clickCell(page, 0, 0);
+    await pasteEvent(page, { text: 'a\tb\nc\td\n' });
+    expect(await cellValue(page, 1, 1)).toBe('d');
+    await page.keyboard.press(`${mod}+z`);
+    expect(await cellValue(page, 0, 0)).toBeNull();
+    expect(await cellValue(page, 1, 1)).toBeNull();
+  });
+
+  test('cut then paste moves the cells', async ({ page }) => {
+    await page.evaluate(() => window.__sheet!.setCellInput(0, 0, 'moveme'));
+    await clickCell(page, 0, 0);
+    const data = await page.evaluate(() => {
+      const dt = new DataTransfer();
+      window.__grid!.editor.textarea.dispatchEvent(new ClipboardEvent('cut', { clipboardData: dt, bubbles: true, cancelable: true }));
+      return dt.getData('text/plain');
+    });
+    expect(await cellValue(page, 0, 0)).toBe('moveme'); // cleared only when pasted, like Sheets
+    await clickCell(page, 4, 4);
+    await pasteEvent(page, { text: data });
+    expect(await cellValue(page, 0, 0)).toBeNull();
+    expect(await cellValue(page, 4, 4)).toBe('moveme');
+  });
+
+  test('real keyboard shortcuts copy and paste within the grid', async ({ page, browserName }) => {
+    test.skip(browserName !== 'chromium', 'headless clipboard permissions differ between engines');
+    await page.context().grantPermissions(['clipboard-read', 'clipboard-write']);
+    await page.evaluate(() => window.__sheet!.setCellInput(0, 0, 'shortcut'));
+    await clickCell(page, 0, 0);
+    await page.keyboard.press(`${mod}+c`);
+    await clickCell(page, 3, 3);
+    await page.keyboard.press(`${mod}+v`);
+    expect(await cellValue(page, 3, 3)).toBe('shortcut');
+  });
+
+  test('typing in the editor is not intercepted by paste handling', async ({ page }) => {
+    await clickCell(page, 0, 0);
+    await page.keyboard.type('abc');
+    await pasteEvent(page, { text: 'zzz' }); // editing: the controller leaves it to the browser
+    await page.keyboard.press('Escape');
+    expect(await cellValue(page, 0, 0)).toBeNull();
+    expect(await cellValue(page, 1, 0)).toBeNull();
+  });
+});

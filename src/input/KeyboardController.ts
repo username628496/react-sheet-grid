@@ -7,6 +7,7 @@ import {
 } from '../core/selection/navigation';
 import type { Spreadsheet } from '../core/Spreadsheet';
 import type { GridSurface } from '../render/GridSurface';
+import type { ClipboardController } from './ClipboardController';
 import type { EditorController } from './EditorController';
 import { type Action, type CommitMove, isMacPlatform, type KeyContext, resolveKey, toKeyInput } from './keymap';
 
@@ -14,6 +15,7 @@ export interface KeyboardDeps {
   sheet: Spreadsheet;
   surface: GridSurface;
   editor: EditorController;
+  clipboard: ClipboardController;
 }
 
 export class KeyboardController {
@@ -124,6 +126,7 @@ export class KeyboardController {
         break;
       case 'cancel':
         editor.cancel();
+        this.deps.clipboard.clearMarquee();
         break;
       case 'newline':
         editor.insertNewline();

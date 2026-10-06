@@ -20,6 +20,8 @@ export interface SpreadsheetOptions {
 type Listener = () => void;
 
 const FORMAT_FILL_LIMIT = 50_000;
+const MAX_TILED_CELLS = 1_000_000;
+const MAX_READ_CELLS = 100_000;
 
 /**
  * Headless spreadsheet: model, styles, view mapping, layout, selection and
@@ -177,6 +179,96 @@ export class Spreadsheet {
       cell: { value: t.cell.value, styleId: this.styles.derive(t.cell.styleId, patch) },
     }));
     this.execute(new SetCellsCommand(label, changes));
+  }
+
+  /** Bottom-right of the data in view coordinates, or null for an empty sheet. */
+  getUsedViewBounds(): { row: number; col: number } | null {
+    const used = this.model.getUsedRange();
+    if (used === null) return null;
+    if (this.mapping.isIdentity) return { row: used.endRow, col: used.endCol };
+    let row = -1;
+    this.model.forEachCell((dataRow) => {
+      const v = this.mapping.toViewRow(dataRow);
+      if (v > row) row = v;
+    });
+    return row < 0 ? null : { row, col: used.endCol };
+  }
+
+  /**
+   * Reads the cells of a view range as a matrix (rows x cols). Ranges up to
+   * MAX_READ_CELLS are read exactly (trailing blanks are part of a copy); bigger ones,
+   * like a whole column, are cut at the used area so we never build a 1M-row matrix.
+   */
+  readCells(range: ViewRange): { rows: number; cols: number; cells: Cell[][] } {
+    let { endRow, endCol } = range;
+    const area = (range.endRow - range.startRow + 1) * (range.endCol - range.startCol + 1);
+    if (area > MAX_READ_CELLS) {
+      const bounds = this.getUsedViewBounds();
+      endRow = bounds === null ? range.startRow : Math.min(range.endRow, Math.max(bounds.row, range.startRow));
+      endCol = bounds === null ? range.startCol : Math.min(range.endCol, Math.max(bounds.col, range.startCol));
+    }
+    const cells: Cell[][] = [];
+    for (let r = range.startRow; r <= endRow; r++) {
+      const line: Cell[] = [];
+      for (let c = range.startCol; c <= endCol; c++) line.push(this.getCellByView(r, c));
+      cells.push(line);
+    }
+    return { rows: cells.length, cols: cells[0]?.length ?? 0, cells };
+  }
+
+  /**
+   * Pastes a matrix as one undoable step. `make` produces the new cell for
+   * matrix position (i, j) given the cell currently there. When the selection
+   * is an exact multiple of the matrix the matrix is tiled, as in Sheets.
+   * `cutFrom` is cleared in the same step (cut + paste is a move).
+   */
+  pasteMatrix(
+    rows: number,
+    cols: number,
+    make: (i: number, j: number, existing: Cell) => Cell,
+    cutFrom: ViewRange | null = null,
+  ): ViewRange | null {
+    if (rows === 0 || cols === 0) return null;
+    const target = this.selection.primary;
+    const th = target.endRow - target.startRow + 1;
+    const tw = target.endCol - target.startCol + 1;
+    // The cap stops one paste into a whole-column selection from allocating millions of cells.
+    const tiled = th >= rows && tw >= cols && th % rows === 0 && tw % cols === 0 && th * tw <= MAX_TILED_CELLS;
+    const height = tiled ? th : rows;
+    const width = tiled ? tw : cols;
+    const startRow = target.startRow;
+    const startCol = target.startCol;
+    const endRow = Math.min(this.rowCount - 1, startRow + height - 1);
+    const endCol = Math.min(this.colCount - 1, startCol + width - 1);
+
+    const changes: CellChange[] = [];
+    if (cutFrom !== null) {
+      this.forEachStoredCellInViewRange(cutFrom, (dataRow, dataCol) => {
+        changes.push({ dataRow, dataCol, cell: { value: null, styleId: 0 } });
+      });
+    }
+    for (let r = startRow; r <= endRow; r++) {
+      const dataRow = this.mapping.toDataRow(r);
+      for (let c = startCol; c <= endCol; c++) {
+        const dataCol = this.mapping.toDataCol(c);
+        const cell = make((r - startRow) % rows, (c - startCol) % cols, this.model.getCell(dataRow, dataCol));
+        changes.push({ dataRow, dataCol, cell });
+      }
+    }
+    this.execute(new SetCellsCommand('Paste', changes));
+    this.selection.selectCell(startRow, startCol);
+    this.selection.extendTo(endRow, endCol);
+    return this.selection.primary;
+  }
+
+  /** Pastes plain values (text typed into each cell the way the editor would); existing formatting is kept. */
+  pasteText(matrix: readonly (readonly string[])[]): ViewRange | null {
+    const rows = matrix.length;
+    const cols = matrix.reduce((w, r) => Math.max(w, r.length), 0);
+    return this.pasteMatrix(rows, cols, (i, j, existing) => ({
+      value: parseInput(matrix[i]?.[j] ?? ''),
+      styleId: existing.styleId,
+    }));
   }
 
   /** Delete key: removes contents of every selected range but keeps formatting. */

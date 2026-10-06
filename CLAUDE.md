@@ -128,7 +128,7 @@ docs/
 - [x] Resize cột/dòng bằng kéo chuột
 
 ### Tuần 2: Tính năng spreadsheet
-- [ ] Copy/cut/paste trong grid và với Excel/Google Sheets
+- [x] Copy/cut/paste trong grid và với Excel/Google Sheets
 - [ ] Fill handle: copy giá trị và chuỗi số đơn giản
 - [ ] Formula engine: tokenizer, parser, evaluator, dependency graph
 - [ ] Hàm: `SUM`, `AVERAGE`, `COUNT`, `MIN`, `MAX`, `IF`, `ROUND`, `CONCAT`, `SUMIF`, `COUNTIF`, `VLOOKUP`
