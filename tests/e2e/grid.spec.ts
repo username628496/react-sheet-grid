@@ -1591,3 +1591,73 @@ test.describe('zoom', () => {
     expect(await page.evaluate(() => window.__grid!.surface.zoom)).toBe(1);
   });
 });
+
+// The project has no @types/node; this is the one Node global these tests use.
+declare const Buffer: { from(data: string | number[], encoding?: string): never; [k: string]: unknown };
+
+test.describe('CSV import and export', () => {
+  type Page = import('@playwright/test').Page;
+  const openFileMenu = async (page: Page, item: string | RegExp): Promise<void> => {
+    await page.getByRole('button', { name: 'File', exact: true }).click();
+    await page.getByRole('menuitem', { name: item }).click();
+  };
+
+  test('Download as CSV writes what the sheet displays, with a BOM for Excel', async ({ page }) => {
+    await page.evaluate(() => {
+      const s = window.__sheet!;
+      s.setCellInput(0, 0, 'tên, hàng');
+      s.setCellInput(0, 1, '1234.5');
+      s.setCellInput(1, 0, 'Việt "Nam"');
+      s.selection.selectCell(0, 1);
+      s.formatSelection({ numberFormat: '#,##0.00' });
+    });
+    const download = page.waitForEvent('download');
+    await openFileMenu(page, /as displayed/);
+    const file = await download;
+    expect(file.suggestedFilename()).toBe('sheet.csv');
+    const stream = await file.createReadStream();
+    const chunks: Uint8Array[] = [];
+    for await (const chunk of stream) chunks.push(chunk as Uint8Array);
+    const bytes = new Uint8Array(chunks.reduce((n, c) => n + c.length, 0));
+    chunks.reduce((at, c) => (bytes.set(c, at), at + c.length), 0);
+    expect(Array.from(bytes.subarray(0, 3))).toEqual([0xef, 0xbb, 0xbf]);
+    // Every row has the same number of fields, and a field with quotes in it is itself quoted.
+    expect(new TextDecoder().decode(bytes.subarray(3))).toBe('"tên, hàng","1,234.50"\r\n"Việt ""Nam""",');
+  });
+
+  test('Import CSV fills from the active cell as one undo step', async ({ page }) => {
+    await clickCell(page, 1, 1);
+    await page.getByRole('button', { name: 'File', exact: true }).click();
+    await page.getByRole('menuitem', { name: 'Import CSV…' }).click();
+    await page.getByTestId('import-file').setInputFiles({
+      name: 'data.csv',
+      mimeType: 'text/csv',
+      buffer: Buffer.from('﻿tên;số lượng\r\n"Cà phê";12,5\r\nTrà;3', 'utf8'),
+    });
+    await expect.poll(() => cellValue(page, 1, 1)).toBe('tên');
+    expect(await cellValue(page, 2, 1)).toBe('Cà phê');
+    expect(await cellValue(page, 2, 2)).toBe('12,5'); // a decimal comma is text, as when typed
+    expect(await cellValue(page, 3, 2)).toBe(3);
+    await page.keyboard.press(`${mod}+z`);
+    expect(await page.evaluate(() => window.__sheet!.model.cellCount)).toBe(0);
+  });
+
+  test('a Windows-1252 file (Excel "CSV") is read with its accents intact', async ({ page }) => {
+    await clickCell(page, 0, 0);
+    await page.getByRole('button', { name: 'File', exact: true }).click();
+    await page.getByRole('menuitem', { name: 'Import CSV…' }).click();
+    await page.getByTestId('import-file').setInputFiles({ name: 'old.csv', mimeType: 'text/csv', buffer: Buffer.from([0x63, 0x61, 0x66, 0xe9, 0x2c, 0xf1]) });
+    await expect.poll(() => cellValue(page, 0, 0)).toBe('café');
+    expect(await cellValue(page, 0, 1)).toBe('ñ');
+  });
+
+  test('an empty file says so, and a read-only sheet cannot import', async ({ page }) => {
+    await page.getByRole('button', { name: 'File', exact: true }).click();
+    await page.getByRole('menuitem', { name: 'Import CSV…' }).click();
+    await page.getByTestId('import-file').setInputFiles({ name: 'empty.csv', mimeType: 'text/csv', buffer: Buffer.from('') });
+    await expect(page.getByRole('status').filter({ hasText: 'no data to import' })).toBeVisible();
+    await page.evaluate(() => (window.__sheet!.readOnly = true));
+    await page.getByRole('button', { name: 'File', exact: true }).click();
+    await expect(page.getByRole('menuitem', { name: 'Import CSV…' })).toBeDisabled();
+  });
+});

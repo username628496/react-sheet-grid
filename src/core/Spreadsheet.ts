@@ -1,3 +1,4 @@
+import { BatchCommand } from './commands/BatchCommand';
 import type { Command } from './commands/Command';
 import { type CellChange, SetCellsCommand } from './commands/SetCellsCommand';
 import { FormulaEngine } from '../formula/engine';
@@ -23,6 +24,7 @@ import {
 } from './commands/StructureCommand';
 import { ResizeCommand } from './commands/ResizeCommand';
 import { ViewStateCommand } from './commands/ViewStateCommand';
+import { type CsvDelimiter, neutralizeFormula, parseCsv, toCsv } from './csv';
 import { fillCells, type FillDirection } from './fill';
 import { History } from './history/History';
 import { AxisLayout } from './layout/AxisLayout';
@@ -65,6 +67,8 @@ const MAX_RANGE_CHECK = 10_000; // largest range inspected cell by cell for the 
 const MAX_TILED_CELLS = 1_000_000;
 /** One paste is one undo step holding every cell, so an absurdly large one would freeze the tab and eat memory. */
 export const MAX_PASTE_CELLS = 1_000_000;
+/** A CSV of this many fields is already hundreds of megabytes of text; beyond it the export is refused. */
+export const MAX_EXPORT_CELLS = 10_000_000;
 const MAX_READ_CELLS = 100_000;
 
 /**
@@ -73,7 +77,7 @@ const MAX_READ_CELLS = 100_000;
  * in a Web Worker. UI code reads from here and mutates only via `execute`.
  */
 /** Something the user should be told about but that is not an error of the host app. Localised by the UI layer. */
-export type SheetNotice = { code: 'pasteTooLarge'; cells: number; limit: number };
+export type SheetNotice = { code: 'pasteTooLarge'; cells: number; limit: number } | { code: 'exportTooLarge'; cells: number; limit: number };
 
 export interface SizeChange {
   /** Row or column count after the change. */
@@ -100,6 +104,8 @@ export class Spreadsheet {
   /** Data keys written since the last recalculation. Only tracked while formulas exist (or one is being added). */
   private readonly dirty = new Set<number>();
   private readOnlyFlag = false;
+  /** Commands applied so far inside `transaction`, or null outside one. */
+  private batch: Command[] | null = null;
   /** Document changes that do not go through the history (frozen panes). */
   private looseEdits = 0;
 
@@ -234,9 +240,37 @@ export class Spreadsheet {
 
   execute(command: Command): void {
     if (this.readOnlyFlag && !(command instanceof ResizeCommand || command instanceof ViewStateCommand)) return;
+    if (this.batch !== null) {
+      // Inside a transaction the command is applied now but only the finished batch becomes an undo step.
+      command.apply(this);
+      this.batch.push(command);
+      this.flushFormulas();
+      this.notify();
+      return;
+    }
     this.history.execute(command, this);
     this.flushFormulas();
     this.notify();
+  }
+
+  /**
+   * Runs `work` and makes everything it executes ONE undo step. Nested calls join the outer one. If `work` throws, what
+   * was already applied stays applied and is still undoable as one step.
+   */
+  transaction(label: string, work: () => void): void {
+    if (this.batch !== null) {
+      work();
+      return;
+    }
+    this.batch = [];
+    try {
+      work();
+    } finally {
+      const done = this.batch;
+      this.batch = null;
+      if (done.length === 1) this.history.record(done[0] as Command);
+      else if (done.length > 1) this.history.record(new BatchCommand(label, done));
+    }
   }
 
   undo(): boolean {
@@ -384,6 +418,75 @@ export class Spreadsheet {
     const row = nearest(this.rows, activeRow);
     const col = nearest(this.cols, activeCol);
     if (row !== activeRow || col !== activeCol) this.selection.selectCell(row, col);
+  }
+
+  /**
+   * The sheet (or `range`, in view coordinates) as CSV text. By default it covers everything from A1 to the last used
+   * cell and writes what the cells display, like Google Sheets' "Download as CSV". Returns null when the area is
+   * too large (a notice is sent). Text cells that start with `= + - @` are prefixed with an apostrophe so a spreadsheet
+   * program opening the file does not run them as formulas; turn that off with `neutralize: false`.
+   */
+  exportCsv(
+    options: {
+      range?: ViewRange;
+      delimiter?: CsvDelimiter;
+      /** 'displayed' (default): as shown, e.g. "$1,234.50"; 'raw': plain values; 'formulas': formulas as typed. */
+      content?: 'displayed' | 'raw' | 'formulas';
+      neutralize?: boolean;
+    } = {},
+  ): string | null {
+    const bounds = this.getUsedViewBounds();
+    const range = options.range ?? (bounds === null ? null : { startRow: 0, startCol: 0, endRow: bounds.row, endCol: bounds.col });
+    if (range === null) return '';
+    const rows = range.endRow - range.startRow + 1;
+    const cols = range.endCol - range.startCol + 1;
+    if (rows * cols > MAX_EXPORT_CELLS) {
+      for (const listener of this.noticeListeners) listener({ code: 'exportTooLarge', cells: rows * cols, limit: MAX_EXPORT_CELLS });
+      return null;
+    }
+    const content = options.content ?? 'displayed';
+    const neutralize = options.neutralize ?? true;
+    const out: string[][] = [];
+    for (let r = range.startRow; r <= range.endRow; r++) {
+      const line: string[] = [];
+      for (let c = range.startCol; c <= range.endCol; c++) {
+        const cell = this.getCellByView(r, c);
+        let text: string;
+        if (cell.value === null && cell.formula === undefined) text = '';
+        else if (content === 'formulas') text = cell.formula !== undefined ? this.getEditText(r, c) : this.getDisplayText(r, c);
+        else if (content === 'raw') text = typeof cell.value === 'number' ? String(Number(cell.value.toPrecision(15))) : formatValue(cell.value);
+        else text = this.getDisplayText(r, c);
+        if (neutralize && cell.formula === undefined && typeof cell.value === 'string') text = neutralizeFormula(text);
+        line.push(text);
+      }
+      out.push(line);
+    }
+    return toCsv(out, options.delimiter ?? ',');
+  }
+
+  /**
+   * Reads CSV text into the sheet starting at the active cell, as one undo step, growing the sheet when the data does not
+   * fit. Values are interpreted as if typed (numbers, TRUE/FALSE, formulas starting with "="). Returns the size
+   * read, or null when nothing was imported (empty text, read-only, or too large: a notice is sent).
+   */
+  importCsv(text: string, options: { delimiter?: CsvDelimiter } = {}): { rows: number; cols: number } | null {
+    if (this.readOnlyFlag) return null;
+    const matrix = parseCsv(text, options.delimiter);
+    const rows = matrix.length;
+    const cols = matrix.reduce((w, r) => Math.max(w, r.length), 0);
+    if (rows === 0 || cols === 0) return null;
+    if (rows * cols > MAX_PASTE_CELLS) {
+      for (const listener of this.noticeListeners) listener({ code: 'pasteTooLarge', cells: rows * cols, limit: MAX_PASTE_CELLS });
+      return null;
+    }
+    const { startRow, startCol } = this.selection.primary;
+    this.transaction('Import CSV', () => {
+      if (startRow + rows > this.rowCount) this.setRowCount(startRow + rows);
+      if (startCol + cols > this.colCount) this.setColCount(startCol + cols);
+      this.selection.selectCell(startRow, startCol);
+      this.pasteText(matrix);
+    });
+    return { rows, cols };
   }
 
   /** "Increase/decrease decimal places": the active cell decides the new pattern, the whole selection gets it. */

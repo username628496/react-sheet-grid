@@ -134,6 +134,21 @@ Every change goes through `sheet.execute(command)`, which is what makes undo/red
 `insertRows`, … are conveniences that do that for you. `sheet.subscribe(fn)` fires on every change including selection;
 `sheet.subscribeChanges(fn)` only when the document changed.
 
+## CSV
+
+The toolbar's File menu imports a CSV (comma, semicolon or tab separated, detected automatically; UTF-8 or Windows-1252)
+at the active cell as one undo step, and downloads the sheet as CSV, either as displayed (`$1,234.50`) or as plain values.
+Downloads start with a byte order mark so Excel reads accents correctly. Text cells that begin with `=`, `+`, `-` or `@`
+are written with a leading apostrophe so they cannot run as formulas when someone opens the file ("CSV injection").
+
+The same is available without the UI:
+
+```ts
+const csv = sheet.exportCsv({ content: 'raw', delimiter: ';' });   // null if the area is too large
+sheet.importCsv(text);                                              // { rows, cols } or null
+sheet.transaction('My change', () => { /* several commands, one undo step */ });
+```
+
 ## Formulas
 
 References: `A1`, `$A$1`, `A1:B5`, `A:A`, `3:3`. Arguments may be separated by `,` or `;`.

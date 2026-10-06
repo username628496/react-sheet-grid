@@ -25,6 +25,14 @@ export class History {
     this.redoStack = [];
   }
 
+  /** Records a command that has already been applied (a finished transaction), as one undo step. */
+  record(command: Command): void {
+    this.version++;
+    this.undoStack.push(command);
+    if (this.undoStack.length > MAX_DEPTH) this.undoStack.shift();
+    this.redoStack = [];
+  }
+
   undo(sheet: Spreadsheet): boolean {
     const command = this.undoStack.pop();
     if (command === undefined) return false;

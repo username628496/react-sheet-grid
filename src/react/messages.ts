@@ -88,6 +88,13 @@ export interface Messages {
   colCount: string;
   removedCells: (n: number) => string;
   pasteTooLarge: (limit: number) => string;
+  exportTooLarge: (limit: number) => string;
+  file: string;
+  importCsv: string;
+  exportCsvDisplayed: string;
+  exportCsvRaw: string;
+  importEmpty: string;
+  importTooBig: string;
   errorTitle: string;
   errorRetry: string;
   // formula bar
@@ -212,6 +219,13 @@ const en: Messages = {
   colCount: 'Column count',
   removedCells: (n) => `Removed ${plural(n, 'filled cell', 'filled cells')}. Undo to restore.`,
   pasteTooLarge: (limit) => `That is too much to paste at once (over ${limit.toLocaleString('en-US')} cells). Nothing was pasted.`,
+  exportTooLarge: (limit) => `That is too large to export (over ${limit.toLocaleString('en-US')} cells). Select a smaller range.`,
+  file: 'File',
+  importCsv: 'Import CSV…',
+  exportCsvDisplayed: 'Download as CSV (as displayed)',
+  exportCsvRaw: 'Download as CSV (plain values)',
+  importEmpty: 'The file has no data to import.',
+  importTooBig: 'That file is too large to import (over 50 MB).',
   errorTitle: 'Something went wrong in the spreadsheet.',
   errorRetry: 'Try again',
   nameBox: 'Name box',
@@ -387,6 +401,13 @@ const vi: Messages = {
   colCount: 'Số cột',
   removedCells: (n) => `Đã xóa ${n} ô có dữ liệu. Nhấn hoàn tác để khôi phục.`,
   pasteTooLarge: (limit) => `Dữ liệu dán quá lớn (hơn ${limit.toLocaleString('vi-VN')} ô). Chưa dán gì cả.`,
+  exportTooLarge: (limit) => `Vùng này quá lớn để xuất (hơn ${limit.toLocaleString('vi-VN')} ô). Hãy chọn vùng nhỏ hơn.`,
+  file: 'Tệp',
+  importCsv: 'Nhập CSV…',
+  exportCsvDisplayed: 'Tải xuống CSV (như đang hiển thị)',
+  exportCsvRaw: 'Tải xuống CSV (giá trị thô)',
+  importEmpty: 'Tệp không có dữ liệu để nhập.',
+  importTooBig: 'Tệp quá lớn để nhập (hơn 50 MB).',
   errorTitle: 'Bảng tính gặp sự cố.',
   errorRetry: 'Thử lại',
   nameBox: 'Ô tên',

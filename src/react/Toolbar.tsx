@@ -5,6 +5,7 @@ import type { HorizontalAlign, Style } from '../core/model/StyleTable';
 import type { GridController } from '../input/GridController';
 import { ChromeStyles } from './chrome';
 import { useMessages, useTheme } from './GridProvider';
+import { downloadText, MAX_IMPORT_BYTES, readTextFile } from './csvFile';
 import { Icon, type IconName } from './icons';
 import { Menu, type MenuEntry } from './Menu';
 import {
@@ -12,6 +13,7 @@ import {
   freezeEntries,
   functionEntries,
   insertEntries,
+  fileEntries,
   type MenuId,
   zoomEntries,
   visibilityEntries,
@@ -94,9 +96,10 @@ export function Toolbar({ sheet, grid = null, onAction }: ToolbarProps) {
   const [notice, setNotice] = useState<string | null>(null);
   const [menu, setMenu] = useState<OpenMenu | null>(null);
   const lastClosed = useRef<{ id: MenuId; at: number } | null>(null);
+  const fileInput = useRef<HTMLInputElement>(null);
   // Things the sheet refused to do (an oversized paste) are announced in the same place as the size notice.
   useEffect(
-    () => sheet.subscribeNotices((n) => setNotice(m.pasteTooLarge(n.limit))),
+    () => sheet.subscribeNotices((n) => setNotice(n.code === 'exportTooLarge' ? m.exportTooLarge(n.limit) : m.pasteTooLarge(n.limit))),
     [sheet, m],
   );
   useEffect(() => {
@@ -194,6 +197,8 @@ export function Toolbar({ sheet, grid = null, onAction }: ToolbarProps) {
         return deleteEntries(sheet, m);
       case 'zoom':
         return grid === null ? [] : zoomEntries(grid);
+      case 'file':
+        return fileEntries(sheet, m, { chooseFile: () => fileInput.current?.click(), download: (text) => downloadText('sheet.csv', text) });
       case 'visibility':
         return visibilityEntries(sheet, m);
       case 'freeze':
@@ -211,6 +216,24 @@ export function Toolbar({ sheet, grid = null, onAction }: ToolbarProps) {
     freeze: m.freeze,
     functions: m.functions,
     zoom: m.zoom,
+    file: m.file,
+  };
+
+  const importFile = async (file: File): Promise<void> => {
+    if (file.size > MAX_IMPORT_BYTES) {
+      setNotice(m.importTooBig);
+      return;
+    }
+    let sawNotice = false;
+    const off = sheet.subscribeNotices(() => {
+      sawNotice = true; // an oversized import already said why
+    });
+    try {
+      const result = sheet.importCsv(await readTextFile(file));
+      if (result === null && !sawNotice) setNotice(m.importEmpty);
+    } finally {
+      off();
+    }
   };
 
   const text = (glyph: string): ReactNode => <span className="rdg-glyph">{glyph}</span>;
@@ -224,6 +247,25 @@ export function Toolbar({ sheet, grid = null, onAction }: ToolbarProps) {
     <div className="rdg-chrome rdg-toolbar-wrap" data-rdg-theme={theme}>
       <ChromeStyles />
       <div role="toolbar" aria-label={m.toolbar} aria-orientation="horizontal" className="rdg-toolbar" data-testid="toolbar" onKeyDown={onKeyDown}>
+        <div className="rdg-group" role="group" aria-label={m.file}>
+          {menuButton('file', 'file', m.file, undefined)}
+          <input
+            ref={fileInput}
+            type="file"
+            accept=".csv,.tsv,.txt,text/csv,text/tab-separated-values,text/plain"
+            aria-hidden="true"
+            aria-label={m.importCsv}
+            tabIndex={-1}
+            data-testid="import-file"
+            style={{ display: 'none' }}
+            onChange={(e) => {
+              const file = e.target.files?.[0];
+              e.target.value = ''; // so choosing the same file again still fires
+              if (file !== undefined) void importFile(file).then(() => onAction?.());
+            }}
+          />
+        </div>
+        <span className="rdg-sep" aria-hidden />
         <div className="rdg-group" role="group" aria-label={m.groupHistory}>
           {button('undo', m.undo, 'Mod+Z', undefined, () => sheet.undo(), !canUndo)}
           {button('redo', m.redo, 'Mod+Y', undefined, () => sheet.redo(), !canRedo)}

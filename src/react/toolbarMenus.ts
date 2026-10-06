@@ -4,7 +4,7 @@ import type { GridController } from '../input/GridController';
 import type { MenuEntry } from './Menu';
 import type { Messages } from './messages';
 
-export type MenuId = 'paste' | 'numberFormat' | 'insert' | 'delete' | 'visibility' | 'freeze' | 'functions' | 'zoom';
+export type MenuId = 'paste' | 'numberFormat' | 'insert' | 'delete' | 'visibility' | 'freeze' | 'functions' | 'zoom' | 'file';
 
 /** Number patterns offered by the "More formats" menu, in display order; '' is the automatic format. */
 export function numberFormatEntries(sheet: Spreadsheet, m: Messages): MenuEntry[] {
@@ -123,4 +123,17 @@ export function zoomEntries(grid: GridController): MenuEntry[] {
     checked: grid.surface.zoom === level,
     run: () => grid.surface.setZoom(level),
   }));
+}
+
+export function fileEntries(sheet: Spreadsheet, m: Messages, actions: { chooseFile: () => void; download: (text: string) => void }): MenuEntry[] {
+  const exportAs = (content: 'displayed' | 'raw') => () => {
+    const text = sheet.exportCsv({ content });
+    if (text !== null) actions.download(text);
+  };
+  return [
+    { label: m.importCsv, disabled: sheet.readOnly, run: actions.chooseFile },
+    'separator',
+    { label: m.exportCsvDisplayed, run: exportAs('displayed') },
+    { label: m.exportCsvRaw, run: exportAs('raw') },
+  ];
 }
