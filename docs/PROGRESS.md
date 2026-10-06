@@ -59,7 +59,7 @@ Toàn bộ lộ trình MVP trong CLAUDE.md (tuần 1 và tuần 2) đã xong.
 
 ## Lỗi đã biết / giới hạn
 
-- **Firefox và WebKit chưa được chạy e2e** trong môi trường này (không tải được binary Playwright). Cần chạy `pnpm exec playwright install` rồi `pnpm test:e2e` trên máy bạn.
+- e2e đã chạy trên cả 3 engine trên máy bạn: Chromium 48/48, WebKit 46 pass + 2 skip (2 test CDP chỉ chạy trên Chromium), Firefox 42 pass + 2 skip, 4 test clipboard lỗi do test dùng `ClipboardEvent` giả lập mà Firefox bỏ qua `clipboardData`; đã sửa test để gọi `copyTo/cutTo/pasteFrom` của controller (cần chạy lại trên Firefox để xác nhận).
 - Chèn/xóa dòng/cột bị chặn khi đang sort/filter (cần bỏ sort/filter trước).
 - Tham chiếu từ ô khác tới vùng bị cut chưa được cập nhật (Sheets cập nhật).
 - Công thức tham chiếu theo tọa độ dữ liệu: khi đang sort, nhãn A1 trong công thức là vị trí dữ liệu gốc, không phải vị trí đang hiển thị.

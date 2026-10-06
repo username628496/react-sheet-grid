@@ -240,20 +240,20 @@ test.describe('resize', () => {
 });
 
 test.describe('clipboard', () => {
+  // These call the controller's copyTo/pasteFrom with a plain object: Firefox ignores clipboardData on
+  // synthetic ClipboardEvents, so dispatching events would test the browser instead of our code.
+  // The real event wiring is covered by the keyboard-shortcut test below.
   async function copyEvent(page: import('@playwright/test').Page): Promise<{ text: string; html: string }> {
     return page.evaluate(() => {
-      const dt = new DataTransfer();
-      window.__grid!.editor.textarea.dispatchEvent(new ClipboardEvent('copy', { clipboardData: dt, bubbles: true, cancelable: true }));
-      return { text: dt.getData('text/plain'), html: dt.getData('text/html') };
+      const store: Record<string, string> = {};
+      window.__grid!.clipboard.copyTo({ setData: (type, value) => void (store[type] = value) });
+      return { text: store['text/plain'] ?? '', html: store['text/html'] ?? '' };
     });
   }
 
   async function pasteEvent(page: import('@playwright/test').Page, data: { text?: string; html?: string }): Promise<void> {
     await page.evaluate((d) => {
-      const dt = new DataTransfer();
-      if (d.text !== undefined) dt.setData('text/plain', d.text);
-      if (d.html !== undefined) dt.setData('text/html', d.html);
-      window.__grid!.editor.textarea.dispatchEvent(new ClipboardEvent('paste', { clipboardData: dt, bubbles: true, cancelable: true }));
+      window.__grid!.clipboard.pasteFrom({ getData: (type) => (type === 'text/html' ? d.html : d.text) ?? '' });
     }, data);
   }
 
@@ -292,9 +292,9 @@ test.describe('clipboard', () => {
     await page.evaluate(() => window.__sheet!.setCellInput(0, 0, 'moveme'));
     await clickCell(page, 0, 0);
     const data = await page.evaluate(() => {
-      const dt = new DataTransfer();
-      window.__grid!.editor.textarea.dispatchEvent(new ClipboardEvent('cut', { clipboardData: dt, bubbles: true, cancelable: true }));
-      return dt.getData('text/plain');
+      const store: Record<string, string> = {};
+      window.__grid!.clipboard.cutTo({ setData: (type, value) => void (store[type] = value) });
+      return store['text/plain'] ?? '';
     });
     expect(await cellValue(page, 0, 0)).toBe('moveme'); // cleared only when pasted, like Sheets
     await clickCell(page, 4, 4);
@@ -317,7 +317,12 @@ test.describe('clipboard', () => {
   test('typing in the editor is not intercepted by paste handling', async ({ page }) => {
     await clickCell(page, 0, 0);
     await page.keyboard.type('abc');
-    await pasteEvent(page, { text: 'zzz' }); // editing: the controller leaves it to the browser
+    // While editing, the real paste event is left to the browser's own textarea handling.
+    await page.evaluate(() => {
+      const dt = new DataTransfer();
+      dt.setData('text/plain', 'zzz');
+      window.__grid!.editor.textarea.dispatchEvent(new ClipboardEvent('paste', { clipboardData: dt, bubbles: true, cancelable: true }));
+    });
     await page.keyboard.press('Escape');
     expect(await cellValue(page, 0, 0)).toBeNull();
     expect(await cellValue(page, 1, 0)).toBeNull();

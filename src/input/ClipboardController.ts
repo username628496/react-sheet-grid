@@ -16,6 +16,14 @@ interface InternalClip {
   cut: boolean;
 }
 
+/** The slice of DataTransfer the controller needs; lets tests drive it without synthetic clipboard events. */
+export interface ClipboardWriter {
+  setData(format: string, data: string): void;
+}
+export interface ClipboardReader {
+  getData(format: string): string;
+}
+
 export class ClipboardController {
   /** Range drawn with a dashed outline after copy/cut; cleared by Escape or any edit. */
   marquee: ViewRange | null = null;
@@ -85,36 +93,54 @@ export class ClipboardController {
     return { rows, cols, cells, text: toTsv(text), source: range, cut };
   }
 
-  private write(e: ClipboardEvent, clip: InternalClip): void {
+  private write(data: ClipboardWriter, clip: InternalClip): void {
     const display = clip.cells.map((line) =>
       line.map((cell) => formatValue(cell.value, this.sheet.styles.get(cell.styleId).numberFormat)),
     );
     const styles = clip.cells.map((line) => line.map((cell) => this.sheet.styles.get(cell.styleId)));
-    e.clipboardData?.setData('text/plain', clip.text);
-    e.clipboardData?.setData('text/html', toHtmlTable(display, styles));
-    e.preventDefault();
+    data.setData('text/plain', clip.text);
+    data.setData('text/html', toHtmlTable(display, styles));
     this.clip = clip;
     this.marquee = this.sheet.selection.primary;
     this.marqueeVersion = this.sheet.history.version;
     this.sheet.notify();
   }
 
+  /** Writes the selection into `data`. Returns false when there is nothing to copy. */
+  copyTo(data: ClipboardWriter): boolean {
+    const clip = this.copyData(false);
+    if (clip === null) return false;
+    this.write(data, clip);
+    return true;
+  }
+
+  /** Like copyTo, but the source is cleared when the data is pasted (a move). */
+  cutTo(data: ClipboardWriter): boolean {
+    const clip = this.copyData(true);
+    if (clip === null) return false;
+    this.write(data, clip);
+    return true;
+  }
+
+  /** Pastes from `data`, preferring text/html over text/plain. */
+  pasteFrom(data: ClipboardReader): void {
+    this.paste(data.getData('text/html'), data.getData('text/plain'));
+  }
+
   private readonly onCopy = (e: ClipboardEvent): void => {
     if (this.editor.editing) return; // native copy inside the cell editor
-    const clip = this.copyData(false);
-    if (clip !== null) this.write(e, clip);
+    if (e.clipboardData !== null && this.copyTo(e.clipboardData)) e.preventDefault();
   };
 
   private readonly onCut = (e: ClipboardEvent): void => {
     if (this.editor.editing) return;
-    const clip = this.copyData(true);
-    if (clip !== null) this.write(e, clip);
+    if (e.clipboardData !== null && this.cutTo(e.clipboardData)) e.preventDefault();
   };
 
   private readonly onPaste = (e: ClipboardEvent): void => {
-    if (this.editor.editing) return;
+    if (this.editor.editing || e.clipboardData === null) return;
     e.preventDefault();
-    this.paste(e.clipboardData?.getData('text/html') ?? '', e.clipboardData?.getData('text/plain') ?? '');
+    this.pasteFrom(e.clipboardData);
   };
 
   private paste(html: string, text: string): void {
