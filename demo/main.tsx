@@ -1,5 +1,5 @@
 import { createRoot } from 'react-dom/client';
-import { DataGrid, type GridController, Spreadsheet } from '../src/index';
+import { DataGrid, type GridController, Spreadsheet, Toolbar } from '../src/index';
 
 const ROWS = 1_000_000;
 const COLS = 100;
@@ -39,7 +39,9 @@ declare global {
 window.__sheet = sheet;
 
 createRoot(document.getElementById('root')!).render(
-  <div style={{ height: '100%' }}>
+  <div style={{ height: '100%', display: 'flex', flexDirection: 'column' }}>
+    <Toolbar sheet={sheet} onAction={() => window.__grid?.editor.focus()} />
+    <div style={{ flex: 1, minHeight: 0 }}>
     <DataGrid
       sheet={sheet}
       frozenRows={empty ? 0 : 1}
@@ -48,5 +50,6 @@ createRoot(document.getElementById('root')!).render(
         window.__grid = controller;
       }}
     />
+    </div>
   </div>,
 );

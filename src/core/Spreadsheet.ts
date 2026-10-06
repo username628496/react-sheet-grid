@@ -3,16 +3,24 @@ import { type CellChange, SetCellsCommand } from './commands/SetCellsCommand';
 import { FormulaEngine } from '../formula/engine';
 import { parseFormulaSafe } from '../formula/parser';
 import { printFormula } from '../formula/print';
+import { ViewStateCommand } from './commands/ViewStateCommand';
 import { fillCells, type FillDirection } from './fill';
 import { History } from './history/History';
 import { AxisLayout } from './layout/AxisLayout';
 import { ViewMapping } from './mapping/ViewMapping';
-import type { Cell } from './model/Cell';
+import type { Cell, CellValue } from './model/Cell';
 import { formatValue } from './model/format';
 import { parseInput } from './model/parseInput';
 import { cellKey, SheetModel } from './model/SheetModel';
 import { type Style, StyleTable } from './model/StyleTable';
 import { SelectionModel, type ViewRange } from './selection/SelectionModel';
+import {
+  cellDisplayText,
+  compareForSort,
+  EMPTY_VIEW_STATE,
+  isDefaultView,
+  type ViewState,
+} from './viewState';
 
 export interface SpreadsheetOptions {
   rowCount?: number;
@@ -42,6 +50,9 @@ export class Spreadsheet {
   readonly history = new History();
   readonly selection: SelectionModel;
   private readonly listeners = new Set<Listener>();
+  private state: ViewState = EMPTY_VIEW_STATE;
+  /** Rows at the top (e.g. the frozen header) that sorting and filtering never touch. */
+  headerRows = 0;
   /** Data keys written since the last recalculation. Only tracked while formulas exist (or one is being added). */
   private readonly dirty = new Set<number>();
 
@@ -223,6 +234,143 @@ export class Spreadsheet {
       cell: { ...t.cell, styleId: this.styles.derive(t.cell.styleId, patch) },
     }));
     this.execute(new SetCellsCommand(label, changes));
+  }
+
+  get viewState(): ViewState {
+    return this.state;
+  }
+
+  /** Called by ViewStateCommand to put a state back without recomputing anything. */
+  restoreViewState(state: ViewState): void {
+    this.state = state;
+    this.selection.clamp();
+  }
+
+  /** Installs a new view state and the row order derived from it. */
+  setView(state: ViewState, order: Int32Array | null): void {
+    this.state = state;
+    this.mapping.setOrder(order);
+    this.rows.setCount(this.mapping.viewRowCount);
+    this.selection.clamp();
+  }
+
+  /**
+   * Builds viewRow -> dataRow for a state: header rows, then the data rows that
+   * pass every filter (sorted if asked), then the untouched empty rows below the
+   * data so the user can still type there. Null means identity.
+   */
+  computeViewOrder(state: ViewState): Int32Array | null {
+    if (isDefaultView(state)) return null;
+    const total = this.mapping.dataRowCount;
+    const header = Math.min(this.headerRows, total);
+    const used = this.model.getUsedRange();
+    const tableEnd = Math.max(used === null ? -1 : used.endRow, header - 1);
+
+    let rows: number[] = [];
+    const filters = [...state.filters];
+    for (let r = header; r <= tableEnd; r++) {
+      let visible = true;
+      for (const [dataCol, allowed] of filters) {
+        if (!allowed.has(cellDisplayText(this.model.getCell(r, dataCol), this.styles))) {
+          visible = false;
+          break;
+        }
+      }
+      if (visible) rows.push(r);
+    }
+    if (state.sort !== null) {
+      const { col, asc } = state.sort;
+      // Keys are read once up front; Array.sort is stable, so equal values keep their original order.
+      const keys = new Map<number, CellValue | null>();
+      for (const r of rows) keys.set(r, this.model.getCell(r, col).value);
+      rows = rows.sort((a, b) => compareForSort(keys.get(a) ?? null, keys.get(b) ?? null, asc));
+    }
+    const order = new Int32Array(header + rows.length + (total - 1 - tableEnd));
+    let k = 0;
+    for (let r = 0; r < header; r++) order[k++] = r;
+    for (const r of rows) order[k++] = r;
+    for (let r = tableEnd + 1; r < total; r++) order[k++] = r;
+    return order;
+  }
+
+  private changeView(next: ViewState, label: string): void {
+    this.execute(new ViewStateCommand(label, next));
+  }
+
+  sortByColumn(viewCol: number, asc: boolean): void {
+    this.changeView({ ...this.state, sort: { col: this.mapping.toDataCol(viewCol), asc } }, 'Sort');
+  }
+
+  clearSort(): void {
+    if (this.state.sort !== null) this.changeView({ ...this.state, sort: null }, 'Clear sort');
+  }
+
+  /** `allowed` null removes the filter on that column. */
+  setColumnFilter(viewCol: number, allowed: ReadonlySet<string> | null): void {
+    const dataCol = this.mapping.toDataCol(viewCol);
+    const filters = new Map(this.state.filters);
+    if (allowed === null) filters.delete(dataCol);
+    else filters.set(dataCol, new Set(allowed));
+    this.changeView({ ...this.state, filters }, 'Filter');
+  }
+
+  clearFilters(): void {
+    if (this.state.filters.size > 0) this.changeView({ ...this.state, filters: new Map() }, 'Clear filters');
+  }
+
+  isColumnFiltered(viewCol: number): boolean {
+    return this.state.filters.has(this.mapping.toDataCol(viewCol));
+  }
+
+  /** Sort direction of a column, or null when the view is not sorted by it. */
+  sortDirection(viewCol: number): 'asc' | 'desc' | null {
+    const s = this.state.sort;
+    if (s === null || s.col !== this.mapping.toDataCol(viewCol)) return null;
+    return s.asc ? 'asc' : 'desc';
+  }
+
+  /**
+   * Distinct display texts of a column across the whole data range (ignoring the
+   * column's own filter, so the user can widen it again), for the filter popup.
+   */
+  getDistinctValues(viewCol: number, limit = 1000): { values: Array<{ text: string; count: number }>; truncated: boolean } {
+    const dataCol = this.mapping.toDataCol(viewCol);
+    const counts = new Map<string, number>();
+    const header = this.headerRows;
+    const used = this.model.getUsedRange();
+    const end = used === null ? -1 : used.endRow;
+    // Other columns' filters still apply: only offer values that exist among rows that can be shown.
+    const others = [...this.state.filters].filter(([c]) => c !== dataCol);
+    this.model.forEachCellInRange({ startRow: header, startCol: dataCol, endRow: Math.max(end, header), endCol: dataCol }, (row, _c, cell) => {
+      for (const [c, allowed] of others) {
+        if (!allowed.has(cellDisplayText(this.model.getCell(row, c), this.styles))) return;
+      }
+      if (cell.value === null && cell.formula === undefined) return;
+      const text = cellDisplayText(cell, this.styles);
+      counts.set(text, (counts.get(text) ?? 0) + 1);
+    });
+    // Rows with an empty cell in this column are part of the data too.
+    let rowsInTable = 0;
+    for (let r = header; r <= end; r++) {
+      let ok = true;
+      for (const [c, allowed] of others) {
+        if (!allowed.has(cellDisplayText(this.model.getCell(r, c), this.styles))) {
+          ok = false;
+          break;
+        }
+      }
+      if (ok) rowsInTable++;
+    }
+    const nonBlank = [...counts.values()].reduce((a, b) => a + b, 0);
+    if (rowsInTable > nonBlank) counts.set('', (counts.get('') ?? 0) + rowsInTable - nonBlank);
+
+    const sorted = [...counts].map(([text, count]) => ({ text, count }));
+    sorted.sort((a, b) => {
+      const va = a.text === '' ? null : (Number.isNaN(Number(a.text)) ? a.text : Number(a.text));
+      const vb = b.text === '' ? null : (Number.isNaN(Number(b.text)) ? b.text : Number(b.text));
+      return compareForSort(va, vb, true);
+    });
+    return { values: sorted.slice(0, limit), truncated: sorted.length > limit };
   }
 
   /** Bottom-right of the data in view coordinates, or null for an empty sheet. */

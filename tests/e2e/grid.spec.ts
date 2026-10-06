@@ -413,3 +413,64 @@ test.describe('fill handle', () => {
     expect(await page.evaluate(() => window.__grid!.surface.host.style.cursor)).toBe('crosshair');
   });
 });
+
+test.describe('formatting', () => {
+  test('Ctrl+B toggles bold on the selection and undo reverts it', async ({ page }) => {
+    await page.evaluate(() => window.__sheet!.setCellInput(0, 0, 'x'));
+    await clickCell(page, 0, 0);
+    await page.keyboard.press(`${mod}+b`);
+    const bold = (): Promise<boolean | undefined> =>
+      page.evaluate(() => {
+        const s = window.__sheet!;
+        return s.styles.get(s.getCellByView(0, 0).styleId).bold;
+      });
+    expect(await bold()).toBe(true);
+    await page.keyboard.press(`${mod}+b`);
+    expect(await bold()).toBeUndefined();
+    await page.keyboard.press(`${mod}+z`);
+    expect(await bold()).toBe(true);
+  });
+
+  test('toolbar buttons format the selection and reflect the active cell', async ({ page }) => {
+    await clickCell(page, 1, 1);
+    await page.getByRole('button', { name: 'Bold' }).click();
+    await page.getByRole('button', { name: 'Align right' }).click();
+    const style = await page.evaluate(() => {
+      const s = window.__sheet!;
+      return s.styles.get(s.getCellByView(1, 1).styleId);
+    });
+    expect(style).toEqual({ bold: true, align: 'right' });
+    await expect(page.getByRole('button', { name: 'Bold' })).toHaveAttribute('aria-pressed', 'true');
+    await clickCell(page, 3, 3);
+    await expect(page.getByRole('button', { name: 'Bold' })).toHaveAttribute('aria-pressed', 'false');
+  });
+
+  test('the number format select changes how numbers display', async ({ page }) => {
+    await page.evaluate(() => window.__sheet!.setCellInput(0, 0, '1234.5'));
+    await clickCell(page, 0, 0);
+    await page.getByLabel('Number format').selectOption('#,##0.00');
+    expect(await page.evaluate(() => window.__sheet!.getDisplayText(0, 0))).toBe('1,234.50');
+  });
+
+  test('toolbar undo/redo buttons work and are disabled when there is nothing to do', async ({ page }) => {
+    await expect(page.getByRole('button', { name: 'Undo' })).toBeDisabled();
+    await clickCell(page, 0, 0);
+    await page.keyboard.type('a');
+    await page.keyboard.press('Enter');
+    await expect(page.getByRole('button', { name: 'Undo' })).toBeEnabled();
+    await page.getByRole('button', { name: 'Undo' }).click();
+    expect(await cellValue(page, 0, 0)).toBeNull();
+    await page.getByRole('button', { name: 'Redo' }).click();
+    expect(await cellValue(page, 0, 0)).toBe('a');
+  });
+
+  test('clicking a toolbar button while editing keeps the edit going', async ({ page }) => {
+    await clickCell(page, 0, 0);
+    await page.keyboard.type('abc');
+    await page.getByRole('button', { name: 'Bold' }).click();
+    expect(await page.evaluate(() => window.__grid!.editor.editing)).toBe(true);
+    await page.keyboard.type('d');
+    await page.keyboard.press('Enter');
+    expect(await cellValue(page, 0, 0)).toBe('abcd');
+  });
+});

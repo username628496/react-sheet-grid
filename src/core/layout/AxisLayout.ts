@@ -1,3 +1,9 @@
+export interface AxisSnapshot {
+  readonly count: number;
+  readonly index: readonly number[];
+  readonly size: readonly number[];
+}
+
 export interface VisibleRange {
   first: number;
   last: number; // inclusive
@@ -35,6 +41,20 @@ export class AxisLayout {
 
   get count(): number {
     return this.itemCount;
+  }
+
+  /** Copy of the layout state, so a command can restore it exactly (including overrides dropped by setCount). */
+  snapshot(): AxisSnapshot {
+    return { count: this.itemCount, index: [...this.overrideIndex], size: [...this.overrideSize] };
+  }
+
+  restore(snapshot: AxisSnapshot): void {
+    this.itemCount = snapshot.count;
+    this.overrideIndex.length = 0;
+    this.overrideIndex.push(...snapshot.index);
+    this.overrideSize.length = 0;
+    this.overrideSize.push(...snapshot.size);
+    this.prefixDirty = true;
   }
 
   /** Changes the number of items; overrides beyond the new count are dropped. */
