@@ -54,7 +54,9 @@ Toàn bộ lộ trình MVP trong CLAUDE.md (tuần 1 và tuần 2) đã xong.
 
 **Sort / filter / cấu trúc**
 - Sort và filter chỉ đổi `ViewMapping` (`Int32Array` viewRow → dataRow) qua một command lưu lại trạng thái trước (thứ tự, kích thước dòng) nên undo chính xác. Dòng tiêu đề (`headerRows` = số dòng đóng băng) và các dòng trống bên dưới dữ liệu được giữ nguyên; ô trống luôn nằm cuối khi sort. Filter so khớp theo văn bản hiển thị.
-- Chèn/xóa dòng/cột đổi số dòng/cột, di chuyển dữ liệu, kích thước và viết lại tham chiếu (`remapFormula`): tham chiếu vào ô bị xóa thành `#REF!`, range co lại hoặc giãn ra, `A:A` giữ nguyên. Undo bằng snapshot. Chỉ cho phép khi chưa sort/filter.
+- Chèn/xóa dòng/cột đổi số dòng/cột, di chuyển dữ liệu, kích thước và viết lại tham chiếu (`remapFormula`): tham chiếu vào ô bị xóa thành `#REF!`, range co lại hoặc giãn ra, `A:A` giữ nguyên. Undo bằng snapshot. Khi đang sort/filter, dòng chèn vào xuất hiện đúng vị trí đang thấy (dòng dữ liệu mới nhận chỉ số mới chèn vào `order`), còn xóa chỉ xóa các dòng đang hiển thị (dòng bị lọc ẩn vẫn còn); phần dữ liệu không liên tục này dùng `deleteSetMap`.
+- Cut-paste cập nhật tham chiếu: `moveReferences` dịch các tham chiếu trỏ vào ô bị cắt (ô đơn, hoặc range nằm trọn trong vùng cắt; range chỉ trùm một phần giữ nguyên như Excel/Sheets), cả ở ô khác lẫn bên trong vùng cắt, trong cùng một bước undo.
+- Double-click viền cột tự fit độ rộng: đo tối đa 100 chuỗi dài nhất của cột (đo là phần chậm), giới hạn 20–600px; chọn nhiều cột nguyên thì mỗi cột tự fit theo nội dung của nó.
 - Định dạng lên vùng quá lớn (> 50.000 ô, ví dụ cả cột) chỉ áp dụng cho ô đã có dữ liệu để không sinh hàng triệu ô.
 
 **Soạn công thức**: khi gõ `=SUM(` rồi nhấn mũi tên hoặc click/kéo ô, tham chiếu được chèn vào công thức (mũi tên chỉ trỏ ô ở "enter mode", tức là text đã gõ; sau khi tự dời con trỏ hoặc mở bằng F2 là "edit mode" và mũi tên dịch con trỏ). Mỗi tham chiếu một màu, vừa trong chữ (textarea trong suốt đè lên một div nền vẽ chữ màu, tắt khi đang gõ IME để thấy gạch chân của IME) vừa viền màu trên lưới.
@@ -88,11 +90,10 @@ Chưa có: Mod+; (ngày hiện tại), Mod+K (liên kết), Mod+T (trình duyệ
 ## Lỗi đã biết / giới hạn
 
 - e2e đã chạy xanh trên cả 3 engine: Chromium 48/48, WebKit 46 pass + 2 skip, Firefox 46 pass + 2 skip (2 test giả lập IME qua CDP chỉ chạy trên Chromium). IME thật vẫn cần thử tay.
-- Chèn/xóa dòng/cột bị chặn khi đang sort/filter (cần bỏ sort/filter trước).
-- Tham chiếu từ ô khác tới vùng bị cut chưa được cập nhật (Sheets cập nhật).
+- Khi đang sort/filter, cut-paste chưa cập nhật tham chiếu từ ô khác tới vùng bị cắt (chỉ làm khi thứ tự dòng tự nhiên).
 - Công thức tham chiếu theo tọa độ dữ liệu: khi đang sort, nhãn A1 trong công thức là vị trí dữ liệu gốc, không phải vị trí đang hiển thị.
 - Chiều cao dòng gắn với vị trí hiển thị, không đi theo dữ liệu khi sort.
-- Double-click viền resize chưa tự fit độ rộng; double-click fill handle chưa tự điền; ngày tháng chưa có chuỗi.
+- Double-click fill handle chưa tự điền; ngày tháng chưa có chuỗi; double-click viền dòng chưa tự fit chiều cao.
 - Một số đơn lẻ khi fill được copy (không tăng) như Sheets.
 - Chữ chưa tràn sang ô trống bên cạnh; ô gộp, nhiều sheet, xlsx, find & replace... nằm ngoài MVP.
 - Paste từ menu chuột phải dùng `navigator.clipboard.read()` nên trình duyệt có thể hỏi quyền (Firefox chỉ đọc được text).
@@ -112,6 +113,6 @@ Chạy `pnpm dev` rồi mở http://localhost:5173/demo/ (thêm `?mode=empty` đ
 ## Việc tiếp theo (ngoài MVP, chỉ làm khi bạn yêu cầu)
 
 - Chạy e2e trên Firefox/WebKit và sửa nếu có khác biệt.
-- Chữ tràn sang ô trống, tự fit độ rộng cột, fill ngày tháng, cập nhật tham chiếu khi cut.
-- Sort/filter không chặn chèn/xóa dòng; công thức theo vị trí hiển thị khi sort.
+- Chữ tràn sang ô trống, fill ngày tháng.
+- Công thức theo vị trí hiển thị khi sort.
 - Tính toán trong Web Worker cho bảng rất lớn.

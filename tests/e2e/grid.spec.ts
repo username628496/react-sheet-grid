@@ -553,15 +553,18 @@ test.describe('context menu', () => {
     expect(await cellValue(page, 0, 0)).toBeNull();
   });
 
-  test('sort from the menu, with the structure items disabled while sorted', async ({ page }) => {
+  test('sort from the menu; inserting rows still works while sorted', async ({ page }) => {
     await page.evaluate(() => {
       for (const [r, v] of [[0, 3], [1, 1], [2, 2]] as const) window.__sheet!.setCellInput(r, 0, String(v));
     });
     await rightClick(page, 0, 0);
     await page.getByRole('menuitem', { name: /Sort sheet by column A, A → Z/ }).click();
     expect(await page.evaluate(() => [0, 1, 2].map((r) => window.__sheet!.getCellByView(r, 0).value))).toEqual([1, 2, 3]);
+    await rightClick(page, 1, 0);
+    await page.getByRole('menuitem', { name: /Insert 1 row above/ }).click();
+    expect(await page.evaluate(() => window.__sheet!.rowCount)).toBe(1001);
+    expect(await page.evaluate(() => [0, 1, 2, 3].map((r) => window.__sheet!.getCellByView(r, 0).value))).toEqual([1, null, 2, 3]);
     await rightClick(page, 0, 0);
-    await expect(page.getByRole('menuitem', { name: /Insert 1 row above/ })).toBeDisabled();
     await page.getByRole('menuitem', { name: /Remove sort/ }).click();
     expect(await cellValue(page, 0, 0)).toBe(3);
   });
@@ -887,5 +890,65 @@ test.describe('pointing at cells while typing a formula', () => {
     for (let i = 0; i < 60; i++) await page.keyboard.press('ArrowDown');
     expect(await editorText(page)).toBe('=A61');
     expect(await page.evaluate(() => window.__grid!.surface.viewport.scrollY)).toBeGreaterThan(0);
+  });
+});
+
+test.describe('auto-fit column width', () => {
+  async function borderPos(page: import('@playwright/test').Page, col: number): Promise<{ x: number; y: number }> {
+    return page.evaluate((c) => {
+      const g = window.__grid!;
+      const v = g.surface.viewport;
+      const r = g.surface.host.getBoundingClientRect();
+      return { x: r.left + v.colLeft(c) + g.sheet.cols.getSize(c), y: r.top + v.headerHeight / 2 };
+    }, col);
+  }
+
+  test('double-click on the column border fits the widest content, in one undo step', async ({ page }) => {
+    await page.evaluate(() => {
+      window.__sheet!.setCellInput(0, 1, 'a');
+      window.__sheet!.setCellInput(1, 1, 'a considerably longer piece of text');
+    });
+    const { x, y } = await borderPos(page, 1);
+    await page.mouse.dblclick(x, y);
+    const width = await page.evaluate(() => window.__sheet!.cols.getSize(1));
+    expect(width).toBeGreaterThan(150);
+    expect(width).toBeLessThan(400);
+    await clickCell(page, 0, 0);
+    await page.keyboard.press(`${mod}+z`);
+    expect(await page.evaluate(() => window.__sheet!.cols.getSize(1))).toBe(100);
+  });
+
+  test('an empty column goes back to the default width and a narrow one shrinks', async ({ page }) => {
+    await page.evaluate(() => {
+      window.__sheet!.cols.setSize(0, 300);
+      window.__sheet!.setCellInput(0, 2, 'x');
+      window.__sheet!.cols.setSize(2, 300);
+    });
+    let pos = await borderPos(page, 0);
+    await page.mouse.dblclick(pos.x, pos.y);
+    expect(await page.evaluate(() => window.__sheet!.cols.getSize(0))).toBe(100);
+    pos = await borderPos(page, 2);
+    await page.mouse.dblclick(pos.x, pos.y);
+    expect(await page.evaluate(() => window.__sheet!.cols.getSize(2))).toBeLessThan(40);
+  });
+
+  test('with several whole columns selected each one fits its own content', async ({ page }) => {
+    await page.evaluate(() => {
+      window.__sheet!.setCellInput(0, 0, 'short');
+      window.__sheet!.setCellInput(0, 1, 'a much much longer value here');
+    });
+    const box = await page.getByTestId('grid').boundingBox();
+    const hdr = await page.evaluate(() => {
+      const v = window.__grid!.surface.viewport;
+      return { a: v.colLeft(0) + 20, b: v.colLeft(1) + 20, y: v.headerHeight / 2 };
+    });
+    await page.mouse.click(box!.x + hdr.a, box!.y + hdr.y);
+    await page.keyboard.down('Shift');
+    await page.mouse.click(box!.x + hdr.b, box!.y + hdr.y);
+    await page.keyboard.up('Shift');
+    const { x, y } = await borderPos(page, 1);
+    await page.mouse.dblclick(x, y);
+    const widths = await page.evaluate(() => [window.__sheet!.cols.getSize(0), window.__sheet!.cols.getSize(1)]);
+    expect(widths[1]).toBeGreaterThan(widths[0] as number);
   });
 });

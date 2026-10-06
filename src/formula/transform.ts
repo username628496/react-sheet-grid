@@ -30,6 +30,35 @@ export function deleteMap(at: number, count: number): AxisMap {
   };
 }
 
+/** Number of values in the sorted array `sorted` that are strictly less than `x`. */
+function countLess(sorted: readonly number[], x: number): number {
+  let lo = 0;
+  let hi = sorted.length;
+  while (lo < hi) {
+    const mid = (lo + hi) >>> 1;
+    if ((sorted[mid] as number) < x) lo = mid + 1;
+    else hi = mid;
+  }
+  return lo;
+}
+
+/**
+ * Deleting an arbitrary, not necessarily contiguous, set of rows (what a delete looks like in a sorted or
+ * filtered view). `deleted` must be sorted ascending and unique. Generalizes deleteMap.
+ */
+export function deleteSetMap(deleted: readonly number[]): AxisMap {
+  const isDeleted = (i: number): boolean => {
+    const k = countLess(deleted, i);
+    return deleted[k] === i;
+  };
+  return {
+    point: (i) => (isDeleted(i) ? null : i - countLess(deleted, i)),
+    // A range keeps its surviving part: the start moves to the first survivor at or after it, the end to the last survivor before it.
+    rangeStart: (i) => i - countLess(deleted, i),
+    rangeEnd: (i) => (isDeleted(i) ? i - countLess(deleted, i) - 1 : i - countLess(deleted, i)),
+  };
+}
+
 const REF_ERROR: Expr = { t: 'err', v: '#REF!' };
 
 /**
@@ -97,4 +126,66 @@ export function remapFormula(
 /** Cut-paste: the formula moves but still points at the same cells. */
 export function rebaseFormula(expr: Expr, fromRow: number, fromCol: number, toRow: number, toCol: number): Expr {
   return remapFormula(expr, fromRow, fromCol, toRow, toCol, IDENTITY_MAP, IDENTITY_MAP);
+}
+
+export interface CellRect {
+  readonly r1: number;
+  readonly c1: number;
+  readonly r2: number;
+  readonly c2: number;
+}
+
+/**
+ * Cut-paste of a block: references to cells inside `rect` follow the cells to their new place (shifted by
+ * dr/dc). A range follows only when it lies entirely inside the block; a partially overlapping range stays,
+ * like in Excel and Sheets. The formula itself stays where it is. Returns the same object when nothing changed.
+ */
+export function moveReferences(expr: Expr, row: number, col: number, rect: CellRect, dr: number, dc: number): Expr {
+  const inside = (r: number, c: number): boolean => r >= rect.r1 && r <= rect.r2 && c >= rect.c1 && c <= rect.c2;
+  const store = (a: Axis, abs: number, base: number): Axis => (a.abs ? { abs: true, n: abs } : { abs: false, n: abs - base });
+  const visit = (e: Expr): Expr => {
+    switch (e.t) {
+      case 'ref': {
+        const r = resolveAxis(e.row, row);
+        const c = resolveAxis(e.col, col);
+        if (!inside(r, c)) return e;
+        const nr = r + dr;
+        const nc = c + dc;
+        if (nr < 0 || nc < 0 || nr >= MAX_ROWS || nc >= MAX_COLS) return REF_ERROR;
+        return { t: 'ref', row: store(e.row, nr, row), col: store(e.col, nc, col) };
+      }
+      case 'range': {
+        const ra = resolveAxis(e.r1, row);
+        const rb = resolveAxis(e.r2, row);
+        const ca = resolveAxis(e.c1, col);
+        const cb = resolveAxis(e.c2, col);
+        if (!(inside(Math.min(ra, rb), Math.min(ca, cb)) && inside(Math.max(ra, rb), Math.max(ca, cb)))) return e;
+        const out = [ra + dr, rb + dr, ca + dc, cb + dc];
+        if (out[0] as number < 0 || out[1] as number < 0 || out[2] as number < 0 || out[3] as number < 0) return REF_ERROR;
+        return {
+          t: 'range',
+          r1: store(e.r1, ra + dr, row),
+          r2: store(e.r2, rb + dr, row),
+          c1: store(e.c1, ca + dc, col),
+          c2: store(e.c2, cb + dc, col),
+        };
+      }
+      case 'un': {
+        const inner = visit(e.e);
+        return inner === e.e ? e : { t: 'un', op: e.op, e: inner };
+      }
+      case 'bin': {
+        const l = visit(e.l);
+        const r = visit(e.r);
+        return l === e.l && r === e.r ? e : { t: 'bin', op: e.op, l, r };
+      }
+      case 'call': {
+        const args = e.args.map(visit);
+        return args.every((a, i) => a === e.args[i]) ? e : { t: 'call', name: e.name, args };
+      }
+      default:
+        return e;
+    }
+  };
+  return visit(expr);
 }

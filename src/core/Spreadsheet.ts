@@ -2,7 +2,7 @@ import type { Command } from './commands/Command';
 import { type CellChange, SetCellsCommand } from './commands/SetCellsCommand';
 import { FormulaEngine } from '../formula/engine';
 import { parseFormulaSafe } from '../formula/parser';
-import { deleteMap, IDENTITY_MAP, insertMap, remapFormula } from '../formula/transform';
+import { deleteMap, deleteSetMap, IDENTITY_MAP, insertMap, moveReferences, remapFormula } from '../formula/transform';
 import { printFormula } from '../formula/print';
 import {
   DeleteColsCommand,
@@ -446,46 +446,74 @@ export class Spreadsheet {
     return { values: sorted.slice(0, limit), truncated: sorted.length > limit };
   }
 
-  /** Inserting/deleting rows or columns is only defined on the natural order, so sort and filter must be cleared first. */
-  get canEditStructure(): boolean {
-    return this.mapping.isIdentity;
-  }
-
-  /** Inserts `count` blank rows before `viewRow`. Returns false when refused (view sorted/filtered, or sheet full). */
+  /**
+   * Inserts `count` blank rows before `viewRow` (in a sorted or filtered view the blank rows appear exactly there).
+   * Returns false when refused (bad position, or the sheet would exceed the maximum size).
+   */
   insertRows(viewRow: number, count: number): boolean {
-    if (!this.canEditStructure || count < 1 || viewRow < 0 || viewRow > this.rowCount) return false;
-    if (this.rowCount + count > MAX_ROWS) return false;
+    if (count < 1 || viewRow < 0 || viewRow > this.rowCount) return false;
+    if (this.mapping.dataRowCount + count > MAX_ROWS) return false;
     this.execute(new InsertRowsCommand(viewRow, count));
     return true;
   }
 
   insertCols(viewCol: number, count: number): boolean {
-    if (!this.canEditStructure || count < 1 || viewCol < 0 || viewCol > this.colCount) return false;
+    if (count < 1 || viewCol < 0 || viewCol > this.colCount) return false;
     if (this.colCount + count > MAX_COLS) return false;
     this.execute(new InsertColsCommand(viewCol, count));
     return true;
   }
 
-  /** Deletes `count` rows from `viewRow`; the last remaining row can never be deleted. */
+  /** Deletes `count` visible rows from `viewRow`; the last remaining row can never be deleted. */
   deleteRows(viewRow: number, count: number): boolean {
     const n = Math.min(count, this.rowCount - viewRow);
-    if (!this.canEditStructure || n < 1 || viewRow < 0 || n >= this.rowCount) return false;
+    if (n < 1 || viewRow < 0 || n >= this.rowCount) return false;
     this.execute(new DeleteRowsCommand(viewRow, n));
     return true;
   }
 
   deleteCols(viewCol: number, count: number): boolean {
     const n = Math.min(count, this.colCount - viewCol);
-    if (!this.canEditStructure || n < 1 || viewCol < 0 || n >= this.colCount) return false;
+    if (n < 1 || viewCol < 0 || n >= this.colCount) return false;
     this.execute(new DeleteColsCommand(viewCol, n));
     return true;
   }
 
-  /** Does the work of a StructureCommand: moves cells, rewrites formulas, resizes layouts and grid. */
+  /**
+   * Does the work of a StructureCommand. `at` is a view index. Cells, formulas and the row/column order all move
+   * together. In a sorted or filtered view the data rows touched are not contiguous: inserted rows get fresh data
+   * indices placed at `at` in the order, and deleted rows are exactly the visible ones (hidden rows survive).
+   */
   applyStructure(axis: Axis, kind: 'insert' | 'delete', at: number, count: number): void {
-    const map = kind === 'insert' ? insertMap(at, count) : deleteMap(at, count);
-    const rowMap = axis === 'row' ? map : IDENTITY_MAP;
-    const colMap = axis === 'col' ? map : IDENTITY_MAP;
+    let rowMap = IDENTITY_MAP;
+    let colMap = IDENTITY_MAP;
+    const order = this.mapping.getOrder();
+    let nextOrder: Int32Array | null = order;
+    if (axis === 'col') {
+      colMap = kind === 'insert' ? insertMap(at, count) : deleteMap(at, count);
+    } else if (order === null) {
+      rowMap = kind === 'insert' ? insertMap(at, count) : deleteMap(at, count);
+    } else if (kind === 'insert') {
+      const dataAt = at < order.length ? (order[at] as number) : this.mapping.dataRowCount;
+      rowMap = insertMap(dataAt, count);
+      nextOrder = new Int32Array(order.length + count);
+      let k = 0;
+      const shifted = (e: number): number => (e >= dataAt ? e + count : e);
+      for (let i = 0; i < at; i++) nextOrder[k++] = shifted(order[i] as number);
+      for (let j = 0; j < count; j++) nextOrder[k++] = dataAt + j;
+      for (let i = at; i < order.length; i++) nextOrder[k++] = shifted(order[i] as number);
+    } else {
+      const deleted = Array.from(order.subarray(at, at + count)).sort((a, b) => a - b);
+      rowMap = deleteSetMap(deleted);
+      nextOrder = new Int32Array(order.length - count);
+      let k = 0;
+      for (let i = 0; i < order.length; i++) {
+        if (i >= at && i < at + count) continue;
+        const e = order[i] as number;
+        nextOrder[k++] = rowMap.point(e) as number;
+      }
+    }
+
     this.model.remapCells((row, col, cell) => {
       const nr = rowMap.point(row);
       const nc = colMap.point(col);
@@ -498,7 +526,11 @@ export class Spreadsheet {
     if (kind === 'insert') layout.insertAt(at, count);
     else layout.deleteAt(at, count);
     const delta = kind === 'insert' ? count : -count;
-    this.mapping.resize(this.rowCount + (axis === 'row' ? delta : 0), this.colCount + (axis === 'col' ? delta : 0));
+    this.mapping.reshape(
+      this.mapping.dataRowCount + (axis === 'row' ? delta : 0),
+      this.colCount + (axis === 'col' ? delta : 0),
+      nextOrder,
+    );
     this.dirty.clear();
     this.engine.rebuildAll();
     if (kind === 'insert') {
@@ -595,7 +627,8 @@ export class Spreadsheet {
     const th = target.endRow - target.startRow + 1;
     const tw = target.endCol - target.startCol + 1;
     // The cap stops one paste into a whole-column selection from allocating millions of cells.
-    const tiled = th >= rows && tw >= cols && th % rows === 0 && tw % cols === 0 && th * tw <= MAX_TILED_CELLS;
+    // Tiling means repeating the block, so the selection must be strictly larger than it.
+    const tiled = (th > rows || tw > cols) && th >= rows && tw >= cols && th % rows === 0 && tw % cols === 0 && th * tw <= MAX_TILED_CELLS;
     const height = tiled ? th : rows;
     const width = tiled ? tw : cols;
     const startRow = target.startRow;
@@ -616,6 +649,9 @@ export class Spreadsheet {
         const cell = make((r - startRow) % rows, (c - startCol) % cols, this.model.getCell(dataRow, dataCol), dataRow, dataCol);
         changes.push({ dataRow, dataCol, cell });
       }
+    }
+    if (cutFrom !== null && !tiled && this.mapping.isIdentity) {
+      this.followMovedCells(changes, cutFrom, startRow, startCol, endRow, endCol);
     }
     this.execute(new SetCellsCommand('Paste', changes));
     this.selection.selectCell(startRow, startCol);
@@ -666,6 +702,39 @@ export class Spreadsheet {
     this.selection.selectCell(result.startRow, result.startCol);
     this.selection.extendTo(result.endRow, result.endCol);
     return result;
+  }
+
+  /**
+   * Cut-paste moves cells, so formulas that pointed at them must follow (formulas inside the block as well as
+   * the ones elsewhere). Only for the natural row order, where view and data coordinates coincide.
+   */
+  private followMovedCells(
+    changes: CellChange[],
+    from: ViewRange,
+    toRow: number,
+    toCol: number,
+    toEndRow: number,
+    toEndCol: number,
+  ): void {
+    const dr = toRow - from.startRow;
+    const dc = toCol - from.startCol;
+    if (dr === 0 && dc === 0) return;
+    const rect = { r1: from.startRow, c1: from.startCol, r2: from.endRow, c2: from.endCol };
+    const written = new Set(changes.map((c) => cellKey(c.dataRow, c.dataCol)));
+    for (let i = 0; i < changes.length; i++) {
+      const change = changes[i] as CellChange;
+      const f = change.cell.formula;
+      const insideTarget =
+        change.dataRow >= toRow && change.dataRow <= toEndRow && change.dataCol >= toCol && change.dataCol <= toEndCol;
+      if (f === undefined || !insideTarget) continue;
+      const moved = moveReferences(f, change.dataRow, change.dataCol, rect, dr, dc);
+      if (moved !== f) changes[i] = { ...change, cell: { ...change.cell, formula: moved } };
+    }
+    this.model.forEachCell((row, col, cell) => {
+      if (cell.formula === undefined || written.has(cellKey(row, col))) return;
+      const moved = moveReferences(cell.formula, row, col, rect, dr, dc);
+      if (moved !== cell.formula) changes.push({ dataRow: row, dataCol: col, cell: { ...cell, formula: moved } });
+    });
   }
 
   /** Pastes plain values (text typed into each cell the way the editor would); existing formatting is kept. */

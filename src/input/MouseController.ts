@@ -1,4 +1,6 @@
 import { ResizeCommand } from '../core/commands/ResizeCommand';
+import { formatValue } from '../core/model/format';
+import { fontFor, theme } from '../render/theme';
 import type { AxisLayout } from '../core/layout/AxisLayout';
 import type { FillDirection } from '../core/fill';
 import type { ViewRange } from '../core/selection/SelectionModel';
@@ -342,12 +344,45 @@ export class MouseController {
   private readonly onDoubleClick = (e: MouseEvent): void => {
     const { x, y } = this.local(e);
     if (this.onScrollbar(x, y)) return;
-    const zone = this.locate(x, y).zone;
+    const hit = this.locate(x, y);
+    if (hit.zone === 'colResize') {
+      this.autoFitColumns(hit.col);
+      return;
+    }
+    const zone = hit.zone;
     if (zone !== 'cell') return;
     const { sheet, editor } = this.deps;
     const { selection } = sheet;
     editor.begin('caret', sheet.getEditText(selection.activeRow, selection.activeCol));
   };
+
+  /** Double-click on a column border: each affected column gets the width of its widest content. */
+  private autoFitColumns(viewCol: number): void {
+    const { sheet } = this.deps;
+    const indices = this.resizeTargets('col', viewCol);
+    const sizes = indices.map((c) => this.fitWidth(c));
+    if (indices.every((c, k) => sheet.cols.getSize(c) === sizes[k])) return;
+    sheet.execute(new ResizeCommand('col', indices, sizes));
+  }
+
+  private fitWidth(viewCol: number): number {
+    const { sheet, surface } = this.deps;
+    const dataCol = sheet.mapping.toDataCol(viewCol);
+    const candidates: Array<{ text: string; styleId: number }> = [];
+    sheet.model.forEachCell((dataRow, col, cell) => {
+      if (col !== dataCol || cell.value === null || sheet.mapping.toViewRow(dataRow) < 0) return;
+      candidates.push({ text: formatValue(cell.value, sheet.styles.get(cell.styleId).numberFormat), styleId: cell.styleId });
+    });
+    if (candidates.length === 0) return sheet.cols.defaultSize;
+    // Measuring is the slow part, and only the longest strings can be the widest.
+    candidates.sort((a, b) => b.text.length - a.text.length);
+    let widest = 0;
+    for (const { text, styleId } of candidates.slice(0, 100)) {
+      const style = sheet.styles.get(styleId);
+      widest = Math.max(widest, surface.renderer.measure(fontFor(style.bold, style.italic), text));
+    }
+    return Math.min(600, Math.max(MIN_COL_WIDTH, Math.ceil(widest) + theme.cellPadding * 2 + 2));
+  }
 
   private readonly onContextMenu = (e: MouseEvent): void => {
     const { x, y } = this.local(e);

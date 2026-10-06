@@ -302,3 +302,72 @@ describe('scale', () => {
     expect(performance.now() - t0).toBeLessThan(1500);
   });
 });
+
+describe('cut-paste moves references with the cells', () => {
+  function cutPaste(s: ReturnType<typeof makeSheet>, from: string, to: string): void {
+    const [fr, fc] = from.split(':').map((a) => addr(a)) as [[number, number], [number, number]];
+    const source = { startRow: fr[0], startCol: fr[1], endRow: (fc ?? fr)[0], endCol: (fc ?? fr)[1] };
+    const { rows, cols, cells } = s.readCells(source);
+    s.selection.selectCell(...addr(to));
+    s.pasteMatrix(
+      rows,
+      cols,
+      (i, j, _existing, dataRow, dataCol) => {
+        const cell = cells[i]?.[j] as Cell;
+        if (cell.formula === undefined) return cell;
+        return { ...cell, formula: rebaseFormula(cell.formula, source.startRow + i, source.startCol + j, dataRow, dataCol) };
+      },
+      source,
+    );
+  }
+
+  it('formulas elsewhere that pointed at the moved cells follow them', () => {
+    const s = makeSheet({ A1: 1, A2: 2, B1: '=A1+A2', C1: '=SUM(A1:A2)' });
+    cutPaste(s, 'A1:A2', 'D1');
+    expect(s.getEditText(...addr('B1'))).toBe('=D1+D2');
+    expect(s.getEditText(...addr('C1'))).toBe('=SUM(D1:D2)');
+    expect(value(s, 'B1')).toBe(3);
+    expect(value(s, 'C1')).toBe(3);
+    expect(s.model.hasCell(...addr('A1'))).toBe(false);
+  });
+
+  it('a range only partly inside the block does not move', () => {
+    const s = makeSheet({ A1: 1, A2: 2, A3: 3, B1: '=SUM(A1:A3)' });
+    cutPaste(s, 'A1:A2', 'D1');
+    expect(s.getEditText(...addr('B1'))).toBe('=SUM(A1:A3)');
+  });
+
+  it('absolute references follow too', () => {
+    const s = makeSheet({ A1: 5, B1: '=$A$1*2' });
+    cutPaste(s, 'A1', 'C3');
+    expect(s.getEditText(...addr('B1'))).toBe('=$C$3*2');
+    expect(value(s, 'B1')).toBe(10);
+  });
+
+  it('formulas inside the block keep pointing at what they pointed at, or at moved cells', () => {
+    const s = makeSheet({ A1: 4, A2: '=A1*2', A3: '=Z1+1', Z1: 100 });
+    cutPaste(s, 'A1:A3', 'D1');
+    expect(s.getEditText(...addr('D2'))).toBe('=D1*2'); // pointed at a cell that moved along
+    expect(s.getEditText(...addr('D3'))).toBe('=Z1+1'); // pointed outside the block: unchanged target
+    expect(value(s, 'D2')).toBe(8);
+    expect(value(s, 'D3')).toBe(101);
+  });
+
+  it('is one undo step that restores every formula', () => {
+    const s = makeSheet({ A1: 1, B1: '=A1+1' });
+    cutPaste(s, 'A1', 'D4');
+    s.undo();
+    expect(s.getEditText(...addr('B1'))).toBe('=A1+1');
+    expect(value(s, 'B1')).toBe(2);
+    expect(value(s, 'A1')).toBe(1);
+    expect(s.model.hasCell(...addr('D4'))).toBe(false);
+  });
+
+  it('a plain copy-paste leaves other formulas alone', () => {
+    const s = makeSheet({ A1: 1, B1: '=A1+1' });
+    const { rows, cols, cells } = s.readCells({ startRow: 0, startCol: 0, endRow: 0, endCol: 0 });
+    s.selection.selectCell(...addr('D1'));
+    s.pasteMatrix(rows, cols, (i, j) => cells[i]?.[j] as Cell);
+    expect(s.getEditText(...addr('B1'))).toBe('=A1+1');
+  });
+});

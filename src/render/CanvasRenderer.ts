@@ -49,6 +49,11 @@ export class CanvasRenderer {
     this.invalidate();
   }
 
+  /** Width of `text` in `font`, through the same cache the drawing code uses. */
+  measure(font: string, text: string): number {
+    return this.measurer.measure(font, text);
+  }
+
   /** Coalesces any number of changes into one draw per animation frame. */
   invalidate(): void {
     if (this.frame !== 0) return;

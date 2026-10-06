@@ -41,8 +41,6 @@ export function buildMenuEntries(controller: GridController, openFilter: (viewCo
   const cols = p.endCol - p.startCol + 1;
   const wholeRows = p.startCol === 0 && p.endCol === sheet.colCount - 1;
   const wholeCols = p.startRow === 0 && p.endRow === sheet.rowCount - 1;
-  const structureBlocked = !sheet.canEditStructure;
-  const blockedTitle = structureBlocked ? 'Remove the sort and filters first' : undefined;
   const col = sheet.selection.activeCol;
   const colName = columnLabel(sheet.mapping.toDataCol(col));
   const entries: Entry[] = [
@@ -51,7 +49,7 @@ export function buildMenuEntries(controller: GridController, openFilter: (viewCo
     { label: 'Paste', shortcut: `${MOD}V`, run: () => void controller.clipboard.pasteFromSystem() },
     'separator',
   ];
-  const structure = (label: string, run: () => void): Item => ({ label, run, disabled: structureBlocked, title: blockedTitle });
+  const structure = (label: string, run: () => void): Item => ({ label, run });
   if (!wholeCols) {
     entries.push(
       structure(`Insert ${plural(rows, 'row')} above`, () => sheet.insertRows(p.startRow, rows)),

@@ -11,6 +11,7 @@ interface Before {
   cols: AxisSnapshot;
   rowCount: number;
   colCount: number;
+  order: Int32Array | null;
 }
 
 /**
@@ -38,6 +39,7 @@ export class StructureCommand implements Command {
       cols: sheet.cols.snapshot(),
       rowCount: sheet.mapping.dataRowCount,
       colCount: sheet.mapping.colCount,
+      order: sheet.mapping.getOrder(),
     };
     sheet.applyStructure(this.axis, this.kind, this.at, this.count);
   }
@@ -48,7 +50,7 @@ export class StructureCommand implements Command {
     sheet.model.restoreCells(b.cells);
     sheet.rows.restore(b.rows);
     sheet.cols.restore(b.cols);
-    sheet.mapping.resize(b.rowCount, b.colCount);
+    sheet.mapping.reshape(b.rowCount, b.colCount, b.order);
     sheet.selection.clamp();
     sheet.engine.rebuildAll();
   }

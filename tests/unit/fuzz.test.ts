@@ -125,13 +125,13 @@ function step(rng: Rng, s: Spreadsheet): void {
   if (op < 6) {
     s.setCellInput(rng.int(s.rowCount), rng.int(s.colCount), randomInput(rng, s));
   } else if (op === 6) {
-    if (s.canEditStructure) s.insertRows(rng.int(s.rowCount + 1), 1 + rng.int(3));
+    s.insertRows(rng.int(s.rowCount + 1), 1 + rng.int(3));
   } else if (op === 7) {
-    if (s.canEditStructure) s.deleteRows(rng.int(s.rowCount), 1 + rng.int(3));
+    s.deleteRows(rng.int(s.rowCount), 1 + rng.int(3));
   } else if (op === 8) {
-    if (s.canEditStructure) s.insertCols(rng.int(s.colCount + 1), 1 + rng.int(2));
+    s.insertCols(rng.int(s.colCount + 1), 1 + rng.int(2));
   } else if (op === 9) {
-    if (s.canEditStructure) s.deleteCols(rng.int(s.colCount), 1 + rng.int(2));
+    s.deleteCols(rng.int(s.colCount), 1 + rng.int(2));
   } else if (op === 10) {
     s.sortByColumn(rng.int(s.colCount), rng.next() < 0.5);
   } else if (op === 11) {

@@ -191,14 +191,97 @@ describe('formula references', () => {
   });
 });
 
-describe('sort/filter interaction', () => {
-  it('refuses while a sort or filter is active', () => {
-    const s = makeSheet({ A1: 2, A2: 1 });
+describe('insert and delete in a sorted or filtered view', () => {
+  const colOf = (s: Spreadsheet, rows: number): unknown[] => Array.from({ length: rows }, (_, r) => s.getCellByView(r, 0).value);
+  const dataCol = (s: Spreadsheet, rows: number): unknown[] => Array.from({ length: rows }, (_, r) => s.model.getCell(r, 0).value);
+
+  function sorted(): Spreadsheet {
+    const s = makeSheet({ A1: 3, A2: 1, A3: 2 });
+    s.sortByColumn(0, true); // view: 1, 2, 3  (data rows 1, 2, 0)
+    return s;
+  }
+
+  it('insert puts the blank rows at the clicked position of the view and keeps the sort', () => {
+    const s = sorted();
+    expect(s.insertRows(1, 1)).toBe(true);
+    expect(colOf(s, 5)).toEqual([1, null, 2, 3, null]);
+    expect(s.rowCount).toBe(1001);
+    expect(s.rows.count).toBe(1001);
+    // Data moved physically at the matching data position: the old rows 2.. shifted down.
+    expect(dataCol(s, 4)).toEqual([3, 1, null, 2]);
+    expect(s.viewState.sort).toEqual({ col: 0, asc: true });
+  });
+
+  it('insert at the end of the view appends after the last data row', () => {
+    const s = sorted();
+    s.insertRows(s.rowCount, 2);
+    expect(s.rowCount).toBe(1002);
+    expect(colOf(s, 3)).toEqual([1, 2, 3]);
+    expect(s.mapping.toDataRow(1000)).toBe(1000);
+  });
+
+  it('delete removes exactly the visible rows chosen, and data of the others stays addressable', () => {
+    const s = sorted();
+    expect(s.deleteRows(0, 2)).toBe(true); // deletes the rows showing 1 and 2
+    expect(colOf(s, 1)).toEqual([3]);
+    expect(dataCol(s, 1)).toEqual([3]);
+    expect(s.rowCount).toBe(998);
+    expect(s.mapping.dataRowCount).toBe(998);
+  });
+
+  it('rows hidden by a filter survive deleting the visible ones', () => {
+    const s = new Spreadsheet({ rowCount: 20, colCount: 2 });
+    ['keep', 'a', 'keep', 'b', 'keep'].forEach((v, r) => s.setCellInput(r, 0, v));
+    s.setColumnFilter(0, new Set(['keep']));
+    expect(colOf(s, 3)).toEqual(['keep', 'keep', 'keep']);
+    s.deleteRows(0, 2);
+    s.clearFilters();
+    expect(colOf(s, 3)).toEqual(['a', 'b', 'keep']);
+  });
+
+  it('formulas follow: references into deleted data rows become #REF!, the others are renumbered', () => {
+    const s = makeSheet({ A1: 3, A2: 1, A3: 2, B1: '=A1', B2: '=A2', B3: '=A3' });
+    s.sortByColumn(0, true); // view rows show data rows 1, 2, 0
+    s.deleteRows(0, 1); // deletes the row showing 1, i.e. data row 1 (A2 and B2)
+    const text = (r: number): string => s.getEditText(r, 1);
+    // data rows after deletion: old 0 -> 0, old 2 -> 1
+    expect(s.model.getCell(0, 1).formula).toBeDefined();
+    expect([text(0), text(1)].sort()).toEqual(['=A1', '=A2'].sort());
+    expect(Array.from({ length: 2 }, (_, r) => s.getCellByView(r, 1).value).sort()).toEqual([2, 3]);
+  });
+
+  it('a reference to a deleted row shows #REF!', () => {
+    const s = makeSheet({ A1: 3, A2: 1, A3: 2, C1: '=A2' });
     s.sortByColumn(0, true);
-    expect(s.canEditStructure).toBe(false);
-    expect(s.insertRows(0, 1)).toBe(false);
-    expect(s.deleteRows(0, 1)).toBe(false);
-    s.clearSort();
-    expect(s.insertRows(0, 1)).toBe(true);
+    s.deleteRows(0, 1); // data row 1 (A2) is gone
+    expect(s.model.getCell(0, 2).value).toEqual(e('#REF!'));
+  });
+
+  it('is one undo step that restores the order, the data and the counts exactly', () => {
+    const s = sorted();
+    const before = JSON.stringify([colOf(s, 3), Array.from(s.mapping.getOrder() ?? []), s.rowCount]);
+    s.insertRows(1, 2);
+    s.undo();
+    expect(JSON.stringify([colOf(s, 3), Array.from(s.mapping.getOrder() ?? []), s.rowCount])).toBe(before);
+    s.deleteRows(0, 1);
+    s.undo();
+    expect(JSON.stringify([colOf(s, 3), Array.from(s.mapping.getOrder() ?? []), s.rowCount])).toBe(before);
+    s.redo();
+    expect(colOf(s, 2)).toEqual([2, 3]);
+  });
+
+  it('column operations keep the row order', () => {
+    const s = sorted();
+    s.insertCols(0, 1);
+    expect(s.mapping.isIdentity).toBe(false);
+    expect(Array.from({ length: 3 }, (_, r) => s.getCellByView(r, 1).value)).toEqual([1, 2, 3]);
+    s.deleteCols(0, 1);
+    expect(colOf(s, 3)).toEqual([1, 2, 3]);
+  });
+
+  it('still refuses to delete every row', () => {
+    const s = new Spreadsheet({ rowCount: 3, colCount: 2 });
+    s.sortByColumn(0, true);
+    expect(s.deleteRows(0, 3)).toBe(false);
   });
 });

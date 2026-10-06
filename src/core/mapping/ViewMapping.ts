@@ -18,11 +18,11 @@ export class ViewMapping {
     return this.cols;
   }
 
-  /** Row/column insert and delete change the grid size; they are only allowed with the identity mapping. */
-  resize(rowCount: number, colCount: number): void {
+  /** Row/column insert and delete change the grid size; `order` is the (remapped) row order, or null for identity. */
+  reshape(rowCount: number, colCount: number, order: Int32Array | null): void {
     this.totalRows = rowCount;
     this.cols = colCount;
-    this.order = null;
+    this.order = order;
     this.inverse = null;
   }
 
