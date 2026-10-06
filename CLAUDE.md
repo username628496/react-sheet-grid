@@ -117,7 +117,7 @@ docs/
 ### Tuần 1: Nền tảng
 - [x] Khởi tạo dự án (Vite, TS strict, Vitest, Playwright, trang demo)
 - [x] `SheetModel` thưa + `StyleTable` + unit test
-- [ ] `layout`: kích thước dòng/cột, tra vị trí theo pixel
+- [x] `layout`: kích thước dòng/cột, tra vị trí theo pixel
 - [ ] Canvas renderer: lưới, header, nội dung ô, hỗ trợ DPR
 - [ ] Virtualization + cuộn mượt với 1.000.000 × 100 ô (dữ liệu demo sinh ngẫu nhiên)
 - [ ] Freeze dòng tiêu đề và cột đầu
