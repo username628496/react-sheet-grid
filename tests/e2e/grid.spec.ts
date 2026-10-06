@@ -1049,3 +1049,21 @@ test.describe('fill handle double-click, shortcut help, paste format', () => {
     expect(await darkPixels(2, 1)).toBe(0); // numbers are clipped, never spilled
   });
 });
+
+test.describe('auto-fit row height', () => {
+  test('double-click on the row border restores the default height, in one undo step', async ({ page }) => {
+    await page.evaluate(() => window.__sheet!.rows.setSize(2, 80));
+    const pos = await page.evaluate(() => {
+      const g = window.__grid!;
+      const v = g.surface.viewport;
+      const r = g.surface.host.getBoundingClientRect();
+      return { x: r.left + v.headerWidth / 2, y: r.top + v.rowTop(2) + g.sheet.rows.getSize(2) };
+    });
+    await page.mouse.dblclick(pos.x, pos.y);
+    const defaultHeight = await page.evaluate(() => window.__sheet!.rows.defaultSize);
+    expect(await page.evaluate(() => window.__sheet!.rows.getSize(2))).toBe(defaultHeight);
+    await clickCell(page, 0, 0);
+    await page.keyboard.press(`${mod}+z`);
+    expect(await page.evaluate(() => window.__sheet!.rows.getSize(2))).toBe(80);
+  });
+});

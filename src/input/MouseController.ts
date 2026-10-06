@@ -349,6 +349,10 @@ export class MouseController {
       this.autoFitColumns(hit.col);
       return;
     }
+    if (hit.zone === 'rowResize') {
+      this.autoFitRows(hit.row);
+      return;
+    }
     if (hit.zone === 'fillHandle') {
       // Double-click on the handle fills down as far as the neighbouring column has data.
       const source = this.deps.sheet.selection.primary;
@@ -370,6 +374,15 @@ export class MouseController {
     const sizes = indices.map((c) => this.fitWidth(c));
     if (indices.every((c, k) => sheet.cols.getSize(c) === sizes[k])) return;
     sheet.execute(new ResizeCommand('col', indices, sizes));
+  }
+
+  /** Cells neither wrap nor vary in font size, so the height that fits any row's content is the default height. */
+  private autoFitRows(viewRow: number): void {
+    const { sheet } = this.deps;
+    const indices = this.resizeTargets('row', viewRow);
+    const size = sheet.rows.defaultSize;
+    if (indices.every((r) => sheet.rows.getSize(r) === size)) return;
+    sheet.execute(new ResizeCommand('row', indices, size));
   }
 
   private fitWidth(viewCol: number): number {
