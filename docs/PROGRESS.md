@@ -118,4 +118,4 @@ Chạy `pnpm dev` rồi mở http://localhost:5173/demo/ (thêm `?mode=empty` đ
 - Chạy e2e trên Firefox/WebKit và sửa nếu có khác biệt.
 - Fill ngày tháng.
 - Công thức theo vị trí hiển thị khi sort.
-- Tính toán trong Web Worker cho bảng rất lớn.
+- Tính toán trong Web Worker cho bảng rất lớn. Đã đo (Node, 200k dòng × 2 cột công thức nối chuỗi phụ thuộc + 1 SUM 200k ô): nạp + `recalculateAll` ~0,9s một lần; sửa ô gốc làm tính lại cả 400k ô ~350ms; sửa ô cuối ~18ms. Chưa đáng làm Worker; xem lại nếu có bảng nhiều công thức hơn mức này.
