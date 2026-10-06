@@ -3,7 +3,7 @@
 All notable changes to this project are documented here. The format follows [Keep a Changelog](https://keepachangelog.com/)
 and the project follows [Semantic Versioning](https://semver.org/). Before 1.0.0 minor versions may contain breaking changes.
 
-## [Unreleased]
+## [0.2.0] - 2026-10-06
 
 ### Added
 - Cell borders: Borders menu (all, outer, inner, horizontal, vertical, each side, clear), line style (thin, medium, thick, dashed, dotted) and color; `sheet.applyBorders`.

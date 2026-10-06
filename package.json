@@ -1,6 +1,6 @@
 {
   "name": "react-sheet-grid",
-  "version": "0.1.1",
+  "version": "0.2.0",
   "description": "A Google Sheets-style spreadsheet grid for React: canvas rendering, one million rows at 60fps, formulas, undo/redo, sorting, filtering and Vietnamese IME support.",
   "keywords": [
     "react",

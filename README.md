@@ -4,7 +4,10 @@ A spreadsheet grid for React with the feel of Google Sheets. The grid is drawn o
 rows by a hundred columns scrolls at 60 fps; editing, menus and the toolbar are ordinary DOM on top of it.
 
 - Formulas with relative and absolute references, a dependency graph and incremental recalculation
-- Undo/redo, copy/cut/paste (Excel and Google Sheets compatible), fill handle, sort, filter, insert/delete, hide, freeze, zoom
+- Undo/redo, copy/cut/paste (Excel and Google Sheets compatible), fill handle, paint format, sort, filter, insert/delete, hide, freeze, zoom
+- Formatting: bold/italic/underline/strikethrough, font size, colors, borders, alignment, text wrapping, number formats
+- Find and replace (with accent-insensitive search), CSV import and export
+- Accessible to screen readers and the keyboard
 - Vietnamese (Telex/VNI) and other IME input works while typing in a cell
 - Toolbar, formula bar and status bar included (and usable on their own)
 - English and Vietnamese UI, light and dark theme
