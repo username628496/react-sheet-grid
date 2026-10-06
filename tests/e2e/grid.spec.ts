@@ -450,10 +450,11 @@ test.describe('formatting', () => {
     await expect(page.getByRole('button', { name: 'Bold' })).toHaveAttribute('aria-pressed', 'false');
   });
 
-  test('the number format select changes how numbers display', async ({ page }) => {
+  test('the number format menu changes how numbers display', async ({ page }) => {
     await page.evaluate(() => window.__sheet!.setCellInput(0, 0, '1234.5'));
     await clickCell(page, 0, 0);
-    await page.getByLabel('Number format').selectOption('#,##0.00');
+    await page.getByRole('button', { name: 'More formats' }).click();
+    await page.getByRole('menuitemradio', { name: 'Number (1,234.57)' }).click();
     expect(await page.evaluate(() => window.__sheet!.getDisplayText(0, 0))).toBe('1,234.50');
   });
 
@@ -1243,5 +1244,169 @@ test.describe('sheet size fields', () => {
     await page.keyboard.type('end');
     await page.keyboard.press('Enter');
     expect(await cellValue(page, 1199, 0)).toBe('end');
+  });
+});
+
+test.describe('toolbar actions', () => {
+  type Page = import('@playwright/test').Page;
+  const press = (page: Page, name: string) => page.getByRole('button', { name, exact: true }).click();
+  const choose = (page: Page, name: string | RegExp) =>
+    page.getByRole('menuitem', { name, exact: typeof name === 'string' }).or(page.getByRole('menuitemradio', { name, exact: typeof name === 'string' })).click();
+
+  test('Insert and Delete menus act on the selected rows and columns', async ({ page }) => {
+    await page.evaluate(() => {
+      window.__sheet!.setCellInput(1, 0, 'second');
+      window.__sheet!.setCellInput(0, 1, 'b1');
+    });
+    await clickCell(page, 1, 0);
+    await press(page, 'Insert');
+    await choose(page, 'Insert 1 row above');
+    expect(await cellValue(page, 2, 0)).toBe('second');
+    expect(await page.evaluate(() => window.__sheet!.rowCount)).toBe(1001);
+    await press(page, 'Delete');
+    await choose(page, /Delete row 2/);
+    expect(await cellValue(page, 1, 0)).toBe('second');
+    await clickCell(page, 0, 1);
+    await press(page, 'Insert');
+    await choose(page, 'Insert 1 column left');
+    expect(await cellValue(page, 0, 2)).toBe('b1');
+    await press(page, 'Delete');
+    await choose(page, /Delete column B/);
+    expect(await cellValue(page, 0, 1)).toBe('b1');
+  });
+
+  test('the menu closes on Escape and when the button is pressed again, and focus returns to the grid', async ({ page }) => {
+    await press(page, 'Insert');
+    await expect(page.getByTestId('menu-insert')).toBeVisible();
+    await page.keyboard.press('Escape');
+    await expect(page.getByTestId('menu-insert')).toBeHidden();
+    expect(await page.evaluate(() => document.activeElement === window.__grid!.editor.textarea)).toBe(true);
+    await press(page, 'Insert');
+    await press(page, 'Insert');
+    await expect(page.getByTestId('menu-insert')).toBeHidden();
+  });
+
+  test('Freeze pins rows and columns, keeps them out of a sort, and is saved with the sheet state', async ({ page }) => {
+    await page.evaluate(() => {
+      const s = window.__sheet!;
+      s.setCellInput(0, 0, 'header');
+      s.setCellInput(1, 0, '3');
+      s.setCellInput(2, 0, '1');
+    });
+    await press(page, 'Freeze');
+    await choose(page, '1 row');
+    await press(page, 'Freeze');
+    await choose(page, '2 columns');
+    expect(await page.evaluate(() => [window.__sheet!.frozenRows, window.__sheet!.frozenCols])).toEqual([1, 2]);
+    expect(await page.evaluate(() => [window.__grid!.surface.viewport.frozenRows, window.__grid!.surface.viewport.frozenCols])).toEqual([1, 2]);
+    await clickCell(page, 1, 0);
+    await press(page, 'Sort A to Z');
+    expect(await cellValue(page, 0, 0)).toBe('header');
+    await press(page, 'Freeze');
+    await expect(page.getByRole('menuitemradio', { name: '1 row' })).toHaveAttribute('aria-checked', 'true');
+    await page.keyboard.press('Escape');
+    // Scrolling right keeps the frozen columns where they are.
+    await page.evaluate(() => window.__grid!.surface.scrollBy(300, 0));
+    const left = await page.evaluate(() => window.__grid!.surface.viewport.colLeft(0));
+    expect(left).toBe(await page.evaluate(() => window.__grid!.surface.viewport.headerWidth));
+  });
+
+  test('the Σ menu writes a formula under the selected numbers', async ({ page }) => {
+    await page.evaluate(() => {
+      window.__sheet!.setCellInput(0, 0, '1');
+      window.__sheet!.setCellInput(1, 0, '2');
+      window.__sheet!.setCellInput(2, 0, '4');
+    });
+    const a = await cellCenter(page, 0, 0);
+    const b = await cellCenter(page, 2, 0);
+    await page.mouse.move(a.x, a.y);
+    await page.mouse.down();
+    await page.mouse.move(b.x, b.y, { steps: 3 });
+    await page.mouse.up();
+    await press(page, 'Functions');
+    await choose(page, /AVERAGE/);
+    expect(await page.evaluate(() => window.__sheet!.getEditText(3, 0))).toBe('=AVERAGE(A1:A3)');
+    expect(await cellValue(page, 3, 0)).toBeCloseTo(7 / 3);
+    expect((await selection(page)).active).toEqual([3, 0]);
+  });
+
+  test('currency, percent and decimals buttons', async ({ page }) => {
+    await page.evaluate(() => window.__sheet!.setCellInput(0, 0, '1234.5'));
+    await clickCell(page, 0, 0);
+    await press(page, 'Format as currency');
+    expect(await page.evaluate(() => window.__sheet!.getDisplayText(0, 0))).toBe('$1,234.50');
+    await expect(page.getByRole('button', { name: 'Format as currency' })).toHaveAttribute('aria-pressed', 'true');
+    await press(page, 'Increase decimal places');
+    expect(await page.evaluate(() => window.__sheet!.getDisplayText(0, 0))).toBe('$1,234.500');
+    await press(page, 'Decrease decimal places');
+    await press(page, 'Decrease decimal places');
+    await press(page, 'Decrease decimal places');
+    expect(await page.evaluate(() => window.__sheet!.getDisplayText(0, 0))).toBe('$1,235');
+    await press(page, 'Format as percent');
+    expect(await page.evaluate(() => window.__sheet!.getDisplayText(0, 0))).toBe('123450.00%');
+    await page.getByRole('button', { name: 'More formats' }).click();
+    await choose(page, /Dong/);
+    expect(await page.evaluate(() => window.__sheet!.getDisplayText(0, 0))).toBe('1,235 ₫');
+  });
+
+  test('the filter button opens the dialog for the active column, and the remove button clears the view', async ({ page }) => {
+    await page.evaluate(() => {
+      const s = window.__sheet!;
+      ['a', 'b', 'a'].forEach((v, r) => s.setCellInput(r, 0, v));
+    });
+    await clickCell(page, 0, 0);
+    await expect(page.getByRole('button', { name: 'Remove sort and filters' })).toBeDisabled();
+    await press(page, 'Filter by values');
+    await expect(page.getByTestId('filter-dialog')).toBeVisible();
+    await page.getByRole('checkbox', { name: /^b/ }).uncheck();
+    await page.getByRole('button', { name: 'OK' }).click();
+    expect(await cellValue(page, 1, 0)).toBe('a');
+    await expect(page.getByRole('button', { name: 'Filter by values' })).toHaveAttribute('aria-pressed', 'true');
+    await press(page, 'Remove sort and filters');
+    expect(await cellValue(page, 1, 0)).toBe('b');
+  });
+
+  test('paint format copies the look of the selection onto the next one', async ({ page }) => {
+    await page.evaluate(() => {
+      const s = window.__sheet!;
+      s.setCellInput(0, 0, 'src');
+      s.selection.selectCell(0, 0);
+      s.toggleStyle('bold');
+      s.formatSelection({ background: '#ffeb3b' });
+      s.setCellInput(3, 3, 'target');
+    });
+    await clickCell(page, 0, 0);
+    await press(page, 'Paint format');
+    await expect(page.getByRole('button', { name: 'Paint format' })).toHaveAttribute('aria-pressed', 'true');
+    await clickCell(page, 3, 3);
+    await expect(page.getByRole('button', { name: 'Paint format' })).toHaveAttribute('aria-pressed', 'false');
+    const style = await page.evaluate(() => window.__sheet!.styles.get(window.__sheet!.getCellByView(3, 3).styleId));
+    expect(style).toEqual({ bold: true, background: '#ffeb3b' });
+    expect(await cellValue(page, 3, 3)).toBe('target'); // content untouched
+  });
+
+  test('paint format is cancelled by Escape and does nothing afterwards', async ({ page }) => {
+    await page.evaluate(() => {
+      window.__sheet!.selection.selectCell(0, 0);
+      window.__sheet!.toggleStyle('bold');
+    });
+    await clickCell(page, 0, 0);
+    await press(page, 'Paint format');
+    await page.keyboard.press('Escape');
+    await expect(page.getByRole('button', { name: 'Paint format' })).toHaveAttribute('aria-pressed', 'false');
+    await clickCell(page, 2, 2);
+    expect(await page.evaluate(() => window.__sheet!.styles.get(window.__sheet!.getCellByView(2, 2).styleId))).toEqual({});
+  });
+
+  test('Cut, Copy and Paste buttons use the grid clipboard', async ({ page, browserName }) => {
+    test.skip(browserName !== 'chromium', 'needs the real system clipboard');
+    await page.context().grantPermissions(['clipboard-read', 'clipboard-write']);
+    await page.evaluate(() => window.__sheet!.setCellInput(0, 0, 'carry'));
+    await clickCell(page, 0, 0);
+    await press(page, 'Copy');
+    await clickCell(page, 4, 4);
+    await press(page, 'Paste');
+    await choose(page, 'Paste');
+    await expect.poll(() => cellValue(page, 4, 4)).toBe('carry');
   });
 });

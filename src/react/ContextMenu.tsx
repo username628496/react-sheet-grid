@@ -1,20 +1,11 @@
-import { useEffect, useLayoutEffect, useRef, useState } from 'react';
-import { createPortal } from 'react-dom';
+import { useState } from 'react';
 import { columnLabel } from '../core/model/address';
 import type { GridController } from '../input/GridController';
-import { ChromeStyles } from './chrome';
-import { useMessages, useTheme } from './GridProvider';
+import { useMessages } from './GridProvider';
+import { Menu, type MenuEntry, type MenuItem } from './Menu';
 import type { Messages } from './messages';
 
-interface Item {
-  label: string;
-  shortcut?: string;
-  disabled?: boolean;
-  title?: string;
-  run: () => void;
-}
-
-type Entry = Item | 'separator';
+type Entry = MenuEntry;
 
 const isMac = typeof navigator !== 'undefined' && /Mac|iPhone|iPad/.test(navigator.platform);
 const MOD = isMac ? '⌘' : 'Ctrl+';
@@ -35,7 +26,7 @@ export function buildMenuEntries(controller: GridController, openFilter: (viewCo
     { label: m.paste, shortcut: `${MOD}V`, run: () => void controller.clipboard.pasteFromSystem() },
     'separator',
   ];
-  const structure = (label: string, run: () => void): Item => ({ label, run });
+  const structure = (label: string, run: () => void): MenuItem => ({ label, run });
   if (!wholeCols) {
     entries.push(
       structure(m.insertRowsAbove(rows), () => sheet.insertRows(p.startRow, rows)),
@@ -75,103 +66,19 @@ interface ContextMenuProps {
 }
 
 export function ContextMenu({ controller, x, y, onClose, onFilter }: ContextMenuProps) {
-  const ref = useRef<HTMLDivElement>(null);
   const m = useMessages();
-  const theme = useTheme();
-  const [active, setActive] = useState(-1);
-  const [pos, setPos] = useState({ x, y });
   // Built once per opening: the selection cannot change while the menu is up.
   const [entries] = useState(() => buildMenuEntries(controller, (col) => onFilter(col, x, y), m));
-  const items = entries.filter((e): e is Item => e !== 'separator');
-
-  // Keep the menu on screen.
-  useLayoutEffect(() => {
-    const el = ref.current;
-    if (el === null) return;
-    const r = el.getBoundingClientRect();
-    setPos({ x: Math.max(4, Math.min(x, window.innerWidth - r.width - 4)), y: Math.max(4, Math.min(y, window.innerHeight - r.height - 4)) });
-    el.focus();
-  }, [x, y]);
-
-  useEffect(() => {
-    const close = (e: Event): void => {
-      if (ref.current !== null && e.target instanceof Node && ref.current.contains(e.target)) return;
-      onClose();
-    };
-    window.addEventListener('mousedown', close, true);
-    window.addEventListener('blur', onClose);
-    window.addEventListener('resize', onClose);
-    return () => {
-      window.removeEventListener('mousedown', close, true);
-      window.removeEventListener('blur', onClose);
-      window.removeEventListener('resize', onClose);
-    };
-  }, [onClose]);
-
-  const activate = (item: Item): void => {
-    if (item.disabled === true) return;
-    onClose();
-    // The clipboard commands need keyboard focus back on the grid's textarea.
-    controller.editor.focus();
-    item.run();
-  };
-
-  const onKeyDown = (e: React.KeyboardEvent): void => {
-    const enabled = items.map((it, i) => (it.disabled === true ? -1 : i)).filter((i) => i >= 0);
-    if (e.key === 'Escape') {
-      e.preventDefault();
-      onClose();
-      controller.editor.focus();
-    } else if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
-      e.preventDefault();
-      const pos0 = enabled.indexOf(active);
-      const step = e.key === 'ArrowDown' ? 1 : -1;
-      const next = enabled[(pos0 + step + enabled.length) % enabled.length] ?? enabled[0] ?? -1;
-      setActive(next);
-    } else if (e.key === 'Enter' && active >= 0) {
-      e.preventDefault();
-      const item = items[active];
-      if (item !== undefined) activate(item);
-    }
-  };
-
-  let index = -1;
-  return createPortal(
-    <div
-      ref={ref}
-      role="menu"
-      aria-label={m.cellMenu}
-      tabIndex={-1}
-      data-testid="context-menu"
-      data-rdg-theme={theme}
-      className="rdg-chrome rdg-popup rdg-menu"
-      style={{ left: pos.x, top: pos.y }}
-      onKeyDown={onKeyDown}
-      onContextMenu={(e) => e.preventDefault()}
-    >
-      <ChromeStyles />
-      {entries.map((entry, i) => {
-        if (entry === 'separator') return <div key={`s${i}`} role="separator" className="rdg-menusep" />;
-        index++;
-        const myIndex = index;
-        return (
-          <button
-            key={entry.label}
-            type="button"
-            role="menuitem"
-            className="rdg-menuitem"
-            data-active={active === myIndex}
-            disabled={entry.disabled}
-            title={entry.title}
-            onMouseEnter={() => setActive(myIndex)}
-            onClick={() => activate(entry)}
-          >
-            <span>{entry.label}</span>
-            {entry.shortcut !== undefined && <span className="rdg-hint">{entry.shortcut}</span>}
-          </button>
-        );
-      })}
-    </div>,
-    document.body,
+  return (
+    <Menu
+      entries={entries}
+      x={x}
+      y={y}
+      label={m.cellMenu}
+      testId="context-menu"
+      onClose={onClose}
+      // The clipboard commands need keyboard focus back on the grid's textarea.
+      beforeRun={() => controller.editor.focus()}
+    />
   );
 }

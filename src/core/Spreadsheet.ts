@@ -13,6 +13,7 @@ import {
   type Shift,
 } from '../formula/transform';
 import { printFormula } from '../formula/print';
+import { refToText } from '../formula/refText';
 import {
   DeleteColsCommand,
   DeleteRowsCommand,
@@ -26,7 +27,7 @@ import { History } from './history/History';
 import { AxisLayout } from './layout/AxisLayout';
 import { ViewMapping } from './mapping/ViewMapping';
 import type { Cell, CellValue } from './model/Cell';
-import { formatValue } from './model/format';
+import { formatValue, shiftDecimals } from './model/format';
 import { parseInput } from './model/parseInput';
 import { cellKey, MAX_COLS, MAX_ROWS, SheetModel } from './model/SheetModel';
 import { type Style, StyleTable } from './model/StyleTable';
@@ -86,8 +87,9 @@ export class Spreadsheet {
   readonly selection: SelectionModel;
   private readonly listeners = new Set<Listener>();
   private state: ViewState = EMPTY_VIEW_STATE;
-  /** Rows at the top (e.g. the frozen header) that sorting and filtering never touch. */
-  headerRows = 0;
+  /** Rows and columns kept in view while scrolling. Frozen rows are the header: sorting and filtering never touch them. */
+  frozenRows = 0;
+  frozenCols = 0;
   /** Data keys written since the last recalculation. Only tracked while formulas exist (or one is being added). */
   private readonly dirty = new Set<number>();
 
@@ -115,6 +117,26 @@ export class Spreadsheet {
   recalculateAll(): void {
     this.dirty.clear();
     this.engine.rebuildAll();
+    this.notify();
+  }
+
+  /** Rows at the top that sorting and filtering leave alone (same as the frozen rows). */
+  get headerRows(): number {
+    return this.frozenRows;
+  }
+
+  set headerRows(count: number) {
+    this.frozenRows = count;
+  }
+
+  /** Freezes the first `rows` rows and `cols` columns (clamped so something stays scrollable). Not an undo step. */
+  setFrozen(rows: number, cols: number): void {
+    const clamp = (n: number, count: number): number => Math.max(0, Math.min(count - 1, Number.isFinite(n) ? Math.trunc(n) : 0));
+    const nextRows = clamp(rows, this.rowCount);
+    const nextCols = clamp(cols, this.colCount);
+    if (nextRows === this.frozenRows && nextCols === this.frozenCols) return;
+    this.frozenRows = nextRows;
+    this.frozenCols = nextCols;
     this.notify();
   }
 
@@ -267,6 +289,56 @@ export class Spreadsheet {
       return n;
     }
     return 0;
+  }
+
+  /** "Increase/decrease decimal places": the active cell decides the new pattern, the whole selection gets it. */
+  shiftSelectionDecimals(delta: 1 | -1): void {
+    const { activeRow, activeCol } = this.selection;
+    const active = this.getCellByView(activeRow, activeCol);
+    const sample = typeof active.value === 'number' ? active.value : null;
+    const format = shiftDecimals(this.styles.get(active.styleId).numberFormat, delta, sample);
+    this.formatSelection({ numberFormat: format }, 'Number format');
+  }
+
+  /**
+   * The toolbar's Σ: writes `=NAME(range)` below the selected numbers (one formula per column), or to the right of a
+   * selected row. With a single cell it sums the numbers right above (else right to the left) into that cell, which
+   * is what Excel's AutoSum does. Not offered while the view is sorted or filtered, where a view range is not a
+   * data range. Returns false when nothing was written.
+   */
+  insertFunction(name: 'SUM' | 'AVERAGE' | 'COUNT' | 'MIN' | 'MAX'): boolean {
+    if (!this.mapping.isIdentity) return false;
+    const p = this.selection.primary;
+    const changes: CellChange[] = [];
+    const put = (row: number, col: number, from: [number, number], to: [number, number]): void => {
+      const old = this.model.getCell(row, col);
+      changes.push({ dataRow: row, dataCol: col, cell: this.cellFromInput(`=${name}(${refToText(from[0], from[1], to[0], to[1])})`, row, col, old.styleId) });
+    };
+    const isNumber = (r: number, c: number): boolean => typeof this.model.getCell(r, c).value === 'number';
+    let target: { row: number; col: number };
+
+    if (p.startRow === p.endRow && p.startCol === p.endCol) {
+      const { startRow: r, startCol: c } = p;
+      let top = r;
+      while (top > 0 && isNumber(top - 1, c)) top--;
+      let left = c;
+      while (left > 0 && isNumber(r, left - 1)) left--;
+      if (top < r) put(r, c, [top, c], [r - 1, c]);
+      else if (left < c) put(r, c, [r, left], [r, c - 1]);
+      else put(r, c, [r, c], [r, c]); // nothing to sum: leave a formula the user can adjust
+      target = { row: r, col: c };
+    } else if (p.startRow === p.endRow) {
+      if (p.endCol + 1 >= this.colCount) return false;
+      put(p.startRow, p.endCol + 1, [p.startRow, p.startCol], [p.endRow, p.endCol]);
+      target = { row: p.startRow, col: p.endCol + 1 };
+    } else {
+      if (p.endRow + 1 >= this.rowCount) return false;
+      for (let c = p.startCol; c <= p.endCol; c++) put(p.endRow + 1, c, [p.startRow, c], [p.endRow, c]);
+      target = { row: p.endRow + 1, col: p.startCol };
+    }
+    this.execute(new SetCellsCommand(name, changes));
+    this.selection.selectCell(target.row, target.col);
+    return true;
   }
 
   /** Mod+\: back to the default look; values and formulas stay. */

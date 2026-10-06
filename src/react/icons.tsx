@@ -17,6 +17,17 @@ const PATHS: Record<string, string[]> = {
   alignCenter: ['M3 6h18', 'M7 10h10', 'M3 14h18', 'M7 18h10'],
   alignRight: ['M3 6h18', 'M9 10h12', 'M3 14h18', 'M9 18h12'],
   close: ['M6 6l12 12', 'M18 6 6 18'],
+  chevron: ['m6 9 6 6 6-6'],
+  paintFormat: ['M18.4 2.6 14 7l-1.6-1.6a2 2 0 0 0-2.8 0L8 7l9 9 1.6-1.6a2 2 0 0 0 0-2.8L17 10l4.4-4.4a2.1 2.1 0 1 0-3-3Z', 'M9 8c-2 3-4 3.5-7 4l8 10c2-1 6-5 6-7', 'M14.5 17.5 4.5 15'],
+  copy: ['M9 9h11v11H9z', 'M5 15H4V4h11v1'],
+  cut: ['M6 9a3 3 0 1 0 0-6 3 3 0 0 0 0 6z', 'M6 21a3 3 0 1 0 0-6 3 3 0 0 0 0 6z', 'M20 4 8.1 15.9', 'M14.5 14.5 20 20', 'M8.1 8.1 12 12'],
+  paste: ['M8 4h8v3H8z', 'M16 5h2a2 2 0 0 1 2 2v13a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V7a2 2 0 0 1 2-2h2'],
+  filter: ['M3 4h18l-7 8.5V19l-4 2v-8.5z'],
+  clearFilter: ['M3 4h13l-5 6.2', 'M10 12.5V19l4-2', 'M17 14l5 5', 'M22 14l-5 5'],
+  insert: ['M12 5v14', 'M5 12h14'],
+  remove: ['M5 12h14'],
+  freeze: ['M3 4h18v16H3z', 'M3 10h18', 'M9 4v16'],
+  sigma: ['M18 5H6l6.5 7L6 19h12'],
 };
 
 export type IconName = keyof typeof PATHS;

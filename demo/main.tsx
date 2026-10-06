@@ -168,7 +168,7 @@ function Page({ sheet, grid, notice, saveStatus, locale, theme, onGrid, onLocale
     : { saving: 'Saving…', saved: 'Saved', error: 'Could not save', reset: 'Reset', sample: 'Load 1M × 100 sample', language: 'Language', theme: 'Theme', auto: 'Auto', light: 'Light', dark: 'Dark' };
   return (
     <div style={{ height: '100%', display: 'flex', flexDirection: 'column', background: resolved === 'dark' ? '#1b1d21' : '#fff' }}>
-      <Toolbar sheet={sheet} onAction={() => window.__grid?.editor.focus()} />
+      <Toolbar sheet={sheet} grid={grid} onAction={() => window.__grid?.editor.focus()} />
       <FormulaBar sheet={sheet} grid={grid} />
       <div style={{ flex: 1, minHeight: 0 }}>
         <DataGrid

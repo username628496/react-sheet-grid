@@ -27,6 +27,8 @@ export interface SheetSnapshot {
   styles: Style[];
   /** [dataRow, dataCol, styleId, value] or, for a formula, [dataRow, dataCol, styleId, null, formulaText]. */
   cells: Array<[number, number, number, CellValue | null] | [number, number, number, null, string]>;
+  frozenRows?: number;
+  frozenCols?: number;
   /** viewRow -> dataRow when sorted/filtered/restructured there, otherwise null (natural order). */
   order: number[] | null;
   sort: { col: number; asc: boolean } | null;
@@ -68,6 +70,8 @@ export function serializeSheet(sheet: Spreadsheet): SheetSnapshot {
     colSizes: pairs(sheet.cols.snapshot()),
     styles,
     cells,
+    frozenRows: sheet.frozenRows,
+    frozenCols: sheet.frozenCols,
     order: order === null ? null : Array.from(order),
     sort: sort === null ? null : { col: sort.col, asc: sort.asc },
     filters: [...filters].map(([col, allowed]): [number, string[]] => [col, [...allowed]]),
@@ -125,6 +129,7 @@ export function deserializeSheet(data: unknown, options: Omit<SpreadsheetOptions
   const viewRows = order === null ? rowCount : order.length;
   sheet.rows.restore({ count: viewRows, ...readSizes(d.rowSizes, 'rowSizes', viewRows) });
   sheet.cols.restore({ count: colCount, ...readSizes(d.colSizes, 'colSizes', colCount) });
+  sheet.setFrozen(int(d.frozenRows ?? 0, 'frozenRows', 0, rowCount), int(d.frozenCols ?? 0, 'frozenCols', 0, colCount));
   sheet.recalculateAll();
   return sheet;
 }

@@ -4,6 +4,7 @@ import type { GridSurface } from '../render/GridSurface';
 import { drawCopyMarquee, drawFormulaRef } from '../render/layers/selectionLayer';
 import { ClipboardController } from './ClipboardController';
 import { EditorController } from './EditorController';
+import { FormatPainter } from './FormatPainter';
 import { KeyboardController } from './KeyboardController';
 import { MouseController } from './MouseController';
 
@@ -13,8 +14,11 @@ export class GridController {
   readonly mouse: MouseController;
   readonly keyboard: KeyboardController;
   readonly clipboard: ClipboardController;
+  readonly painter: FormatPainter;
   /** Set by the host to show its shortcut help (Mod+/). */
   onShowShortcuts: (() => void) | null = null;
+  /** Set by the host to open its "filter by values" dialog for a column, anchored at viewport coordinates. */
+  onOpenFilter: ((viewCol: number, x: number, y: number) => void) | null = null;
   private readonly unsubscribe: Array<() => void> = [];
 
   constructor(
@@ -25,6 +29,7 @@ export class GridController {
     this.editor = new EditorController(textarea, sheet, surface);
     this.mouse = new MouseController({ sheet, surface, editor: this.editor });
     this.clipboard = new ClipboardController(sheet, this.editor);
+    this.painter = new FormatPainter(sheet, surface);
     this.keyboard = new KeyboardController({ sheet, surface, editor: this.editor, clipboard: this.clipboard, showShortcuts: () => this.onShowShortcuts?.() });
 
     surface.renderer.highlight = {
@@ -64,6 +69,7 @@ export class GridController {
     this.editor.destroy();
     this.keyboard.destroy();
     this.clipboard.destroy();
+    this.painter.destroy();
     this.surface.renderer.overlay = null;
     this.surface.renderer.highlight = null;
   }

@@ -12,6 +12,7 @@ import { ShortcutsDialog } from './ShortcutsDialog';
 
 export interface DataGridProps {
   sheet: Spreadsheet;
+  /** Initial frozen panes. They live in the sheet afterwards (and can be changed from the toolbar). */
   frozenRows?: number;
   frozenCols?: number;
   className?: string;
@@ -24,7 +25,7 @@ export interface DataGridProps {
  * Thin React shell. No cell data or scroll position goes through React state:
  * the surface draws imperatively and React only mounts/unmounts it.
  */
-export function DataGrid({ sheet, frozenRows = 0, frozenCols = 0, className, style, onReady }: DataGridProps) {
+export function DataGrid({ sheet, frozenRows, frozenCols, className, style, onReady }: DataGridProps) {
   const mountRef = useRef<HTMLDivElement>(null);
   const editorRef = useRef<HTMLTextAreaElement>(null);
   const colorTheme = useTheme();
@@ -49,11 +50,6 @@ export function DataGrid({ sheet, frozenRows = 0, frozenCols = 0, className, sty
     controller?.editor.reposition();
   }, [colorTheme, controller]);
 
-  // Frozen rows act as the header: sort and filter leave them alone.
-  useEffect(() => {
-    sheet.headerRows = frozenRows;
-  }, [sheet, frozenRows]);
-
   useEffect(() => {
     const mount = mountRef.current;
     const textarea = editorRef.current;
@@ -62,6 +58,7 @@ export function DataGrid({ sheet, frozenRows = 0, frozenCols = 0, className, sty
     const ctrl = new GridController(surface, sheet, textarea);
     ctrl.mouse.onContext = (x, y) => setMenu({ x, y });
     ctrl.onShowShortcuts = () => setHelp(true);
+    ctrl.onOpenFilter = (col, x, y) => setFilter({ col, x, y });
     setController(ctrl);
     onReady?.(ctrl);
     return () => {

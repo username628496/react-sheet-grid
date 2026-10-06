@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { cellAddress, columnLabel, parseColumnLabel } from '../../src/core/model/address';
-import { defaultAlign, formatValue } from '../../src/core/model/format';
+import { defaultAlign, formatValue, shiftDecimals } from '../../src/core/model/format';
 import { parseInput } from '../../src/core/model/parseInput';
 
 describe('formatValue', () => {
@@ -75,5 +75,52 @@ describe('column addresses', () => {
     expect(parseColumnLabel('1')).toBe(-1);
     expect(cellAddress(0, 0)).toBe('A1');
     expect(cellAddress(9, 27)).toBe('AB10');
+  });
+});
+
+describe('number format patterns', () => {
+  it.each([
+    [1234.5, '0.0', '1234.5'],
+    [1234.5, '0.000', '1234.500'],
+    [1234567.891, '#,##0.0', '1,234,567.9'],
+    [0.256, '0.0%', '25.6%'],
+    [-0.256, '0%', '-26%'],
+    [1234.5, '€#,##0.00', '€1,234.50'],
+    [-1234.5, '£#,##0', '-£1,235'],
+    [1234567, '#,##0 ₫', '1,234,567 ₫'],
+    [1234.5, '#,##0.00 USD', '1,234.50 USD'],
+    [-0.001, '0.00', '0.00'], // no "-0.00"
+    [-0.001, '$#,##0.00', '$0.00'],
+    [5, '0.0000000000', '5.0000000000'],
+  ])('%s with %s', (n, format, expected) => {
+    expect(formatValue(n, format)).toBe(expected);
+  });
+
+  it('an unknown pattern falls back to the automatic format', () => {
+    expect(formatValue(1.5, 'nonsense')).toBe('1.5');
+    expect(formatValue(1.5, '0.00000000000')).toBe('1.5'); // more than the supported decimals
+  });
+});
+
+describe('shiftDecimals', () => {
+  it('moves the decimals of an existing pattern and keeps the rest of it', () => {
+    expect(shiftDecimals('0', 1, 3)).toBe('0.0');
+    expect(shiftDecimals('#,##0.00', -1, 3)).toBe('#,##0.0');
+    expect(shiftDecimals('$#,##0.00', -1, 3)).toBe('$#,##0.0');
+    expect(shiftDecimals('0.0%', 1, 0.5)).toBe('0.00%');
+    expect(shiftDecimals('#,##0 ₫', 1, 3)).toBe('#,##0.0 ₫');
+  });
+
+  it('never goes below zero or above the maximum', () => {
+    expect(shiftDecimals('0', -1, 3)).toBe('0');
+    expect(shiftDecimals('0.0000000000', 1, 3)).toBe('0.0000000000');
+  });
+
+  it('starts from what the automatic format shows', () => {
+    expect(shiftDecimals(undefined, 1, 1.5)).toBe('0.00');
+    expect(shiftDecimals(undefined, 1, 3)).toBe('0.0');
+    expect(shiftDecimals(undefined, -1, 3.14)).toBe('0.0');
+    expect(shiftDecimals(undefined, 1, null)).toBe('0.0');
+    expect(shiftDecimals('nonsense', 1, 2.5)).toBe('0.00');
   });
 });

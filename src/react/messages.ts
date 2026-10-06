@@ -38,6 +38,36 @@ export interface Messages {
   formatNumber: (example: string) => string;
   formatPercent: (example: string) => string;
   formatCurrency: (example: string) => string;
+  groupClipboard: string;
+  groupNumber: string;
+  groupStructure: string;
+  pasteValues: string;
+  pasteFormat: string;
+  paintFormat: string;
+  filter: string;
+  removeSortAndFilters: string;
+  formatCurrencyButton: string;
+  formatPercentButton: string;
+  decreaseDecimals: string;
+  increaseDecimals: string;
+  moreFormats: string;
+  formatEuro: (example: string) => string;
+  formatDong: (example: string) => string;
+  insert: string;
+  delete: string;
+  freeze: string;
+  noFrozenRows: string;
+  noFrozenCols: string;
+  freezeRows: (n: number) => string;
+  freezeCols: (n: number) => string;
+  freezeUpToRow: (n: number) => string;
+  freezeUpToCol: (col: string) => string;
+  functions: string;
+  fnSum: string;
+  fnAverage: string;
+  fnCount: string;
+  fnMax: string;
+  fnMin: string;
   rowsLabel: string;
   colsLabel: string;
   rowCount: string;
@@ -116,6 +146,36 @@ const en: Messages = {
   formatNumber: (example) => `Number (${example})`,
   formatPercent: (example) => `Percent (${example})`,
   formatCurrency: (example) => `Currency (${example})`,
+  groupClipboard: 'Clipboard',
+  groupNumber: 'Number',
+  groupStructure: 'Rows and columns',
+  pasteValues: 'Paste values only',
+  pasteFormat: 'Paste format only',
+  paintFormat: 'Paint format',
+  filter: 'Filter by values',
+  removeSortAndFilters: 'Remove sort and filters',
+  formatCurrencyButton: 'Format as currency',
+  formatPercentButton: 'Format as percent',
+  decreaseDecimals: 'Decrease decimal places',
+  increaseDecimals: 'Increase decimal places',
+  moreFormats: 'More formats',
+  formatEuro: (example) => `Euro (${example})`,
+  formatDong: (example) => `Dong (${example})`,
+  insert: 'Insert',
+  delete: 'Delete',
+  freeze: 'Freeze',
+  noFrozenRows: 'No frozen rows',
+  noFrozenCols: 'No frozen columns',
+  freezeRows: (n) => `${n === 1 ? '1 row' : `${n} rows`}`,
+  freezeCols: (n) => `${n === 1 ? '1 column' : `${n} columns`}`,
+  freezeUpToRow: (n) => `Up to row ${n}`,
+  freezeUpToCol: (col) => `Up to column ${col}`,
+  functions: 'Functions',
+  fnSum: 'SUM',
+  fnAverage: 'AVERAGE',
+  fnCount: 'COUNT',
+  fnMax: 'MAX',
+  fnMin: 'MIN',
   rowsLabel: 'Rows',
   colsLabel: 'Cols',
   rowCount: 'Row count',
@@ -243,6 +303,36 @@ const vi: Messages = {
   formatNumber: (example) => `Số (${example})`,
   formatPercent: (example) => `Phần trăm (${example})`,
   formatCurrency: (example) => `Tiền tệ (${example})`,
+  groupClipboard: 'Bộ nhớ tạm',
+  groupNumber: 'Số',
+  groupStructure: 'Dòng và cột',
+  pasteValues: 'Chỉ dán giá trị',
+  pasteFormat: 'Chỉ dán định dạng',
+  paintFormat: 'Sao chép định dạng',
+  filter: 'Lọc theo giá trị',
+  removeSortAndFilters: 'Bỏ sắp xếp và bộ lọc',
+  formatCurrencyButton: 'Định dạng tiền tệ',
+  formatPercentButton: 'Định dạng phần trăm',
+  decreaseDecimals: 'Giảm số thập phân',
+  increaseDecimals: 'Tăng số thập phân',
+  moreFormats: 'Định dạng khác',
+  formatEuro: (example) => `Euro (${example})`,
+  formatDong: (example) => `Đồng (${example})`,
+  insert: 'Chèn',
+  delete: 'Xóa',
+  freeze: 'Cố định',
+  noFrozenRows: 'Không cố định dòng',
+  noFrozenCols: 'Không cố định cột',
+  freezeRows: (n) => `${n} dòng`,
+  freezeCols: (n) => `${n} cột`,
+  freezeUpToRow: (n) => `Đến dòng ${n}`,
+  freezeUpToCol: (col) => `Đến cột ${col}`,
+  functions: 'Hàm',
+  fnSum: 'SUM (tổng)',
+  fnAverage: 'AVERAGE (trung bình)',
+  fnCount: 'COUNT (đếm số)',
+  fnMax: 'MAX (lớn nhất)',
+  fnMin: 'MIN (nhỏ nhất)',
   rowsLabel: 'Dòng',
   colsLabel: 'Cột',
   rowCount: 'Số dòng',

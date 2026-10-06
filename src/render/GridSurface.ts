@@ -34,8 +34,11 @@ export class GridSurface {
     options: SurfaceOptions = {},
   ) {
     this.viewport = new Viewport(sheet.rows, sheet.cols);
-    this.viewport.frozenRows = options.frozenRows ?? 0;
-    this.viewport.frozenCols = options.frozenCols ?? 0;
+    if (options.frozenRows !== undefined || options.frozenCols !== undefined) {
+      sheet.setFrozen(options.frozenRows ?? sheet.frozenRows, options.frozenCols ?? sheet.frozenCols);
+    }
+    this.viewport.frozenRows = sheet.frozenRows;
+    this.viewport.frozenCols = sheet.frozenCols;
     // Wide enough for the largest row number plus padding.
     this.viewport.headerWidth = Math.max(46, String(sheet.rowCount).length * 8 + 22);
 
@@ -56,10 +59,22 @@ export class GridSurface {
     this.resizeObserver = new ResizeObserver(() => this.measure());
     this.resizeObserver.observe(mount);
     this.unsubscribeSheet = sheet.subscribe(() => {
+      this.syncFrozen();
       this.updateExtent();
       this.renderer.invalidate();
     });
     this.measure();
+  }
+
+  // The frozen counts live in the sheet (they are part of the document); the viewport only mirrors them.
+  private syncFrozen(): void {
+    const vp = this.viewport;
+    if (vp.frozenRows === this.sheet.frozenRows && vp.frozenCols === this.sheet.frozenCols) return;
+    vp.frozenRows = this.sheet.frozenRows;
+    vp.frozenCols = this.sheet.frozenCols;
+    vp.clampScroll();
+    this.applyScrollToHost();
+    this.emitView();
   }
 
   /** Called whenever scroll position or size changes (used to reposition the cell editor). */

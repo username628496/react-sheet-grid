@@ -117,7 +117,7 @@ test.describe('language and theme', () => {
         const y = Math.round((vp.rowTop(6) + 8) * dpr);
         return Array.from(canvas.getContext('2d')!.getImageData(x, y, 1, 1).data).slice(0, 3);
       });
-    expect(await background()).toEqual([255, 255, 255]);
+    await expect.poll(background).toEqual([255, 255, 255]); // the first paint may still be on its way
     await page.getByLabel('Theme').selectOption('dark');
     await expect.poll(background).toEqual([0x1b, 0x1d, 0x21]);
     await expect(page.getByTestId('toolbar')).toHaveCSS('background-color', 'rgb(35, 38, 43)');
