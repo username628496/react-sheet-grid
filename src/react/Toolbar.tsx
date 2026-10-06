@@ -1,5 +1,6 @@
 import { type KeyboardEvent, type ReactNode, useEffect, useRef, useState, useSyncExternalStore } from 'react';
 import type { Spreadsheet } from '../core/Spreadsheet';
+import { type Border, DEFAULT_BORDER } from '../core/model/borders';
 import { DEFAULT_FONT_SIZE, MAX_FONT_SIZE, MIN_FONT_SIZE } from '../core/model/font';
 import { parseNumberFormat } from '../core/model/format';
 import type { HorizontalAlign, Style } from '../core/model/StyleTable';
@@ -15,6 +16,7 @@ import {
   functionEntries,
   insertEntries,
   fileEntries,
+  borderEntries,
   type MenuId,
   valignEntries,
   wrapEntries,
@@ -98,11 +100,15 @@ export function Toolbar({ sheet, grid = null, onAction }: ToolbarProps) {
   const { canUndo, canRedo, style, rows, cols, painting, viewActive, columnFiltered, zoom, readOnly } = JSON.parse(raw) as ToolbarState;
   const [notice, setNotice] = useState<string | null>(null);
   const [menu, setMenu] = useState<OpenMenu | null>(null);
+  // What the Borders menu draws next: remembered between uses, like the pen in a paint program.
+  const [borderChoice, setBorderChoice] = useState<Border>(DEFAULT_BORDER);
   const lastClosed = useRef<{ id: MenuId; at: number } | null>(null);
   const fileInput = useRef<HTMLInputElement>(null);
   // Things the sheet refused to do (an oversized paste) are announced in the same place as the size notice.
   useEffect(
-    () => sheet.subscribeNotices((n) => setNotice(n.code === 'exportTooLarge' ? m.exportTooLarge(n.limit) : m.pasteTooLarge(n.limit))),
+    () => sheet.subscribeNotices((n) =>
+        setNotice(n.code === 'exportTooLarge' ? m.exportTooLarge(n.limit) : n.code === 'formatTooLarge' ? m.formatTooLarge(n.limit) : m.pasteTooLarge(n.limit)),
+      ),
     [sheet, m],
   );
   useEffect(() => {
@@ -139,7 +145,7 @@ export function Toolbar({ sheet, grid = null, onAction }: ToolbarProps) {
     m.undo, m.redo, m.paintFormat, m.clearFormatting, m.cut, m.formatCurrencyButton, m.formatPercentButton, m.decreaseDecimals,
     m.increaseDecimals, m.decreaseFontSize, m.increaseFontSize, m.bold, m.italic, m.underline, m.strike, m.alignLeft, m.alignCenter, m.alignRight,
   ]);
-  const mutatingMenus: ReadonlySet<MenuId> = new Set<MenuId>(['paste', 'numberFormat', 'insert', 'delete', 'functions', 'wrap', 'valign']);
+  const mutatingMenus: ReadonlySet<MenuId> = new Set<MenuId>(['paste', 'numberFormat', 'insert', 'delete', 'functions', 'wrap', 'valign', 'borders']);
 
   const button = (
     icon: IconName | ReactNode,
@@ -200,6 +206,8 @@ export function Toolbar({ sheet, grid = null, onAction }: ToolbarProps) {
         return deleteEntries(sheet, m);
       case 'zoom':
         return grid === null ? [] : zoomEntries(grid);
+      case 'borders':
+        return borderEntries(sheet, m, borderChoice, setBorderChoice);
       case 'wrap':
         return wrapEntries(sheet, m);
       case 'valign':
@@ -224,6 +232,7 @@ export function Toolbar({ sheet, grid = null, onAction }: ToolbarProps) {
     functions: m.functions,
     zoom: m.zoom,
     file: m.file,
+    borders: m.borders,
     wrap: m.textWrapping,
     valign: m.verticalAlign,
   };
@@ -346,6 +355,16 @@ export function Toolbar({ sheet, grid = null, onAction }: ToolbarProps) {
             active={style.background !== undefined}
             onPick={(background) => run(() => sheet.formatSelection({ background }, 'Fill color'))}
             onClear={() => run(() => sheet.formatSelection({ background: undefined }, 'Fill color'))}
+          />
+          {menuButton('borders', 'borders', m.borders, undefined)}
+          <ColorButton
+            icon="borderColor"
+            title={m.borderColor}
+            disabled={readOnly}
+            value={borderChoice.color}
+            active={false}
+            onPick={(color) => setBorderChoice({ ...borderChoice, color })}
+            onClear={() => setBorderChoice({ ...borderChoice, color: DEFAULT_BORDER.color })}
           />
         </div>
         <span className="rdg-sep" aria-hidden />

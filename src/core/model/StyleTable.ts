@@ -1,3 +1,5 @@
+import { type Borders, BORDER_SIDES, canonicalBorder } from './borders';
+
 export type HorizontalAlign = 'left' | 'center' | 'right';
 
 export type TextWrap = 'overflow' | 'wrap' | 'clip';
@@ -18,6 +20,8 @@ export interface Style {
   readonly wrap?: TextWrap;
   /** Where the text sits in a taller cell (default middle). */
   readonly valign?: VerticalAlign;
+  /** Lines around the cell. Each side stands on its own; adjacent cells can both draw the edge between them. */
+  readonly borders?: Borders;
 }
 
 export const DEFAULT_STYLE_ID = 0;
@@ -31,6 +35,18 @@ function styleKey(style: Style): string {
 }
 
 const EMPTY_STYLE: Style = Object.freeze({});
+
+// Nested borders must have a fixed key order for the intern key to be a function of their content.
+function normalize(style: Style): Style {
+  const borders = style.borders;
+  if (borders === undefined) return style;
+  const next: { -readonly [K in keyof Borders]: Borders[K] } = {};
+  for (const side of BORDER_SIDES) {
+    const b = borders[side];
+    if (b !== undefined) next[side] = canonicalBorder(b);
+  }
+  return { ...style, borders: Object.keys(next).length === 0 ? undefined : next };
+}
 
 /**
  * Shared style registry: cells store only a `styleId`, so a million cells
@@ -46,6 +62,7 @@ export class StyleTable {
   }
 
   intern(style: Style): number {
+    style = normalize(style);
     const key = styleKey(style);
     const existing = this.idByKey.get(key);
     if (existing !== undefined) return existing;

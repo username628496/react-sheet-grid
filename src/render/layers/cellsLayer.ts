@@ -1,5 +1,6 @@
 import { DEFAULT_FONT_SIZE, lineHeightFor } from '../../core/model/font';
 import { wrapLines } from '../../core/layout/wrap';
+import { BORDER_SIDES, type Borders } from '../../core/model/borders';
 import { DEFAULT_STYLE_ID, type Style, type VerticalAlign } from '../../core/model/StyleTable';
 import { defaultAlign, formatValue } from '../../core/model/format';
 import type { Spreadsheet } from '../../core/Spreadsheet';
@@ -54,6 +55,54 @@ export function drawCellBackgrounds(
 
 const overflow: Overflow = { left: 0, right: 0 }; // reused: no allocation per cell
 
+// Dash patterns are module constants: the render loop must not allocate.
+const DASHED: number[] = [4, 3];
+const DOTTED: number[] = [1, 2];
+const NO_DASH: number[] = [];
+
+/**
+ * Draws the borders of one cell on top of the grid lines. A border sits on the boundary between cells, on the same
+ * pixels as the grid line it covers (grid lines are the 1px column ending at floor(edge)), widened symmetrically for
+ * thicker styles. Solid lines are filled rectangles, so they are crisp at any zoom; dashes need a stroke.
+ */
+function drawBorders(ctx: CanvasRenderingContext2D, borders: Borders, x: number, y: number, w: number, h: number): void {
+  const left = Math.floor(x);
+  const right = Math.floor(x + w);
+  const top = Math.floor(y);
+  const bottom = Math.floor(y + h);
+  for (const side of BORDER_SIDES) {
+    const b = borders[side];
+    if (b === undefined) continue;
+    const vertical = side === 'left' || side === 'right';
+    const edge = side === 'left' ? left : side === 'right' ? right : side === 'top' ? top : bottom;
+    const start = edge - 1 - Math.floor((b.width - 1) / 2); // first pixel of the line across the boundary
+    const from = vertical ? top - 1 : left - 1;
+    const length = vertical ? bottom - top + 1 : right - left + 1;
+    ctx.fillStyle = b.color;
+    if (b.style === 'solid') {
+      if (vertical) ctx.fillRect(start, from, b.width, length);
+      else ctx.fillRect(from, start, length, b.width);
+      continue;
+    }
+    ctx.save();
+    ctx.strokeStyle = b.color;
+    ctx.lineWidth = b.width;
+    ctx.setLineDash(b.style === 'dashed' ? DASHED : DOTTED);
+    ctx.beginPath();
+    const mid = start + b.width / 2;
+    if (vertical) {
+      ctx.moveTo(mid, from);
+      ctx.lineTo(mid, from + length);
+    } else {
+      ctx.moveTo(from, mid);
+      ctx.lineTo(from + length, mid);
+    }
+    ctx.stroke();
+    ctx.setLineDash(NO_DASH);
+    ctx.restore();
+  }
+}
+
 // Wrapping a string means measuring several candidate lines; the result only depends on font, width and text, so it is
 // remembered. The map is emptied when it grows large instead of tracking recency: cheap, and a miss just recomputes.
 const WRAP_CACHE_LIMIT = 5000;
@@ -104,6 +153,10 @@ export function drawCellText(
     for (let c = colSeg.first; c <= colSeg.last; c++) {
       const w = cols.getSize(c);
       const cell = model.getCell(dataRow, mapping.toDataCol(c));
+      if (cell.styleId !== DEFAULT_STYLE_ID && w > 0 && h > 0) {
+        const borders = styles.get(cell.styleId).borders;
+        if (borders !== undefined) drawBorders(ctx, borders, x, y, w, h);
+      }
       if (cell.value !== null && w > 0 && h > 0) {
         const style = styles.get(cell.styleId);
         const text = formatValue(cell.value, style.numberFormat);

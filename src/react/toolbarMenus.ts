@@ -1,10 +1,11 @@
 import { columnLabel } from '../core/model/address';
+import type { Border, BorderPreset } from '../core/model/borders';
 import type { Spreadsheet } from '../core/Spreadsheet';
 import type { GridController } from '../input/GridController';
 import type { MenuEntry } from './Menu';
 import type { Messages } from './messages';
 
-export type MenuId = 'paste' | 'numberFormat' | 'insert' | 'delete' | 'visibility' | 'freeze' | 'functions' | 'zoom' | 'file' | 'wrap' | 'valign';
+export type MenuId = 'paste' | 'numberFormat' | 'insert' | 'delete' | 'visibility' | 'freeze' | 'functions' | 'zoom' | 'file' | 'wrap' | 'valign' | 'borders';
 
 /** Number patterns offered by the "More formats" menu, in display order; '' is the automatic format. */
 export function numberFormatEntries(sheet: Spreadsheet, m: Messages): MenuEntry[] {
@@ -158,4 +159,44 @@ export function valignEntries(sheet: Spreadsheet, m: Messages): MenuEntry[] {
     run: () => sheet.formatSelection({ valign: value === 'middle' ? undefined : value }, 'Vertical align'),
   });
   return [item('top', m.alignTop), item('middle', m.alignMiddle), item('bottom', m.alignBottom)];
+}
+
+const LINE_STYLES: ReadonlyArray<{ key: 'thin' | 'medium' | 'thick' | 'dashed' | 'dotted'; width: 1 | 2 | 3; style: Border['style'] }> = [
+  { key: 'thin', width: 1, style: 'solid' },
+  { key: 'medium', width: 2, style: 'solid' },
+  { key: 'thick', width: 3, style: 'solid' },
+  { key: 'dashed', width: 1, style: 'dashed' },
+  { key: 'dotted', width: 1, style: 'dotted' },
+];
+
+export function borderEntries(sheet: Spreadsheet, m: Messages, choice: Border, setChoice: (border: Border) => void): MenuEntry[] {
+  const apply = (preset: BorderPreset) => () => void sheet.applyBorders(preset, choice);
+  const labels: Record<(typeof LINE_STYLES)[number]['key'], string> = {
+    thin: m.borderThin,
+    medium: m.borderMedium,
+    thick: m.borderThick,
+    dashed: m.borderDashed,
+    dotted: m.borderDotted,
+  };
+  return [
+    { label: m.borderAll, run: apply('all') },
+    { label: m.borderOuter, run: apply('outer') },
+    { label: m.borderInner, run: apply('inner') },
+    { label: m.borderHorizontal, run: apply('horizontal') },
+    { label: m.borderVertical, run: apply('vertical') },
+    'separator',
+    { label: m.borderTop, run: apply('top') },
+    { label: m.borderBottom, run: apply('bottom') },
+    { label: m.borderLeft, run: apply('left') },
+    { label: m.borderRight, run: apply('right') },
+    'separator',
+    { label: m.borderNone, run: apply('none') },
+    'separator',
+    ...LINE_STYLES.map((l): MenuEntry => ({
+      label: labels[l.key],
+      checked: choice.width === l.width && choice.style === l.style,
+      // Choosing a line only sets what the next border will look like; it does not touch the sheet.
+      run: () => setChoice({ ...choice, width: l.width, style: l.style }),
+    })),
+  ];
 }

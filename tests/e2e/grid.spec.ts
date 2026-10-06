@@ -1924,3 +1924,133 @@ test.describe('font size, wrapping and vertical alignment', () => {
     await expect(page.getByRole('button', { name: 'Vertical align' })).toBeDisabled();
   });
 });
+
+test.describe('cell borders', () => {
+  type Page = import('@playwright/test').Page;
+  /** The color of the canvas pixel on the boundary line to the right/bottom of a cell (where the grid line normally is). */
+  const edgePixel = (page: Page, row: number, col: number, side: 'right' | 'bottom' | 'left' | 'top', offset = 0.5): Promise<number[]> =>
+    page.evaluate(
+      async ([r, c, sd, off]) => {
+        await new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)));
+        const g = window.__grid!;
+        const vp = g.surface.viewport;
+        const canvas = document.querySelector('[data-testid=grid] canvas') as HTMLCanvasElement;
+        const dpr = window.devicePixelRatio || 1;
+        const x0 = vp.colLeft(c as number);
+        const y0 = vp.rowTop(r as number);
+        const w = g.sheet.cols.getSize(c as number);
+        const h = g.sheet.rows.getSize(r as number);
+        const px = sd === 'right' ? x0 + w - 1 + 0.5 : sd === 'left' ? x0 - 1 + 0.5 : x0 + w * (off as number);
+        const py = sd === 'bottom' ? y0 + h - 1 + 0.5 : sd === 'top' ? y0 - 1 + 0.5 : y0 + h * (off as number);
+        return Array.from(canvas.getContext('2d')!.getImageData(Math.floor(px * dpr), Math.floor(py * dpr), 1, 1).data).slice(0, 3);
+      },
+      [row, col, side, offset] as [number, number, string, number],
+    );
+  const isDark = (rgb: number[]) => (rgb[0] as number) < 90 && (rgb[1] as number) < 90 && (rgb[2] as number) < 90;
+  const isGridGray = (rgb: number[]) => (rgb[0] as number) > 200;
+  const drag = async (page: Page, from: [number, number], to: [number, number]): Promise<void> => {
+    const a = await cellCenter(page, ...from);
+    const b = await cellCenter(page, ...to);
+    await page.mouse.move(a.x, a.y);
+    await page.mouse.down();
+    await page.mouse.move(b.x, b.y, { steps: 3 });
+    await page.mouse.up();
+  };
+  const choose = async (page: Page, button: string, item: string): Promise<void> => {
+    await page.getByRole('button', { name: button, exact: true }).click();
+    await page.getByRole('menuitem', { name: item }).or(page.getByRole('menuitemradio', { name: item })).click();
+  };
+
+  test('Outer borders draws a black rectangle around the selection, Clear borders removes it', async ({ page }) => {
+    await page.evaluate(() => window.__sheet!.selection.selectCell(9, 9)); // keep the blue selection outline off the edges sampled
+    expect(isGridGray(await edgePixel(page, 1, 2, 'top'))).toBe(true); // before: a plain grid line
+    await drag(page, [1, 1], [2, 2]);
+    await choose(page, 'Borders', 'Outer borders');
+    await page.evaluate(() => window.__sheet!.selection.selectCell(9, 9));
+    expect(isDark(await edgePixel(page, 2, 2, 'right'))).toBe(true); // right edge of C3
+    expect(isDark(await edgePixel(page, 2, 2, 'bottom'))).toBe(true); // bottom edge
+    expect(isDark(await edgePixel(page, 1, 1, 'left'))).toBe(true); // left edge of B2
+    expect(isDark(await edgePixel(page, 1, 1, 'top'))).toBe(true);
+    expect(isGridGray(await edgePixel(page, 1, 1, 'right'))).toBe(true); // the line between B2 and C2 is inside: untouched
+    await drag(page, [1, 1], [2, 2]);
+    await choose(page, 'Borders', 'Clear borders');
+    await page.evaluate(() => window.__sheet!.selection.selectCell(9, 9));
+    expect(isGridGray(await edgePixel(page, 2, 2, 'right'))).toBe(true);
+    expect(isGridGray(await edgePixel(page, 1, 1, 'top'))).toBe(true);
+    await page.keyboard.press(`${mod}+z`);
+    expect(await page.evaluate(() => window.__sheet!.model.cellCount)).toBeGreaterThan(0); // the borders are back
+  });
+
+  test('line style and color choices apply to the next border; dashed lines are really broken', async ({ page }) => {
+    await clickCell(page, 4, 1);
+    await choose(page, 'Borders', 'Dashed line'); // only chooses the style
+    expect(await page.evaluate(() => window.__sheet!.model.cellCount)).toBe(0);
+    await page.getByRole('button', { name: 'Border color' }).click();
+    await page.getByLabel('Border color picker').evaluate((el: HTMLInputElement) => {
+      el.value = '#ff0000';
+      el.dispatchEvent(new Event('change', { bubbles: true }));
+    });
+    await clickCell(page, 4, 1);
+    await choose(page, 'Borders', 'Bottom border');
+    const border = await page.evaluate(() => window.__sheet!.styles.get(window.__sheet!.getCellByView(4, 1).styleId).borders);
+    expect(border).toEqual({ bottom: { width: 1, style: 'dashed', color: '#ff0000' } });
+    await page.evaluate(() => window.__sheet!.selection.selectCell(9, 9));
+    // Sample along the line: red where a dash is, plain gray in the gaps.
+    const samples: number[][] = [];
+    for (let i = 1; i < 19; i++) samples.push(await edgePixel(page, 4, 1, 'bottom', i / 20));
+    const red = samples.filter((p) => (p[0] as number) > 200 && (p[1] as number) < 90).length;
+    const gray = samples.filter(isGridGray).length;
+    expect(red).toBeGreaterThan(3);
+    expect(gray).toBeGreaterThan(2);
+  });
+
+  test('a thick line is thicker than a thin one', async ({ page }) => {
+    await clickCell(page, 3, 3);
+    await choose(page, 'Borders', 'Thick line');
+    await clickCell(page, 3, 3);
+    await choose(page, 'Borders', 'All borders');
+    await page.evaluate(() => window.__sheet!.selection.selectCell(9, 9));
+    expect(await page.evaluate(() => window.__sheet!.styles.get(window.__sheet!.getCellByView(3, 3).styleId).borders?.right?.width)).toBe(3);
+    const probe = (dx: number): Promise<number[]> =>
+      page.evaluate(
+        async (offset) => {
+          await new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)));
+          const g = window.__grid!;
+          const vp = g.surface.viewport;
+          const canvas = document.querySelector('[data-testid=grid] canvas') as HTMLCanvasElement;
+          const dpr = window.devicePixelRatio || 1;
+          const x = vp.colLeft(3) + g.sheet.cols.getSize(3) - 1 + offset + 0.5;
+          const y = vp.rowTop(3) + g.sheet.rows.getSize(3) / 2;
+          return Array.from(canvas.getContext('2d')!.getImageData(Math.floor(x * dpr), Math.floor(y * dpr), 1, 1).data).slice(0, 3);
+        },
+        dx,
+      );
+    expect(isDark(await probe(-1))).toBe(true);
+    expect(isDark(await probe(0))).toBe(true);
+    expect(isDark(await probe(1))).toBe(true);
+    expect(isGridGray(await probe(-3)) || (await probe(-3))[0]! > 200).toBe(true); // clearly wider than 1px but not huge
+  });
+
+  test('borders copy and paste with an otherwise empty cell', async ({ page }) => {
+    await clickCell(page, 1, 1);
+    await choose(page, 'Borders', 'All borders');
+    const before = await page.evaluate(() => window.__sheet!.getCellByView(1, 1).styleId);
+    const clip = await page.evaluate(() => {
+      const store: Record<string, string> = {};
+      window.__grid!.clipboard.copyTo({ setData: (type, value) => void (store[type] = value) });
+      return { text: store['text/plain'] ?? '', html: store['text/html'] ?? '' };
+    });
+    expect(clip.text).toBe(''); // no value, only formatting
+    expect(clip.html).toContain('border-top:1px solid #000000');
+    await clickCell(page, 6, 6);
+    await page.evaluate((c) => window.__grid!.clipboard.pasteFrom({ getData: (type) => (type === 'text/html' ? c.html : c.text) }), clip);
+    expect(await page.evaluate(() => window.__sheet!.getCellByView(6, 6).styleId)).toBe(before);
+    expect(await page.evaluate(() => JSON.stringify(window.__sheet!.styles.get(window.__sheet!.getCellByView(6, 6).styleId).borders))).toContain('"top"');
+  });
+
+  test('the Borders controls are disabled on a read-only sheet', async ({ page }) => {
+    await page.evaluate(() => (window.__sheet!.readOnly = true));
+    await expect(page.getByRole('button', { name: 'Borders', exact: true })).toBeDisabled();
+    await expect(page.getByRole('button', { name: 'Border color' })).toBeDisabled();
+  });
+});

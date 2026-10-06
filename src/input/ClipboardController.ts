@@ -172,7 +172,8 @@ export class ClipboardController {
     if (this.valuesOnlyTimer !== null) clearTimeout(this.valuesOnlyTimer);
     this.valuesOnlyTimer = null;
     if (mode === 'format' && (clip === null || text !== clip.text)) return; // formats only exist in our own copies
-    if (clip !== null && text !== '' && text === clip.text) {
+    // An empty text is still our own copy when the cells copied held no value (only formatting, e.g. a border or fill).
+    if (clip !== null && text === clip.text) {
       // Our own copy: keep formulas and formatting instead of round-tripping through text.
       sheet.pasteMatrix(
         clip.rows,

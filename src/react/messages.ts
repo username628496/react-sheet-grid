@@ -24,6 +24,24 @@ export interface Messages {
   groupSort: string;
   groupTextStyle: string;
   groupAlignment: string;
+  borders: string;
+  borderColor: string;
+  borderAll: string;
+  borderOuter: string;
+  borderInner: string;
+  borderHorizontal: string;
+  borderVertical: string;
+  borderTop: string;
+  borderBottom: string;
+  borderLeft: string;
+  borderRight: string;
+  borderNone: string;
+  borderThin: string;
+  borderMedium: string;
+  borderThick: string;
+  borderDashed: string;
+  borderDotted: string;
+  formatTooLarge: (limit: number) => string;
   groupFont: string;
   fontSize: string;
   decreaseFontSize: string;
@@ -185,6 +203,24 @@ const en: Messages = {
   groupSort: 'Sort',
   groupTextStyle: 'Text style',
   groupAlignment: 'Alignment',
+  borders: 'Borders',
+  borderColor: 'Border color',
+  borderAll: 'All borders',
+  borderOuter: 'Outer borders',
+  borderInner: 'Inner borders',
+  borderHorizontal: 'Horizontal borders',
+  borderVertical: 'Vertical borders',
+  borderTop: 'Top border',
+  borderBottom: 'Bottom border',
+  borderLeft: 'Left border',
+  borderRight: 'Right border',
+  borderNone: 'Clear borders',
+  borderThin: 'Thin line',
+  borderMedium: 'Medium line',
+  borderThick: 'Thick line',
+  borderDashed: 'Dashed line',
+  borderDotted: 'Dotted line',
+  formatTooLarge: (limit) => `That range is too large to format this way (over ${limit.toLocaleString('en-US')} cells). Select a smaller range.`,
   groupFont: 'Font',
   fontSize: 'Font size',
   decreaseFontSize: 'Decrease font size',
@@ -399,6 +435,24 @@ const vi: Messages = {
   groupSort: 'Sắp xếp',
   groupTextStyle: 'Kiểu chữ',
   groupAlignment: 'Căn lề',
+  borders: 'Viền',
+  borderColor: 'Màu viền',
+  borderAll: 'Tất cả đường viền',
+  borderOuter: 'Viền ngoài',
+  borderInner: 'Viền trong',
+  borderHorizontal: 'Viền ngang',
+  borderVertical: 'Viền dọc',
+  borderTop: 'Viền trên',
+  borderBottom: 'Viền dưới',
+  borderLeft: 'Viền trái',
+  borderRight: 'Viền phải',
+  borderNone: 'Xóa viền',
+  borderThin: 'Nét mảnh',
+  borderMedium: 'Nét vừa',
+  borderThick: 'Nét dày',
+  borderDashed: 'Nét gạch',
+  borderDotted: 'Nét chấm',
+  formatTooLarge: (limit) => `Vùng này quá lớn để định dạng kiểu này (hơn ${limit.toLocaleString('vi-VN')} ô). Hãy chọn vùng nhỏ hơn.`,
   groupFont: 'Phông chữ',
   fontSize: 'Cỡ chữ',
   decreaseFontSize: 'Giảm cỡ chữ',

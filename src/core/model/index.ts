@@ -5,3 +5,4 @@ export * from './address';
 export * from './format';
 export * from './parseInput';
 export * from './font';
+export * from './borders';

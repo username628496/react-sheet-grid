@@ -1,3 +1,4 @@
+import { type Border, type BorderPreset, type BorderSide, DEFAULT_BORDER, OPPOSITE, presetSides, withBorder } from './model/borders';
 import { BatchCommand } from './commands/BatchCommand';
 import type { Command } from './commands/Command';
 import { type CellChange, SetCellsCommand } from './commands/SetCellsCommand';
@@ -68,6 +69,8 @@ const FORMAT_FILL_LIMIT = 50_000;
 const MAX_SCATTERED_MOVE = 200_000; // cut-paste cells followed one by one in a sorted/filtered view
 const MAX_RANGE_CHECK = 10_000; // largest range inspected cell by cell for the same move
 const MAX_TILED_CELLS = 1_000_000;
+/** Borders create a cell for every cell they touch, so a range this big is refused instead of filling memory. */
+export const MAX_BORDER_CELLS = 100_000;
 /** Fitting row heights measures every cell of each row, so a huge selection is left alone. */
 const MAX_FIT_ROWS = 5_000;
 /** One paste is one undo step holding every cell, so an absurdly large one would freeze the tab and eat memory. */
@@ -82,7 +85,10 @@ const MAX_READ_CELLS = 100_000;
  * in a Web Worker. UI code reads from here and mutates only via `execute`.
  */
 /** Something the user should be told about but that is not an error of the host app. Localised by the UI layer. */
-export type SheetNotice = { code: 'pasteTooLarge'; cells: number; limit: number } | { code: 'exportTooLarge'; cells: number; limit: number };
+export type SheetNotice =
+  | { code: 'pasteTooLarge'; cells: number; limit: number }
+  | { code: 'exportTooLarge'; cells: number; limit: number }
+  | { code: 'formatTooLarge'; cells: number; limit: number };
 
 export interface FindOptions extends TextSearchOptions {
   query: string;
@@ -703,6 +709,81 @@ export class Spreadsheet {
       return;
     }
     this.applyStyle(targets, patch, label);
+  }
+
+  /**
+   * The Borders menu. Applies `preset` to every selected range with `border` (default thin black): "all" puts all four
+   * sides on every cell, "outer" only the rectangle's edge, "inner"/"horizontal"/"vertical" the lines between cells,
+   * "top"/"bottom"/"left"/"right" one edge, and "none" removes every border inside the range and the sides of the
+   * cells just outside that touch it (so the line really disappears). One undo step. Returns false when nothing
+   * changed, the sheet is read-only, or the range is too large (a notice is sent).
+   */
+  applyBorders(preset: BorderPreset, border: Border = DEFAULT_BORDER): boolean {
+    if (this.readOnlyFlag) return false;
+    const changes = new Map<number, CellChange>();
+    const setSides = (viewRow: number, viewCol: number, sides: readonly BorderSide[], value: Border | null): void => {
+      if (sides.length === 0) return;
+      const dataRow = this.mapping.toDataRow(viewRow);
+      const dataCol = this.mapping.toDataCol(viewCol);
+      const key = cellKey(dataRow, dataCol);
+      const cell = changes.get(key)?.cell ?? this.model.getCell(dataRow, dataCol);
+      let borders = this.styles.get(cell.styleId).borders;
+      for (const side of sides) borders = withBorder(borders, side, value);
+      const styleId = this.styles.derive(cell.styleId, { borders });
+      if (styleId !== cell.styleId) changes.set(key, { dataRow, dataCol, cell: { ...cell, styleId } });
+    };
+
+    const clearing = preset === 'none';
+    const used = this.getUsedViewBounds();
+    for (const original of this.selection.allRanges) {
+      let range = original;
+      if (clearing) {
+        // Nothing outside the used area can have a border, so a whole-column selection costs only what is there.
+        if (used === null) continue;
+        range = { ...original, endRow: Math.min(original.endRow, used.row), endCol: Math.min(original.endCol, used.col) };
+        if (range.endRow < range.startRow || range.endCol < range.startCol) continue;
+      }
+      const rows = range.endRow - range.startRow + 1;
+      const cols = range.endCol - range.startCol + 1;
+      const everyCell = preset === 'all' || preset === 'inner' || preset === 'horizontal' || preset === 'vertical' || clearing;
+      const cost = everyCell ? rows * cols : 2 * (rows + cols);
+      if (cost > MAX_BORDER_CELLS) {
+        for (const listener of this.noticeListeners) listener({ code: 'formatTooLarge', cells: cost, limit: MAX_BORDER_CELLS });
+        return false;
+      }
+      const value = clearing ? null : border;
+      const visit = (r: number, c: number): void =>
+        setSides(r, c, presetSides(preset, r, c, range.startRow, range.startCol, range.endRow, range.endCol), value);
+      if (everyCell) {
+        for (let r = range.startRow; r <= range.endRow; r++) for (let c = range.startCol; c <= range.endCol; c++) visit(r, c);
+      } else {
+        for (let c = range.startCol; c <= range.endCol; c++) {
+          visit(range.startRow, c);
+          if (range.endRow !== range.startRow) visit(range.endRow, c);
+        }
+        for (let r = range.startRow + 1; r < range.endRow; r++) {
+          visit(r, range.startCol);
+          if (range.endCol !== range.startCol) visit(r, range.endCol);
+        }
+      }
+      if (clearing) {
+        // The line between a selected cell and its neighbour belongs to both: clear the neighbour's side too.
+        const touch = (r: number, c: number, side: BorderSide): void => {
+          if (r >= 0 && c >= 0 && r < this.rowCount && c < this.colCount && this.getCellByView(r, c).styleId !== 0) setSides(r, c, [side], null);
+        };
+        for (let c = range.startCol; c <= range.endCol; c++) {
+          touch(range.startRow - 1, c, OPPOSITE.top);
+          touch(range.endRow + 1, c, OPPOSITE.bottom);
+        }
+        for (let r = range.startRow; r <= range.endRow; r++) {
+          touch(r, range.startCol - 1, OPPOSITE.left);
+          touch(r, range.endCol + 1, OPPOSITE.right);
+        }
+      }
+    }
+    if (changes.size === 0) return false;
+    this.execute(new SetCellsCommand('Borders', [...changes.values()]));
+    return true;
   }
 
   /** "Increase / decrease font size": the active cell's size moves one step and the whole selection gets it. */
