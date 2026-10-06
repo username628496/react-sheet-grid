@@ -5,3 +5,4 @@ export * from './layout';
 export * from './mapping';
 export * from './model';
 export * from './selection';
+export * from './snapshot';

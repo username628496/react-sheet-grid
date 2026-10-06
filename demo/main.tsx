@@ -1,6 +1,7 @@
-import { useState } from 'react';
+import { type CSSProperties, useEffect, useState } from 'react';
 import { createRoot } from 'react-dom/client';
-import { DataGrid, FormulaBar, type GridController, Spreadsheet, StatusBar, Toolbar } from '../src/index';
+import { DataGrid, deserializeSheet, FormulaBar, type GridController, SnapshotError, Spreadsheet, StatusBar, Toolbar } from '../src/index';
+import { autoSave, clearSnapshot, loadSnapshot, type SaveStatus } from './storage';
 
 const ROWS = 1_000_000;
 const COLS = 100;
@@ -26,15 +27,13 @@ function seed(sheet: Spreadsheet): void {
   for (let i = 0; i < 300_000; i++) put(Math.floor(rand() * ROWS), Math.floor(rand() * COLS));
 }
 
-// Default: a blank 50 x 26 sheet (resizable from the toolbar). ?mode=sample loads the 1M x 100 stress sheet,
-// ?mode=empty a blank 1000 x 26 one with no frozen panes, which keeps the e2e tests deterministic.
+// Default: a blank 50 x 26 sheet that is saved in the browser (IndexedDB) and restored on reload.
+// ?mode=sample loads the 1M x 100 stress sheet and ?mode=empty a blank 1000 x 26 one with no frozen panes (kept
+// deterministic for the e2e tests); neither reads nor writes the saved sheet.
 const mode = new URLSearchParams(location.search).get('mode');
 const empty = mode === 'empty';
 const sample = mode === 'sample';
-const sheet = sample
-  ? new Spreadsheet({ rowCount: ROWS, colCount: COLS })
-  : new Spreadsheet(empty ? { rowCount: 1000, colCount: 26 } : { rowCount: 50, colCount: 26 });
-if (sample) seed(sheet);
+const persistent = !empty && !sample;
 
 declare global {
   interface Window {
@@ -42,10 +41,46 @@ declare global {
     __sheet?: Spreadsheet;
   }
 }
-window.__sheet = sheet;
 
-function App() {
+async function createSheet(): Promise<{ sheet: Spreadsheet; notice: string | null }> {
+  if (sample) {
+    const big = new Spreadsheet({ rowCount: ROWS, colCount: COLS });
+    seed(big);
+    return { sheet: big, notice: null };
+  }
+  if (empty) return { sheet: new Spreadsheet({ rowCount: 1000, colCount: 26 }), notice: null };
+  const stored = await loadSnapshot();
+  if (stored !== undefined) {
+    try {
+      return { sheet: deserializeSheet(stored), notice: null };
+    } catch (e) {
+      // A corrupt or too-new save must not lock the user out: start blank and say why.
+      const reason = e instanceof SnapshotError ? e.message : 'The saved sheet could not be read.';
+      return { sheet: new Spreadsheet({ rowCount: 50, colCount: 26 }), notice: `${reason} Started a blank sheet.` };
+    }
+  }
+  return { sheet: new Spreadsheet({ rowCount: 50, colCount: 26 }), notice: null };
+}
+
+const linkStyle: CSSProperties = {
+  font: '12px system-ui, sans-serif',
+  padding: '6px 14px',
+  color: '#1a73e8',
+  background: 'transparent',
+  border: 0,
+  cursor: 'pointer',
+  textDecoration: 'none',
+};
+
+function App({ sheet, notice }: { sheet: Spreadsheet; notice: string | null }) {
   const [grid, setGrid] = useState<GridController | null>(null);
+  const [saveStatus, setSaveStatus] = useState<SaveStatus | null>(null);
+  useEffect(() => (persistent ? autoSave(sheet, setSaveStatus) : undefined), [sheet]);
+  const reset = async (): Promise<void> => {
+    if (!window.confirm('Discard the saved sheet and start a blank one?')) return;
+    await clearSnapshot();
+    location.reload();
+  };
   return (
     <div style={{ height: '100%', display: 'flex', flexDirection: 'column' }}>
       <Toolbar sheet={sheet} onAction={() => window.__grid?.editor.focus()} />
@@ -61,12 +96,20 @@ function App() {
           }}
         />
       </div>
-      <div style={{ display: 'flex', alignItems: 'stretch' }}>
-        <div style={{ flex: 1 }}>
+      <div style={{ display: 'flex', alignItems: 'stretch', background: '#f8f9fb', borderTop: '1px solid #e1e4e8' }}>
+        <div style={{ flex: 1, minWidth: 0 }}>
           <StatusBar sheet={sheet} />
         </div>
+        <span data-testid="save-status" style={{ ...linkStyle, color: saveStatus === 'error' ? '#d93025' : '#656d76', alignSelf: 'center' }}>
+          {notice ?? (saveStatus === 'saving' ? 'Saving…' : saveStatus === 'saved' ? 'Saved' : saveStatus === 'error' ? 'Could not save' : '')}
+        </span>
+        {persistent && (
+          <button type="button" style={linkStyle} onClick={() => void reset()}>
+            Reset
+          </button>
+        )}
         {!sample && (
-          <a href="?mode=sample" style={{ font: '12px system-ui, sans-serif', padding: '6px 14px', color: '#1a73e8', borderTop: '1px solid #e1e4e8', background: '#f8f9fb', textDecoration: 'none' }}>
+          <a href="?mode=sample" style={linkStyle}>
             Load 1M × 100 sample
           </a>
         )}
@@ -75,4 +118,7 @@ function App() {
   );
 }
 
-createRoot(document.getElementById('root')!).render(<App />);
+void createSheet().then(({ sheet, notice }) => {
+  window.__sheet = sheet;
+  createRoot(document.getElementById('root')!).render(<App sheet={sheet} notice={notice} />);
+});

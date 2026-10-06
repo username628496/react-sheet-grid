@@ -33,6 +33,7 @@ Toàn bộ lộ trình MVP trong CLAUDE.md (tuần 1 và tuần 2) đã xong.
 - Cuộn: một `div` cuộn native nằm trên canvas, canvas vẽ lại theo vị trí cuộn logic. Firefox giới hạn chiều cao phần tử ~17,9M px mà 1M dòng × 21px = 21M, nên host chỉ được tối đa 8M px vật lý và `logic = vật lý × scale`.
 - Vẽ theo "segment": mỗi trục có segment đóng băng và segment cuộn; vùng vẽ = tích hai trục, nên freeze không cần code riêng.
 - Số dòng/cột đổi được từ toolbar (ô `Rows`/`Cols`) qua `sheet.setRowCount/setColCount`: tăng thì thêm dòng trống ở cuối, giảm thì xóa dòng cuối (một bước undo, công thức trỏ vào vùng bị cắt thành `#REF!`, toolbar báo số ô có dữ liệu bị xóa). Giới hạn 1…1.048.576 dòng, 1…16.384 cột.
+- **Lưu và nạp**: `serializeSheet(sheet)` trả về `SheetSnapshot` (JSON thuần: ô theo toạ độ dữ liệu, công thức dạng chữ, bảng style, cỡ dòng/cột, thứ tự dòng, sort, filter); `deserializeSheet(data)` dựng lại `Spreadsheet` (kiểm tra chặt, lỗi ném `SnapshotError`) và tính lại công thức nên không có kết quả cache cũ. Không lưu lịch sử undo và vùng chọn. Đo trên 400k ô: serialize ~110ms, nạp + tính lại ~90ms, JSON ~9MB. Demo mặc định tự lưu vào IndexedDB sau 600ms kể từ lần sửa cuối (và khi ẩn/đóng tab), có nút Reset; `?mode=sample` và `?mode=empty` không đọc/ghi bản lưu. Save hỏng thì demo bắt đầu trang trống và báo lý do.
 - Dữ liệu demo `?mode=sample` là bản thưa (khối dày 5000×20 + 300k ô rải rác) vì 100M ô không thể lưu trong `Map`.
 - Chữ chỉ clip khi tràn ô; tràn sang ô trống bên cạnh để sau MVP.
 
@@ -116,7 +117,8 @@ Chạy `pnpm dev` rồi mở http://localhost:5173/demo/ (mặc định là tran
 5. **Công thức**: gõ `=SUM(A:A)`, `=VLOOKUP(...)`, `=A1/0`, tạo vòng `A1 = B1`, `B1 = A1`; kéo fill handle công thức; chèn/xóa dòng giữa vùng được `SUM` tham chiếu.
 6. **Sort/filter**: chuột phải một cột → sort, filter theo giá trị; xem ký hiệu trên header; Ctrl/Cmd+Z hoàn tác từng bước.
 7. **Kéo chọn vùng ra ngoài mép** để thử tự cuộn; kéo viền header để resize; Shift+click, Ctrl/Cmd+click nhiều vùng.
-8. **Thanh công thức**: gõ tiếng Việt (Telex/VNI) trong ô nhập của thanh; gõ `=` rồi click ô trên lưới; sửa công thức dài rồi Enter/Tab/Esc; gõ `A1:C5`, `B:B` vào ô tên rồi Enter.
+8. **Lưu dữ liệu**: sửa vài ô, đổi số dòng, sort, đổi cỡ cột rồi F5 (phải còn nguyên, chỉ mất lịch sử undo); thử mở hai tab cùng lúc (tab sau ghi đè tab trước, chưa có đồng bộ); nút Reset.
+9. **Thanh công thức**: gõ tiếng Việt (Telex/VNI) trong ô nhập của thanh; gõ `=` rồi click ô trên lưới; sửa công thức dài rồi Enter/Tab/Esc; gõ `A1:C5`, `B:B` vào ô tên rồi Enter.
 
 ## Việc tiếp theo (ngoài MVP, chỉ làm khi bạn yêu cầu)
 

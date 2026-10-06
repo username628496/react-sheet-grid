@@ -13,3 +13,79 @@ test('the default demo is a blank 50 x 26 sheet', async ({ page }) => {
   await expect(page.getByLabel('Row count')).toHaveValue('50');
   await expect(page.getByLabel('Column count')).toHaveValue('26');
 });
+
+test.describe('the default demo keeps your work across reloads', () => {
+  test('values, formulas, formatting and the row count survive a reload', async ({ page }) => {
+    await page.goto('/demo/');
+    await page.waitForFunction(() => window.__grid !== undefined);
+    await page.evaluate(() => {
+      const s = window.__sheet!;
+      s.setCellInput(0, 0, '5');
+      s.setCellInput(1, 0, '=A1*2');
+      s.selection.selectCell(0, 0);
+      s.toggleStyle('bold');
+      s.cols.setSize(1, 160);
+    });
+    await page.getByLabel('Row count').fill('80');
+    await page.getByLabel('Row count').press('Enter');
+    await expect(page.getByTestId('save-status')).toHaveText('Saved');
+
+    await page.reload();
+    await page.waitForFunction(() => window.__grid !== undefined);
+    const restored = await page.evaluate(() => {
+      const s = window.__sheet!;
+      return {
+        a1: s.getCellByView(0, 0).value,
+        a2: s.getCellByView(1, 0).value,
+        formula: s.getEditText(1, 0),
+        bold: s.styles.get(s.getCellByView(0, 0).styleId).bold,
+        rows: s.rowCount,
+        undoable: s.history.canUndo,
+      };
+    });
+    expect(restored).toEqual({ a1: 5, a2: 10, formula: '=A1*2', bold: true, rows: 80, undoable: false });
+    await expect(page.getByLabel('Row count')).toHaveValue('80');
+  });
+
+  test('Reset discards the saved sheet', async ({ page }) => {
+    await page.goto('/demo/');
+    await page.waitForFunction(() => window.__grid !== undefined);
+    await page.evaluate(() => window.__sheet!.setCellInput(0, 0, 'gone soon'));
+    await expect(page.getByTestId('save-status')).toHaveText('Saved');
+    page.once('dialog', (dialog) => void dialog.accept());
+    await page.getByRole('button', { name: 'Reset' }).click();
+    await page.waitForFunction(() => window.__grid !== undefined && window.__sheet!.model.cellCount === 0);
+    expect(await page.evaluate(() => window.__sheet!.rowCount)).toBe(50);
+  });
+
+  test('a corrupt save starts a blank sheet and says so', async ({ page }) => {
+    await page.goto('/demo/');
+    await page.waitForFunction(() => window.__grid !== undefined);
+    await page.evaluate(
+      () =>
+        new Promise<void>((resolve, reject) => {
+          const open = indexedDB.open('react-data-grid-demo', 1);
+          open.onerror = () => reject(open.error);
+          open.onsuccess = () => {
+            const tx = open.result.transaction('sheets', 'readwrite');
+            tx.objectStore('sheets').put({ version: 99 }, 'default');
+            tx.oncomplete = () => resolve();
+          };
+        }),
+    );
+    await page.reload();
+    await page.waitForFunction(() => window.__grid !== undefined);
+    await expect(page.getByTestId('save-status')).toContainText('Started a blank sheet');
+    expect(await page.evaluate(() => window.__sheet!.rowCount)).toBe(50);
+  });
+
+  test('the e2e and sample modes never touch the saved sheet', async ({ page }) => {
+    await page.goto('/demo/?mode=empty');
+    await page.waitForFunction(() => window.__grid !== undefined);
+    await page.evaluate(() => window.__sheet!.setCellInput(0, 0, 'not saved'));
+    await page.waitForTimeout(1000);
+    await page.goto('/demo/');
+    await page.waitForFunction(() => window.__grid !== undefined);
+    expect(await page.evaluate(() => window.__sheet!.model.cellCount)).toBe(0);
+  });
+});
