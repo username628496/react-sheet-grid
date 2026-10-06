@@ -1,29 +1,9 @@
-import { type CSSProperties, type KeyboardEvent, useEffect, useRef } from 'react';
+import { type KeyboardEvent, useEffect, useRef } from 'react';
 import { formatRangeAddress, parseRangeAddress } from '../core/model/address';
 import type { Spreadsheet } from '../core/Spreadsheet';
 import type { GridController } from '../input/GridController';
 import type { CommitMove } from '../input/keymap';
-
-const barStyle: CSSProperties = {
-  display: 'flex',
-  alignItems: 'center',
-  gap: 6,
-  padding: '3px 8px',
-  borderBottom: '1px solid #dadce0',
-  background: '#fff',
-  fontFamily: 'Arial, sans-serif',
-  fontSize: 13,
-};
-
-const inputStyle: CSSProperties = {
-  height: 26,
-  boxSizing: 'border-box',
-  border: '1px solid #dadce0',
-  borderRadius: 4,
-  padding: '0 8px',
-  font: 'inherit',
-  outline: 'none',
-};
+import { ChromeStyles } from './chrome';
 
 interface FormulaBarProps {
   sheet: Spreadsheet;
@@ -159,9 +139,11 @@ export function FormulaBar({ sheet, grid }: FormulaBarProps) {
   };
 
   return (
-    <div style={barStyle} data-testid="formula-bar">
+    <div className="rdg-chrome rdg-formulabar" data-testid="formula-bar">
+      <ChromeStyles />
       <input
         ref={nameRef}
+        className="rdg-field rdg-namebox"
         aria-label="Name box"
         data-testid="name-box"
         spellCheck={false}
@@ -169,13 +151,13 @@ export function FormulaBar({ sheet, grid }: FormulaBarProps) {
         disabled={grid === null}
         onFocus={(e) => e.currentTarget.select()}
         onKeyDown={onNameKeyDown}
-        style={{ ...inputStyle, width: 96 }}
       />
-      <span aria-hidden style={{ color: '#5f6368', fontStyle: 'italic' }}>
+      <span aria-hidden className="rdg-fx">
         fx
       </span>
       <input
         ref={textRef}
+        className="rdg-field rdg-formula"
         aria-label="Formula bar"
         data-testid="formula-input"
         spellCheck={false}
@@ -187,7 +169,6 @@ export function FormulaBar({ sheet, grid }: FormulaBarProps) {
         onKeyUp={pushToEditor}
         onMouseUp={pushToEditor}
         onKeyDown={onTextKeyDown}
-        style={{ ...inputStyle, flex: 1, minWidth: 0 }}
       />
     </div>
   );

@@ -1,19 +1,7 @@
 import { useEffect, useState } from 'react';
 import { formatNumber } from '../core/model/format';
 import type { SelectionStats, Spreadsheet } from '../core/Spreadsheet';
-
-const barStyle = {
-  display: 'flex',
-  gap: 16,
-  alignItems: 'center',
-  minHeight: 26,
-  padding: '0 12px',
-  borderTop: '1px solid #dadce0',
-  background: '#f8f9fa',
-  fontFamily: 'Arial, sans-serif',
-  fontSize: 12,
-  color: '#444746',
-} as const;
+import { ChromeStyles } from './chrome';
 
 /**
  * Sum / average / count of the selected numbers, shown when more than one cell is selected.
@@ -41,9 +29,10 @@ export function StatusBar({ sheet }: { sheet: Spreadsheet }) {
   }, [sheet]);
 
   return (
-    <div role="status" aria-label="Selection summary" style={barStyle} data-testid="status-bar">
+    <div role="status" aria-label="Selection summary" className="rdg-chrome rdg-statusbar" data-testid="status-bar">
+      <ChromeStyles />
       {stats === null ? (
-        <span style={{ color: '#80868b' }}>&nbsp;</span>
+        <span>&nbsp;</span>
       ) : (
         <>
           <span>

@@ -19,7 +19,7 @@ Toàn bộ lộ trình MVP trong CLAUDE.md (tuần 1 và tuần 2) đã xong.
 - Định dạng: đậm, nghiêng, màu chữ, màu nền, căn lề, định dạng số; toolbar phản ánh ô đang chọn.
 - Sort theo cột, filter theo giá trị (hộp thoại có tìm kiếm); ký hiệu ↑ ↓ ▾ trên header.
 - Chèn/xóa dòng và cột, có cập nhật tham chiếu công thức.
-- Thanh công thức `FormulaBar` (ô tên: hiện và nhảy tới `B3`, `A1:C5`, `B:B`, `2:2`; ô nhập nội dung ô đang chọn). Toolbar thêm xóa định dạng, sort A→Z / Z→A.
+- Thanh công thức `FormulaBar` (ô tên: hiện và nhảy tới `B3`, `A1:C5`, `B:B`, `2:2`; ô nhập nội dung ô đang chọn). Toolbar thêm xóa định dạng, sort A→Z / Z→A. Giao diện chrome (toolbar, thanh công thức, thanh trạng thái) dùng icon SVG nội bộ (`icons.tsx`), style chung trong `chrome.tsx` (inject một thẻ `<style>`, biến CSS `--rdg-*` ghi đè được), tooltip kèm phím tắt theo nền tảng, điều hướng mũi tên/Home/End giữa các nút, Esc về lưới.
 - Context menu chuột phải; thanh thống kê (tổng, trung bình, đếm).
 
 **Kiểm thử**: 625 unit test (gồm ~300 test công thức theo bảng, 80 chuỗi fuzz × 120 thao tác, 60 chuỗi fuzz chèn/xóa với oracle độc lập) và 48 e2e test chạy trên Chromium, Firefox và WebKit.
