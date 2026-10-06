@@ -47,7 +47,7 @@ export function drawSelection(
     }
   }
   if (!showActiveBorder) return;
-  drawFillHandle(ctx, sheet, selection, rowSeg, colSeg);
+  if (!sheet.readOnly) drawFillHandle(ctx, sheet, selection, rowSeg, colSeg);
   const ax = colSeg.origin + cols.offsetOf(selection.activeCol) - colSeg.base;
   const ay = rowSeg.origin + rows.offsetOf(selection.activeRow) - rowSeg.base;
   ctx.strokeStyle = theme.accent;

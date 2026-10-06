@@ -20,13 +20,15 @@ export function buildMenuEntries(controller: GridController, openFilter: (viewCo
   const wholeCols = p.startRow === 0 && p.endRow === sheet.rowCount - 1;
   const col = sheet.selection.activeCol;
   const colName = columnLabel(sheet.mapping.toDataCol(col));
+  const readOnly = sheet.readOnly;
   const entries: Entry[] = [
-    { label: m.cut, shortcut: `${MOD}X`, run: () => controller.clipboard.exec('cut') },
+    { label: m.cut, shortcut: `${MOD}X`, disabled: readOnly, run: () => controller.clipboard.exec('cut') },
     { label: m.copy, shortcut: `${MOD}C`, run: () => controller.clipboard.exec('copy') },
-    { label: m.paste, shortcut: `${MOD}V`, run: () => void controller.clipboard.pasteFromSystem() },
+    { label: m.paste, shortcut: `${MOD}V`, disabled: readOnly, run: () => void controller.clipboard.pasteFromSystem() },
     'separator',
   ];
-  const structure = (label: string, run: () => void): MenuItem => ({ label, run });
+  // Hiding rows/columns only changes the view, so it stays available when the sheet is read-only.
+  const structure = (label: string, run: () => void, mutates = true): MenuItem => ({ label, run, disabled: mutates && readOnly });
   if (!wholeCols) {
     entries.push(
       structure(m.insertRowsAbove(rows), () => sheet.insertRows(p.startRow, rows)),
@@ -49,14 +51,14 @@ export function buildMenuEntries(controller: GridController, openFilter: (viewCo
   if (wholeCols) {
     const a = columnLabel(sheet.mapping.toDataCol(p.startCol));
     const b = columnLabel(sheet.mapping.toDataCol(p.endCol));
-    entries.push(structure(m.hideCols(a, b), () => void sheet.hideLines('col', p.startCol, p.endCol)));
-    if (sheet.cols.hiddenIn(p.startCol, p.endCol).length > 0) entries.push(structure(m.showHiddenCols, () => void sheet.showLines('col', p.startCol, p.endCol)));
+    entries.push(structure(m.hideCols(a, b), () => void sheet.hideLines('col', p.startCol, p.endCol), false));
+    if (sheet.cols.hiddenIn(p.startCol, p.endCol).length > 0) entries.push(structure(m.showHiddenCols, () => void sheet.showLines('col', p.startCol, p.endCol), false));
   }
   if (wholeRows) {
-    entries.push(structure(m.hideRows(p.startRow + 1, p.endRow + 1), () => void sheet.hideLines('row', p.startRow, p.endRow)));
-    if (sheet.rows.hiddenIn(p.startRow, p.endRow).length > 0) entries.push(structure(m.showHiddenRows, () => void sheet.showLines('row', p.startRow, p.endRow)));
+    entries.push(structure(m.hideRows(p.startRow + 1, p.endRow + 1), () => void sheet.hideLines('row', p.startRow, p.endRow), false));
+    if (sheet.rows.hiddenIn(p.startRow, p.endRow).length > 0) entries.push(structure(m.showHiddenRows, () => void sheet.showLines('row', p.startRow, p.endRow), false));
   }
-  entries.push({ label: m.clearContents, shortcut: 'Del', run: () => sheet.clearSelection() }, 'separator');
+  entries.push({ label: m.clearContents, shortcut: 'Del', disabled: readOnly, run: () => sheet.clearSelection() }, 'separator');
   entries.push(
     { label: m.sortSheetAsc(colName), run: () => sheet.sortByColumn(col, true) },
     { label: m.sortSheetDesc(colName), run: () => sheet.sortByColumn(col, false) },

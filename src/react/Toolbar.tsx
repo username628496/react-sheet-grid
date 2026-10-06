@@ -41,6 +41,7 @@ interface ToolbarState {
   viewActive: boolean;
   columnFiltered: boolean;
   zoom: number;
+  readOnly: boolean;
 }
 
 // Reading from the sheet through one string keeps useSyncExternalStore's snapshot comparison trivial and stable.
@@ -57,6 +58,7 @@ function snapshot(sheet: Spreadsheet, grid: GridController | null | undefined): 
     viewActive: sheet.viewState.sort !== null || sheet.viewState.filters.size > 0,
     columnFiltered: sheet.isColumnFiltered(selection.activeCol),
     zoom: grid?.surface.zoom ?? 1,
+    readOnly: sheet.readOnly,
   };
   return JSON.stringify(state);
 }
@@ -87,7 +89,7 @@ export function Toolbar({ sheet, grid = null, onAction }: ToolbarProps) {
   );
   const m = useMessages();
   const theme = useTheme();
-  const { canUndo, canRedo, style, rows, cols, painting, viewActive, columnFiltered, zoom } = JSON.parse(raw) as ToolbarState;
+  const { canUndo, canRedo, style, rows, cols, painting, viewActive, columnFiltered, zoom, readOnly } = JSON.parse(raw) as ToolbarState;
   const [notice, setNotice] = useState<string | null>(null);
   const [menu, setMenu] = useState<OpenMenu | null>(null);
   const lastClosed = useRef<{ id: MenuId; at: number } | null>(null);
@@ -120,6 +122,13 @@ export function Toolbar({ sheet, grid = null, onAction }: ToolbarProps) {
     items[next]?.focus();
   };
 
+  // In a read-only sheet everything that would change the document is disabled; viewing controls stay usable.
+  const mutating = new Set([
+    m.undo, m.redo, m.paintFormat, m.clearFormatting, m.cut, m.formatCurrencyButton, m.formatPercentButton, m.decreaseDecimals,
+    m.increaseDecimals, m.bold, m.italic, m.underline, m.strike, m.alignLeft, m.alignCenter, m.alignRight,
+  ]);
+  const mutatingMenus: ReadonlySet<MenuId> = new Set<MenuId>(['paste', 'numberFormat', 'insert', 'delete', 'functions']);
+
   const button = (
     icon: IconName | ReactNode,
     label: string,
@@ -135,7 +144,7 @@ export function Toolbar({ sheet, grid = null, onAction }: ToolbarProps) {
       title={tip(label, shortcut)}
       aria-label={label}
       aria-pressed={active}
-      disabled={disabled}
+      disabled={disabled || (readOnly && mutating.has(label))}
       onMouseDown={(e) => e.preventDefault()}
       onClick={() => run(onClick)}
     >
@@ -153,7 +162,7 @@ export function Toolbar({ sheet, grid = null, onAction }: ToolbarProps) {
       aria-label={label}
       aria-haspopup="menu"
       aria-expanded={menu?.id === id}
-      disabled={disabled}
+      disabled={disabled || (readOnly && mutatingMenus.has(id))}
       onMouseDown={(e) => e.preventDefault()}
       onClick={(e) => {
         const closed = lastClosed.current;
@@ -259,6 +268,7 @@ export function Toolbar({ sheet, grid = null, onAction }: ToolbarProps) {
           <ColorButton
             icon="textColor"
             title={m.textColor}
+            disabled={readOnly}
             value={style.color ?? '#1f2328'}
             active={style.color !== undefined}
             onPick={(color) => run(() => sheet.formatSelection({ color }, 'Text color'))}
@@ -267,6 +277,7 @@ export function Toolbar({ sheet, grid = null, onAction }: ToolbarProps) {
           <ColorButton
             icon="fillColor"
             title={m.fillColor}
+            disabled={readOnly}
             value={style.background ?? '#ffffff'}
             active={style.background !== undefined}
             onPick={(background) => run(() => sheet.formatSelection({ background }, 'Fill color'))}
@@ -295,6 +306,7 @@ export function Toolbar({ sheet, grid = null, onAction }: ToolbarProps) {
           <CountField
             label={m.rowsLabel}
             ariaLabel={m.rowCount}
+            disabled={readOnly}
             value={rows}
             onApply={(n) => {
               const { removedCells } = sheet.setRowCount(n);
@@ -305,6 +317,7 @@ export function Toolbar({ sheet, grid = null, onAction }: ToolbarProps) {
           <CountField
             label={m.colsLabel}
             ariaLabel={m.colCount}
+            disabled={readOnly}
             value={cols}
             onApply={(n) => {
               const { removedCells } = sheet.setColCount(n);
@@ -342,6 +355,7 @@ export function Toolbar({ sheet, grid = null, onAction }: ToolbarProps) {
 interface CountFieldProps {
   label: string;
   ariaLabel: string;
+  disabled?: boolean;
   value: number;
   onApply(n: number): void;
   /** After Enter or Esc, so the host can give focus back to the grid. */
@@ -349,7 +363,7 @@ interface CountFieldProps {
 }
 
 /** A small "Rows [ 50 ]" field: Enter or leaving the field applies the number, Esc or garbage restores the old one. */
-function CountField({ label, ariaLabel, value, onApply, onDone }: CountFieldProps) {
+function CountField({ label, ariaLabel, disabled = false, value, onApply, onDone }: CountFieldProps) {
   const [draft, setDraftState] = useState<string | null>(null);
   // Enter applies and then moves focus, which fires blur in the same tick, before React re-renders: the ref makes
   // that second apply see the draft is already consumed.
@@ -371,6 +385,7 @@ function CountField({ label, ariaLabel, value, onApply, onDone }: CountFieldProp
       <input
         className="rdg-count-input"
         aria-label={ariaLabel}
+        disabled={disabled}
         inputMode="numeric"
         autoComplete="off"
         spellCheck={false}
@@ -398,13 +413,14 @@ function CountField({ label, ariaLabel, value, onApply, onDone }: CountFieldProp
 interface ColorButtonProps {
   icon: IconName;
   title: string;
+  disabled?: boolean;
   value: string;
   active: boolean;
   onPick(color: string): void;
   onClear(): void;
 }
 
-function ColorButton({ icon, title, value, active, onPick, onClear }: ColorButtonProps) {
+function ColorButton({ icon, title, disabled = false, value, active, onPick, onClear }: ColorButtonProps) {
   const m = useMessages();
   const input = useRef<HTMLInputElement>(null);
   const pick = useRef(onPick);
@@ -427,6 +443,7 @@ function ColorButton({ icon, title, value, active, onPick, onClear }: ColorButto
         className="rdg-btn"
         title={title}
         aria-label={title}
+        disabled={disabled}
         onMouseDown={(e) => e.preventDefault()}
         onClick={() => input.current?.click()}
       >
@@ -434,7 +451,7 @@ function ColorButton({ icon, title, value, active, onPick, onClear }: ColorButto
         <span className="rdg-swatch" style={{ ['--rdg-swatch' as string]: value }} />
       </button>
       <input ref={input} type="color" aria-label={m.colorPicker(title)} defaultValue={value} key={value} tabIndex={-1} />
-      {active && (
+      {active && !disabled && (
         <button
           type="button"
           className="rdg-reset"

@@ -103,7 +103,7 @@ export class MouseController {
 
   private overFillHandle(x: number, y: number): boolean {
     const { sheet, editor, surface } = this.deps;
-    if (editor.editing) return false;
+    if (editor.editing || sheet.readOnly) return false; // nothing to fill in a read-only sheet
     const vp = surface.viewport;
     const p = sheet.selection.primary;
     const right = vp.colLeft(p.endCol) + sheet.cols.getSize(p.endCol);

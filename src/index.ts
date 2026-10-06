@@ -1,4 +1,4 @@
-export const VERSION = '0.0.0';
+export const VERSION = '0.1.0';
 export * from './core';
 export { DataGrid, type DataGridProps } from './react/DataGrid';
 export { GridController } from './input/GridController';
@@ -9,3 +9,4 @@ export { ContextMenu } from './react/ContextMenu';
 export { FormulaBar } from './react/FormulaBar';
 export { GridProvider, useMessages, type ThemeSetting } from './react/GridProvider';
 export { MESSAGES, type Locale, type Messages } from './react/messages';
+export { SheetGrid, type SheetChangeEvent, type SheetGridHandle, type SheetGridProps } from './react/SheetGrid';

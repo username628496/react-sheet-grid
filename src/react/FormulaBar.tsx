@@ -1,4 +1,4 @@
-import { type KeyboardEvent, useEffect, useRef } from 'react';
+import { type KeyboardEvent, useEffect, useRef, useSyncExternalStore } from 'react';
 import { formatRangeAddress, parseRangeAddress } from '../core/model/address';
 import type { Spreadsheet } from '../core/Spreadsheet';
 import type { GridController } from '../input/GridController';
@@ -59,6 +59,10 @@ export function FormulaBar({ sheet, grid }: FormulaBarProps) {
     };
   }, [sheet, grid]);
 
+  const readOnly = useSyncExternalStore(
+    (listener) => sheet.subscribe(listener),
+    () => sheet.readOnly,
+  );
   const pushToEditor = (): void => {
     const text = textRef.current;
     if (text === null || grid === null) return;
@@ -166,6 +170,7 @@ export function FormulaBar({ sheet, grid }: FormulaBarProps) {
         spellCheck={false}
         autoComplete="off"
         disabled={grid === null}
+        readOnly={readOnly}
         onFocus={onTextFocus}
         onBlur={onTextBlur}
         onInput={pushToEditor}

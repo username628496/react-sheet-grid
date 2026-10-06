@@ -63,6 +63,8 @@ export class EditorController {
 
   private readonly onInput = (): void => {
     this.pointSpan = null; // the user typed: whatever was being pointed at is now ordinary text
+    // A key or IME composition that arrived while editing was refused (read-only) must not pile up in the hidden box.
+    if (!this.editing) this.textarea.value = '';
   };
 
   // Focus coming back to the grid (e.g. a click to point at a cell) makes the textarea the editing surface again.
@@ -196,6 +198,7 @@ export class EditorController {
   }
 
   private open(mode: EditMode, text: string, fromBar: boolean): void {
+    if (this.sheet.readOnly) return; // nothing can be typed into a read-only sheet
     const { selection } = this.sheet;
     this.surface.scrollCellIntoView(selection.activeRow, selection.activeCol);
     this.editing = true;

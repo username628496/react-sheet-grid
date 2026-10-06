@@ -132,6 +132,7 @@ export class ClipboardController {
 
   /** Like copyTo, but the source is cleared when the data is pasted (a move). */
   cutTo(data: ClipboardWriter): boolean {
+    if (this.sheet.readOnly) return false;
     const clip = this.copyData(true);
     if (clip === null) return false;
     this.write(data, clip);
@@ -161,6 +162,7 @@ export class ClipboardController {
 
   private paste(html: string, text: string): void {
     const { sheet } = this;
+    if (sheet.readOnly) return;
     const clip = this.clip;
     const mode = this.pasteMode;
     this.pasteMode = 'normal';

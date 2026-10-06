@@ -93,6 +93,9 @@ export class Spreadsheet {
   frozenCols = 0;
   /** Data keys written since the last recalculation. Only tracked while formulas exist (or one is being added). */
   private readonly dirty = new Set<number>();
+  private readOnlyFlag = false;
+  /** Document changes that do not go through the history (frozen panes). */
+  private looseEdits = 0;
 
   constructor(options: SpreadsheetOptions = {}) {
     const rowCount = options.rowCount ?? 1000;
@@ -138,6 +141,7 @@ export class Spreadsheet {
     if (nextRows === this.frozenRows && nextCols === this.frozenCols) return;
     this.frozenRows = nextRows;
     this.frozenCols = nextCols;
+    this.looseEdits++;
     this.notify();
   }
 
@@ -182,13 +186,49 @@ export class Spreadsheet {
     return formatValue(value);
   }
 
+  /**
+   * While true, nothing that changes the document runs: cell edits, formatting, pasting, inserting and deleting
+   * rows/columns, resizing the sheet, undo and redo. Changing how the sheet is *viewed* still works (sorting, filtering,
+   * column/row sizes, hiding, freezing), as in a shared Sheets file you can only view.
+   */
+  get readOnly(): boolean {
+    return this.readOnlyFlag;
+  }
+
+  set readOnly(value: boolean) {
+    if (value === this.readOnlyFlag) return;
+    this.readOnlyFlag = value;
+    this.notify();
+  }
+
+  /**
+   * A number that changes whenever the document does (edits, undo, redo, freezing) and never for selection or scroll.
+   * Compare it to the last value you saved to know whether there is anything to save.
+   */
+  get revision(): number {
+    return this.history.version + this.looseEdits;
+  }
+
+  /** Like `subscribe`, but only called when the document changed (see `revision`), not on selection moves. */
+  subscribeChanges(listener: () => void): () => void {
+    let seen = this.revision;
+    return this.subscribe(() => {
+      const now = this.revision;
+      if (now === seen) return;
+      seen = now;
+      listener();
+    });
+  }
+
   execute(command: Command): void {
+    if (this.readOnlyFlag && !(command instanceof ResizeCommand || command instanceof ViewStateCommand)) return;
     this.history.execute(command, this);
     this.flushFormulas();
     this.notify();
   }
 
   undo(): boolean {
+    if (this.readOnlyFlag) return false;
     const done = this.history.undo(this);
     if (done) {
       this.flushFormulas();
@@ -199,6 +239,7 @@ export class Spreadsheet {
   }
 
   redo(): boolean {
+    if (this.readOnlyFlag) return false;
     const done = this.history.redo(this);
     if (done) {
       this.flushFormulas();
@@ -642,6 +683,7 @@ export class Spreadsheet {
 
   private resize(axis: Axis, requested: number): SizeChange {
     const current = axis === 'row' ? this.rowCount : this.colCount;
+    if (this.readOnlyFlag) return { count: current, removedCells: 0 };
     const limit = axis === 'row' ? MAX_ROWS - (this.mapping.dataRowCount - this.rowCount) : MAX_COLS;
     const target = Math.max(1, Math.min(limit, Math.trunc(Number.isFinite(requested) ? requested : current)));
     if (target === current) return { count: current, removedCells: 0 };
@@ -808,7 +850,7 @@ export class Spreadsheet {
     make: (i: number, j: number, existing: Cell, dataRow: number, dataCol: number) => Cell,
     cutFrom: ViewRange | null = null,
   ): ViewRange | null {
-    if (rows === 0 || cols === 0) return null;
+    if (rows === 0 || cols === 0 || this.readOnlyFlag) return null;
     const target = this.selection.primary;
     const th = target.endRow - target.startRow + 1;
     const tw = target.endCol - target.startCol + 1;

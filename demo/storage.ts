@@ -50,10 +50,10 @@ export type SaveStatus = 'saved' | 'saving' | 'error';
 
 /**
  * Saves the sheet shortly after the last change (not on every keystroke or selection move) and again when the tab is
- * hidden or closed. Only real edits count: the history version moves with every edit, undo and redo.
+ * hidden or closed. Only real edits count: the revision moves with every edit, undo, redo and freeze.
  */
 export function autoSave(sheet: Spreadsheet, onStatus: (status: SaveStatus) => void): () => void {
-  let savedVersion = sheet.history.version;
+  let savedVersion = sheet.revision;
   let timer: ReturnType<typeof setTimeout> | undefined;
   let writing = false;
 
@@ -63,14 +63,14 @@ export function autoSave(sheet: Spreadsheet, onStatus: (status: SaveStatus) => v
       timer = setTimeout(() => void flush(), 200); // one write at a time; the next one picks up newer edits
       return;
     }
-    const version = sheet.history.version;
+    const version = sheet.revision;
     if (version === savedVersion) return;
     writing = true;
     onStatus('saving');
     try {
       await run('readwrite', (store) => store.put(serializeSheet(sheet) satisfies SheetSnapshot, KEY));
       savedVersion = version;
-      onStatus(sheet.history.version === savedVersion ? 'saved' : 'saving');
+      onStatus(sheet.revision === savedVersion ? 'saved' : 'saving');
     } catch {
       onStatus('error');
     } finally {
@@ -79,7 +79,7 @@ export function autoSave(sheet: Spreadsheet, onStatus: (status: SaveStatus) => v
   };
 
   const schedule = (): void => {
-    if (sheet.history.version === savedVersion) return;
+    if (sheet.revision === savedVersion) return;
     onStatus('saving');
     clearTimeout(timer);
     timer = setTimeout(() => void flush(), 600);
