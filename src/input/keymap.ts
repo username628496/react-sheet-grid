@@ -1,3 +1,4 @@
+import type { HorizontalAlign } from '../core/model/StyleTable';
 import type { Direction } from '../core/selection/navigation';
 
 export type KeyContext = 'navigating' | 'editing' | 'editingFormula';
@@ -10,6 +11,8 @@ export interface KeyInput {
   mod: boolean;
   isComposing: boolean;
   keyCode: number;
+  /** Physical key, used where the character depends on the keyboard layout (Shift+digit). */
+  code?: string;
 }
 
 export type CommitMove = 'down' | 'up' | 'right' | 'left' | 'none';
@@ -31,7 +34,17 @@ export type Action =
   | { type: 'undo' }
   | { type: 'redo' }
   | { type: 'bold' }
-  | { type: 'italic' };
+  | { type: 'italic' }
+  | { type: 'underline' }
+  | { type: 'strike' }
+  | { type: 'fillDown' }
+  | { type: 'fillRight' }
+  | { type: 'commitFill' }
+  | { type: 'clearFormat' }
+  | { type: 'align'; align: HorizontalAlign }
+  | { type: 'numberFormat'; format: string }
+  | { type: 'pasteValues' }
+  | { type: 'scrollToActive' };
 
 export interface KeyOptions {
   /** In "enter mode" (started by typing) arrows commit and move; after F2/double-click they move the caret. */
@@ -50,7 +63,7 @@ export function isMacPlatform(): boolean {
 }
 
 export function toKeyInput(
-  e: { key: string; shiftKey: boolean; altKey: boolean; ctrlKey: boolean; metaKey: boolean; isComposing: boolean; keyCode: number },
+  e: { key: string; shiftKey: boolean; altKey: boolean; ctrlKey: boolean; metaKey: boolean; isComposing: boolean; keyCode: number; code?: string },
   isMac: boolean,
 ): KeyInput {
   return {
@@ -60,6 +73,7 @@ export function toKeyInput(
     mod: isMac ? e.metaKey : e.ctrlKey,
     isComposing: e.isComposing,
     keyCode: e.keyCode,
+    code: e.code,
   };
 }
 
@@ -103,22 +117,53 @@ function navigatingKey(k: KeyInput): Action | null {
       return { type: 'page', dir: 'down', extend: k.shift };
     case 'Delete':
     case 'Backspace':
-      return { type: 'clear' };
+      return k.mod ? { type: 'scrollToActive' } : { type: 'clear' };
     default:
       break;
   }
   if (k.mod && !k.alt) {
-    switch (k.key.toLowerCase()) {
+    const key = k.key.toLowerCase();
+    if (k.shift) {
+      // Shift+digit gives different characters per layout, so these use the physical key.
+      const numberFormats: Record<string, string> = { Digit1: '#,##0.00', Digit4: '$#,##0.00', Digit5: '0%' };
+      const format = k.code === undefined ? undefined : numberFormats[k.code];
+      if (format !== undefined) return { type: 'numberFormat', format };
+      switch (key) {
+        case 'z':
+          return { type: 'redo' };
+        case 'l':
+          return { type: 'align', align: 'left' };
+        case 'e':
+          return { type: 'align', align: 'center' };
+        case 'r':
+          return { type: 'align', align: 'right' };
+        case 'x':
+          return { type: 'strike' };
+        case 'v':
+          return { type: 'pasteValues' }; // the paste event itself still comes from the browser
+        default:
+          return null;
+      }
+    }
+    switch (key) {
       case 'a':
         return { type: 'selectAll' };
       case 'z':
-        return k.shift ? { type: 'redo' } : { type: 'undo' };
+        return { type: 'undo' };
       case 'y':
         return { type: 'redo' };
       case 'b':
         return { type: 'bold' };
       case 'i':
         return { type: 'italic' };
+      case 'u':
+        return { type: 'underline' };
+      case 'd':
+        return { type: 'fillDown' };
+      case 'r':
+        return { type: 'fillRight' };
+      case '\\':
+        return { type: 'clearFormat' };
       case ' ':
         return { type: 'selectColumn' };
       default:
@@ -135,6 +180,7 @@ function navigatingKey(k: KeyInput): Action | null {
 function editingKey(context: KeyContext, k: KeyInput, options: KeyOptions): Action | null {
   switch (k.key) {
     case 'Enter':
+      if (k.mod) return { type: 'commitFill' }; // Ctrl/Cmd+Enter fills the whole selection
       if (k.alt) return { type: 'newline' };
       return { type: 'commit', move: k.shift ? 'up' : 'down' };
     case 'Tab':

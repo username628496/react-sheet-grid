@@ -630,3 +630,106 @@ test.describe('status bar', () => {
     await expect(page.getByTestId('stat-sum')).toHaveText('11');
   });
 });
+
+test.describe('Google Sheets shortcuts', () => {
+  const styleOf = (page: import('@playwright/test').Page, r: number, c: number): Promise<Record<string, unknown>> =>
+    page.evaluate(([row, col]) => {
+      const s = window.__sheet!;
+      return { ...s.styles.get(s.getCellByView(row as number, col as number).styleId) };
+    }, [r, c]);
+
+  test('Mod+D fills the selection down from its first row, as one undo step', async ({ page }) => {
+    await page.evaluate(() => {
+      window.__sheet!.setCellInput(0, 0, 'top');
+      window.__sheet!.setCellInput(1, 0, 'x');
+    });
+    await clickCell(page, 0, 0);
+    await clickCell(page, 3, 0, { modifiers: ['Shift'] });
+    await page.keyboard.press(`${mod}+d`);
+    expect([0, 1, 2, 3]).toEqual([0, 1, 2, 3]);
+    expect(await cellValue(page, 3, 0)).toBe('top');
+    expect(await cellValue(page, 1, 0)).toBe('top');
+    await page.keyboard.press(`${mod}+z`);
+    expect(await cellValue(page, 1, 0)).toBe('x');
+    expect(await cellValue(page, 3, 0)).toBeNull();
+  });
+
+  test('Mod+D with one cell selected copies from the cell above', async ({ page }) => {
+    await page.evaluate(() => window.__sheet!.setCellInput(0, 0, 'above'));
+    await clickCell(page, 1, 0);
+    await page.keyboard.press(`${mod}+d`);
+    expect(await cellValue(page, 1, 0)).toBe('above');
+  });
+
+  test('Mod+R fills right', async ({ page }) => {
+    await page.evaluate(() => window.__sheet!.setCellInput(0, 0, 'left'));
+    await clickCell(page, 0, 0);
+    await clickCell(page, 0, 3, { modifiers: ['Shift'] });
+    await page.keyboard.press(`${mod}+r`);
+    expect(await cellValue(page, 0, 3)).toBe('left');
+  });
+
+  test('Mod+Enter fills the whole selection with what was typed', async ({ page }) => {
+    await clickCell(page, 0, 0);
+    await clickCell(page, 2, 1, { modifiers: ['Shift'] });
+    await page.keyboard.type('7');
+    await page.keyboard.press(`${mod}+Enter`);
+    expect(await cellValue(page, 0, 0)).toBe(7);
+    expect(await cellValue(page, 2, 1)).toBe(7);
+    expect(await page.evaluate(() => window.__grid!.editor.editing)).toBe(false);
+  });
+
+  test('underline, strikethrough and alignment shortcuts', async ({ page }) => {
+    await page.evaluate(() => window.__sheet!.setCellInput(0, 0, 'x'));
+    await clickCell(page, 0, 0);
+    await page.keyboard.press(`${mod}+u`);
+    await page.keyboard.press(`${mod}+Shift+x`);
+    await page.keyboard.press(`${mod}+Shift+e`);
+    expect(await styleOf(page, 0, 0)).toEqual({ underline: true, strike: true, align: 'center' });
+    await page.keyboard.press(`${mod}+Shift+r`);
+    expect((await styleOf(page, 0, 0)).align).toBe('right');
+    await page.keyboard.press(`${mod}+\\`);
+    expect(await styleOf(page, 0, 0)).toEqual({});
+    expect(await cellValue(page, 0, 0)).toBe('x');
+  });
+
+  test('number format shortcuts', async ({ page }) => {
+    await page.evaluate(() => window.__sheet!.setCellInput(0, 0, '0.256'));
+    await clickCell(page, 0, 0);
+    await page.keyboard.press(`${mod}+Shift+5`);
+    expect(await page.evaluate(() => window.__sheet!.getDisplayText(0, 0))).toBe('26%');
+    await page.keyboard.press(`${mod}+Shift+4`);
+    expect(await page.evaluate(() => window.__sheet!.getDisplayText(0, 0))).toBe('$0.26');
+    await page.keyboard.press(`${mod}+Shift+1`);
+    expect(await page.evaluate(() => window.__sheet!.getDisplayText(0, 0))).toBe('0.26');
+  });
+
+  test('Mod+Shift+V pastes values only, keeping the target formatting', async ({ page, browserName }) => {
+    test.skip(browserName !== 'chromium', 'needs real clipboard shortcuts');
+    await page.context().grantPermissions(['clipboard-read', 'clipboard-write']);
+    await page.evaluate(() => {
+      const s = window.__sheet!;
+      s.setCellInput(0, 0, '2');
+      s.setCellInput(0, 1, '=A1*5');
+      s.selection.selectCell(0, 1);
+      s.toggleStyle('bold');
+    });
+    await clickCell(page, 0, 1);
+    await page.keyboard.press(`${mod}+c`);
+    await clickCell(page, 4, 4);
+    await page.keyboard.press(`${mod}+Shift+v`);
+    // Some browsers fire no paste event for this shortcut, so the controller falls back to an async clipboard read.
+    await expect.poll(() => cellValue(page, 4, 4)).toBe(10);
+    expect(await page.evaluate(() => window.__sheet!.getEditText(4, 4))).toBe('10'); // no formula carried over
+    expect(await styleOf(page, 4, 4)).toEqual({}); // and no bold
+    await clickCell(page, 5, 5);
+    await page.keyboard.press(`${mod}+v`); // a normal paste afterwards is not values-only
+    expect(await page.evaluate(() => window.__sheet!.getEditText(5, 5))).toBe('=E6*5');
+  });
+
+  test('Mod+U does not trigger the browser (view source) and toolbar shows the state', async ({ page }) => {
+    await clickCell(page, 0, 0);
+    await page.keyboard.press(`${mod}+u`);
+    await expect(page.getByRole('button', { name: 'Underline' })).toHaveAttribute('aria-pressed', 'true');
+  });
+});

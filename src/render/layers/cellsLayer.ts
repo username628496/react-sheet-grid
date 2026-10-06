@@ -90,6 +90,13 @@ export function drawCellText(
         if (!overflow && align === 'right') tx = x + w - pad - textWidth;
         else if (!overflow && align === 'center') tx = x + (w - textWidth) / 2;
         ctx.fillText(text, tx, y + h / 2 + 0.5);
+        if (style.underline === true || style.strike === true) {
+          // Canvas has no text-decoration, so the lines are drawn by hand across the visible part of the text.
+          const lineWidth = Math.min(textWidth, available);
+          const mid = Math.round(y + h / 2);
+          if (style.underline === true) ctx.fillRect(tx, mid + 7, lineWidth, 1);
+          if (style.strike === true) ctx.fillRect(tx, mid, lineWidth, 1);
+        }
         if (overflow) ctx.restore();
       }
       x += w;

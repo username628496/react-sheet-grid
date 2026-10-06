@@ -95,6 +95,8 @@ export function Toolbar({ sheet, onAction }: ToolbarProps) {
       <Separator />
       {button('B', 'Bold', style.bold === true, () => sheet.toggleStyle('bold'), false, { fontWeight: 'bold' })}
       {button('I', 'Italic', style.italic === true, () => sheet.toggleStyle('italic'), false, { fontStyle: 'italic' })}
+      {button('U', 'Underline', style.underline === true, () => sheet.toggleStyle('underline'), false, { textDecoration: 'underline' })}
+      {button('S', 'Strikethrough', style.strike === true, () => sheet.toggleStyle('strike'), false, { textDecoration: 'line-through' })}
       <ColorButton
         label="A"
         title="Text color"

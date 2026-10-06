@@ -25,6 +25,9 @@ function styleAttr(style: Style | undefined): string {
   const css: string[] = [];
   if (style.bold === true) css.push('font-weight:bold');
   if (style.italic === true) css.push('font-style:italic');
+  if (style.underline === true || style.strike === true) {
+    css.push(`text-decoration:${[style.underline === true ? 'underline' : '', style.strike === true ? 'line-through' : ''].filter(Boolean).join(' ')}`);
+  }
   if (style.color !== undefined) css.push(`color:${style.color}`);
   if (style.background !== undefined) css.push(`background-color:${style.background}`);
   if (style.align !== undefined) css.push(`text-align:${style.align}`);

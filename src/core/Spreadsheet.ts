@@ -228,10 +228,66 @@ export class Spreadsheet {
   }
 
   /** Ctrl+B / Ctrl+I: if every selected cell already has the style it is removed, otherwise it is applied to all. */
-  toggleStyle(key: 'bold' | 'italic'): void {
+  toggleStyle(key: 'bold' | 'italic' | 'underline' | 'strike'): void {
     const targets = this.formatTargets();
     const allOn = targets.length > 0 && targets.every((t) => this.styles.get(t.cell.styleId)[key] === true);
-    this.applyStyle(targets, { [key]: allOn ? undefined : true }, key === 'bold' ? 'Bold' : 'Italic');
+    const labels = { bold: 'Bold', italic: 'Italic', underline: 'Underline', strike: 'Strikethrough' };
+    this.applyStyle(targets, { [key]: allOn ? undefined : true }, labels[key]);
+  }
+
+  /** Mod+\: back to the default look; values and formulas stay. */
+  clearFormatting(): void {
+    const targets = this.formatTargets().filter((t) => t.cell.styleId !== 0);
+    if (targets.length === 0) return;
+    this.execute(new SetCellsCommand('Clear formatting', targets.map((t) => ({ dataRow: t.dataRow, dataCol: t.dataCol, cell: { ...t.cell, styleId: 0 } }))));
+  }
+
+  /**
+   * Mod+D / Mod+R: copies the first row (or column) of the selection over the rest, as a plain copy
+   * (formulas adapt through their relative references, no series). With a single row/column selected it
+   * copies from the neighbour above/left, like Sheets. Returns false when there is nothing to do.
+   */
+  fillFromEdge(direction: 'down' | 'right'): boolean {
+    const p = this.selection.primary;
+    const down = direction === 'down';
+    const lines = down ? p.endRow - p.startRow + 1 : p.endCol - p.startCol + 1;
+    const lanes = down ? p.endCol - p.startCol + 1 : p.endRow - p.startRow + 1;
+    const fromNeighbour = lines === 1;
+    const sourceIndex = (down ? p.startRow : p.startCol) - (fromNeighbour ? 1 : 0);
+    if (sourceIndex < 0 || lines * lanes > MAX_TILED_CELLS) return false;
+    const changes: CellChange[] = [];
+    for (let lane = 0; lane < lanes; lane++) {
+      const sr = down ? sourceIndex : p.startRow + lane;
+      const sc = down ? p.startCol + lane : sourceIndex;
+      const source = this.getCellByView(sr, sc);
+      for (let k = fromNeighbour ? 0 : 1; k < lines; k++) {
+        const r = down ? p.startRow + k : sr;
+        const c = down ? sc : p.startCol + k;
+        changes.push({ dataRow: this.mapping.toDataRow(r), dataCol: this.mapping.toDataCol(c), cell: source });
+      }
+    }
+    if (changes.length === 0) return false;
+    this.execute(new SetCellsCommand(down ? 'Fill down' : 'Fill right', changes));
+    return true;
+  }
+
+  /** Mod+Enter while editing: enters the same text in every selected cell (formulas adapt per cell). */
+  fillSelectionWithInput(text: string): boolean {
+    const p = this.selection.primary;
+    if ((p.endRow - p.startRow + 1) * (p.endCol - p.startCol + 1) > MAX_TILED_CELLS) return false;
+    // Parsed once at the active cell: the relative references are then shared, so every cell adapts as if filled.
+    const base = this.cellFromInput(text, this.mapping.toDataRow(this.selection.activeRow), this.mapping.toDataCol(this.selection.activeCol), 0);
+    const changes: CellChange[] = [];
+    for (let r = p.startRow; r <= p.endRow; r++) {
+      const dataRow = this.mapping.toDataRow(r);
+      for (let c = p.startCol; c <= p.endCol; c++) {
+        const dataCol = this.mapping.toDataCol(c);
+        const styleId = this.model.getCell(dataRow, dataCol).styleId;
+        changes.push({ dataRow, dataCol, cell: { ...base, styleId } });
+      }
+    }
+    this.execute(new SetCellsCommand('Fill selection', changes));
+    return true;
   }
 
   /** Applies a style patch (color, background, align, numberFormat...) to the selection. */

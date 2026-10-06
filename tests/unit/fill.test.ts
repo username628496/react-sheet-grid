@@ -140,3 +140,102 @@ describe('Spreadsheet.fillRange', () => {
     expect(s.fillRange({ startRow: 0, startCol: 0, endRow: 0, endCol: 0 }, 'down', 0)).toBeNull();
   });
 });
+
+describe('fillFromEdge (Mod+D / Mod+R)', () => {
+  it('copies the top row of a multi-row selection down, as a copy not a series', () => {
+    const s = makeSheet({ A1: 1, A2: 2, A3: 3, B1: 'x' });
+    s.selection.selectCell(0, 0);
+    s.selection.extendTo(2, 1);
+    expect(s.fillFromEdge('down')).toBe(true);
+    expect([0, 1, 2].map((r) => s.getCellByView(r, 0).value)).toEqual([1, 1, 1]);
+    expect([0, 1, 2].map((r) => s.getCellByView(r, 1).value)).toEqual(['x', 'x', 'x']);
+    s.undo();
+    expect([0, 1, 2].map((r) => s.getCellByView(r, 0).value)).toEqual([1, 2, 3]);
+  });
+
+  it('with a single row selected, copies from the cell above', () => {
+    const s = makeSheet({ A1: 'above', B1: 7 });
+    s.selection.selectCell(1, 0);
+    s.selection.extendTo(1, 1);
+    s.fillFromEdge('down');
+    expect(value(s, 'A2')).toBe('above');
+    expect(value(s, 'B2')).toBe(7);
+  });
+
+  it('does nothing without a source (first row, single cell)', () => {
+    const s = makeSheet({ A1: 1 });
+    s.selection.selectCell(0, 0);
+    expect(s.fillFromEdge('down')).toBe(false);
+    expect(s.fillFromEdge('right')).toBe(false);
+    expect(s.history.canUndo).toBe(true); // only the setup input
+  });
+
+  it('fills right from the left column, or from the neighbour', () => {
+    const s = makeSheet({ A1: 'a', B1: 'b' });
+    s.selection.selectCell(0, 0);
+    s.selection.extendTo(0, 3);
+    s.fillFromEdge('right');
+    expect([0, 1, 2, 3].map((c) => s.getCellByView(0, c).value)).toEqual(['a', 'a', 'a', 'a']);
+    const t = makeSheet({ A1: 5 });
+    t.selection.selectCell(0, 1);
+    t.fillFromEdge('right');
+    expect(value(t, 'B1')).toBe(5);
+  });
+
+  it('formulas adapt to each target through relative references', () => {
+    const s = makeSheet({ A1: 1, A2: 2, A3: 3, B1: '=A1*10' });
+    s.selection.selectCell(0, 1);
+    s.selection.extendTo(2, 1);
+    s.fillFromEdge('down');
+    expect(s.getEditText(...addr('B3'))).toBe('=A3*10');
+    expect(value(s, 'B3')).toBe(30);
+  });
+
+  it('copies formatting too', () => {
+    const s = makeSheet({ A1: 1 });
+    s.selection.selectCell(0, 0);
+    s.toggleStyle('bold');
+    s.selection.selectCell(0, 0);
+    s.selection.extendTo(1, 0);
+    s.fillFromEdge('down');
+    expect(s.styles.get(s.getCellByView(1, 0).styleId).bold).toBe(true);
+  });
+});
+
+describe('fillSelectionWithInput (Mod+Enter) and clearFormatting', () => {
+  it('writes the text into every selected cell; formulas adapt per cell', () => {
+    const s = makeSheet({ A1: 1, A2: 2 });
+    s.selection.selectCell(0, 1);
+    s.selection.extendTo(1, 1);
+    s.fillSelectionWithInput('=A1+100');
+    expect(value(s, 'B1')).toBe(101);
+    expect(value(s, 'B2')).toBe(102);
+    expect(s.getEditText(...addr('B2'))).toBe('=A2+100');
+    s.undo();
+    expect(s.model.hasCell(1, 1)).toBe(false);
+  });
+
+  it('clearFormatting resets style but keeps values and formulas', () => {
+    const s = makeSheet({ A1: 1, B1: '=A1+1' });
+    s.selection.selectCell(0, 0);
+    s.selection.extendTo(0, 1);
+    s.toggleStyle('bold');
+    s.formatSelection({ background: '#ff0' });
+    s.clearFormatting();
+    expect(s.getCellByView(0, 0)).toEqual({ value: 1, styleId: 0 });
+    expect(s.getEditText(0, 1)).toBe('=A1+1');
+    expect(s.getCellByView(0, 1).styleId).toBe(0);
+    s.undo();
+    expect(s.styles.get(s.getCellByView(0, 0).styleId).bold).toBe(true);
+  });
+
+  it('underline and strikethrough toggle independently', () => {
+    const s = makeSheet({ A1: 'x' });
+    s.selection.selectCell(0, 0);
+    s.toggleStyle('underline');
+    s.toggleStyle('strike');
+    expect(s.styles.get(s.getCellByView(0, 0).styleId)).toEqual({ underline: true, strike: true });
+    s.toggleStyle('underline');
+    expect(s.styles.get(s.getCellByView(0, 0).styleId)).toEqual({ strike: true });
+  });
+});

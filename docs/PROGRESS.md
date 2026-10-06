@@ -57,6 +57,30 @@ Toàn bộ lộ trình MVP trong CLAUDE.md (tuần 1 và tuần 2) đã xong.
 - Chèn/xóa dòng/cột đổi số dòng/cột, di chuyển dữ liệu, kích thước và viết lại tham chiếu (`remapFormula`): tham chiếu vào ô bị xóa thành `#REF!`, range co lại hoặc giãn ra, `A:A` giữ nguyên. Undo bằng snapshot. Chỉ cho phép khi chưa sort/filter.
 - Định dạng lên vùng quá lớn (> 50.000 ô, ví dụ cả cột) chỉ áp dụng cho ô đã có dữ liệu để không sinh hàng triệu ô.
 
+## Phím tắt (Mod = Cmd trên Mac, Ctrl trên Windows/Linux)
+
+| Phím | Tác dụng |
+|---|---|
+| Mũi tên, Mod+mũi tên, Shift+… | Di chuyển, nhảy theo khối dữ liệu, mở rộng vùng chọn |
+| Tab / Shift+Tab, Enter / Shift+Enter | Di chuyển ngang / dọc (vòng trong vùng chọn nhiều ô) |
+| Home, End, Mod+Home, Mod+End, PageUp, PageDown | Về đầu/cuối dòng, đầu/cuối dữ liệu, cuộn từng trang |
+| Mod+A, Mod+Space, Shift+Space | Chọn tất cả, cả cột, cả dòng |
+| F2, Enter, gõ ký tự, double-click | Sửa ô |
+| Enter, Tab, Esc, Alt+Enter | Lưu, lưu rồi sang phải, hủy, xuống dòng trong ô |
+| Mod+Enter (khi đang sửa) | Điền nội dung đang gõ vào cả vùng chọn (công thức dịch tham chiếu) |
+| Delete, Backspace | Xóa nội dung |
+| Mod+C / X / V | Copy / cut / paste |
+| Mod+Shift+V | Dán chỉ giá trị |
+| Mod+D / Mod+R | Điền xuống / sang phải từ hàng/cột đầu của vùng chọn (một ô: lấy từ ô trên/trái) |
+| Mod+Z, Mod+Y, Mod+Shift+Z | Hoàn tác, làm lại |
+| Mod+B / I / U, Mod+Shift+X | Đậm, nghiêng, gạch chân, gạch ngang |
+| Mod+Shift+L / E / R | Căn trái / giữa / phải |
+| Mod+Shift+1 / 4 / 5 | Định dạng số `#,##0.00` / tiền tệ / phần trăm |
+| Mod+\ | Xóa định dạng |
+| Mod+Backspace | Cuộn tới ô đang chọn |
+
+Chưa có: Mod+; (ngày hiện tại), Mod+K (liên kết), F4 / Mod+T (đổi tuyệt đối/tương đối khi gõ công thức), Mod+Alt+V (dán chỉ định dạng), Mod+/ (danh sách phím tắt), Mod+Alt+= và Mod+Alt+- (chèn/xóa), Mod+Shift+L bật bộ lọc.
+
 ## Lỗi đã biết / giới hạn
 
 - e2e đã chạy xanh trên cả 3 engine: Chromium 48/48, WebKit 46 pass + 2 skip, Firefox 46 pass + 2 skip (2 test giả lập IME qua CDP chỉ chạy trên Chromium). IME thật vẫn cần thử tay.

@@ -100,3 +100,36 @@ describe('keymap: editing', () => {
     expect(resolveKey('editingFormula', key('Enter'))).toEqual({ type: 'commit', move: 'down' });
   });
 });
+
+describe('keymap: Google Sheets shortcuts', () => {
+  it('maps fill, formatting and misc shortcuts', () => {
+    expect(resolveKey('navigating', key('d', { mod: true }))).toEqual({ type: 'fillDown' });
+    expect(resolveKey('navigating', key('r', { mod: true }))).toEqual({ type: 'fillRight' });
+    expect(resolveKey('navigating', key('u', { mod: true }))).toEqual({ type: 'underline' });
+    expect(resolveKey('navigating', key('X', { mod: true, shift: true }))).toEqual({ type: 'strike' });
+    expect(resolveKey('navigating', key('\\', { mod: true }))).toEqual({ type: 'clearFormat' });
+    expect(resolveKey('navigating', key('Backspace', { mod: true }))).toEqual({ type: 'scrollToActive' });
+    expect(resolveKey('navigating', key('V', { mod: true, shift: true }))).toEqual({ type: 'pasteValues' });
+  });
+
+  it('Mod+Shift+L/E/R align, and Mod+R without Shift fills right', () => {
+    expect(resolveKey('navigating', key('L', { mod: true, shift: true }))).toEqual({ type: 'align', align: 'left' });
+    expect(resolveKey('navigating', key('E', { mod: true, shift: true }))).toEqual({ type: 'align', align: 'center' });
+    expect(resolveKey('navigating', key('R', { mod: true, shift: true }))).toEqual({ type: 'align', align: 'right' });
+  });
+
+  it('Mod+Shift+digit uses the physical key so any keyboard layout works', () => {
+    expect(resolveKey('navigating', key('!', { mod: true, shift: true, code: 'Digit1' }))).toEqual({ type: 'numberFormat', format: '#,##0.00' });
+    expect(resolveKey('navigating', key('€', { mod: true, shift: true, code: 'Digit4' }))).toEqual({ type: 'numberFormat', format: '$#,##0.00' });
+    expect(resolveKey('navigating', key('%', { mod: true, shift: true, code: 'Digit5' }))).toEqual({ type: 'numberFormat', format: '0%' });
+  });
+
+  it('Mod+Enter fills the selection while editing (including formulas)', () => {
+    expect(resolveKey('editing', key('Enter', { mod: true }))).toEqual({ type: 'commitFill' });
+    expect(resolveKey('editingFormula', key('Enter', { mod: true }))).toEqual({ type: 'commitFill' });
+  });
+
+  it('ignores them during IME composition', () => {
+    expect(resolveKey('navigating', key('d', { mod: true, isComposing: true }))).toBeNull();
+  });
+});

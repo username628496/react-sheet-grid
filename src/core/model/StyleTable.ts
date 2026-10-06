@@ -3,6 +3,8 @@ export type HorizontalAlign = 'left' | 'center' | 'right';
 export interface Style {
   readonly bold?: boolean;
   readonly italic?: boolean;
+  readonly underline?: boolean;
+  readonly strike?: boolean;
   readonly color?: string;
   readonly background?: string;
   readonly align?: HorizontalAlign;

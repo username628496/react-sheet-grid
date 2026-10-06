@@ -67,7 +67,8 @@ export class KeyboardController {
     });
     if (action === null) return;
     // startTyping must not be prevented: the browser's default inserts the character into the textarea.
-    if (action.type !== 'startTyping') e.preventDefault();
+    // pasteValues likewise lets the browser's paste event through; it only marks the next paste as values-only.
+    if (action.type !== 'startTyping' && action.type !== 'pasteValues') e.preventDefault();
     this.run(action);
   };
 
@@ -139,8 +140,37 @@ export class KeyboardController {
         break;
       case 'bold':
       case 'italic':
+      case 'underline':
+      case 'strike':
         sheet.toggleStyle(action.type);
         break;
+      case 'fillDown':
+        sheet.fillFromEdge('down');
+        break;
+      case 'fillRight':
+        sheet.fillFromEdge('right');
+        break;
+      case 'commitFill': {
+        const text = editor.text;
+        editor.cancel();
+        sheet.fillSelectionWithInput(text);
+        break;
+      }
+      case 'clearFormat':
+        sheet.clearFormatting();
+        break;
+      case 'align':
+        sheet.formatSelection({ align: action.align }, 'Align');
+        break;
+      case 'numberFormat':
+        sheet.formatSelection({ numberFormat: action.format }, 'Number format');
+        break;
+      case 'pasteValues':
+        this.deps.clipboard.armValuesOnly();
+        return;
+      case 'scrollToActive':
+        this.deps.surface.scrollCellIntoView(selection.activeRow, selection.activeCol);
+        return;
     }
     this.deps.surface.scrollCellIntoView(selection.focusRow, selection.focusCol);
     editor.reposition();
