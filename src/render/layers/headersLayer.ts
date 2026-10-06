@@ -10,6 +10,27 @@ export interface HeaderHighlight {
   colMark?(viewCol: number): string | null;
 }
 
+/**
+ * A small triangle inside the header cell, pointing toward the hidden rows/columns next to it. It stays inside its
+ * own cell (the neighbour paints over anything that crosses the boundary) and clear of the centred label.
+ */
+function drawHiddenMark(ctx: CanvasRenderingContext2D, edge: number, along: number, vertical: boolean, towardEnd: boolean): void {
+  const tip = edge;
+  const base = towardEnd ? edge - 5 : edge + 5;
+  ctx.beginPath();
+  if (vertical) {
+    ctx.moveTo(along - 4, base);
+    ctx.lineTo(along + 4, base);
+    ctx.lineTo(along, tip);
+  } else {
+    ctx.moveTo(base, along - 4);
+    ctx.lineTo(base, along + 4);
+    ctx.lineTo(tip, along);
+  }
+  ctx.closePath();
+  ctx.fill();
+}
+
 export function drawHeaders(
   ctx: CanvasRenderingContext2D,
   sheet: Spreadsheet,
@@ -33,6 +54,7 @@ export function drawHeaders(
     let x = seg.origin + cols.offsetOf(seg.first) - seg.base;
     for (let c = seg.first; c <= seg.last; c++) {
       const w = cols.getSize(c);
+      if (w <= 0) continue; // hidden: nothing to draw (the neighbour carries a marker)
       const active = highlight?.isColSelected(c) === true;
       ctx.fillStyle = active ? theme.headerActive : theme.headerBackground;
       ctx.fillRect(x, 0, w, hh);
@@ -45,6 +67,12 @@ export function drawHeaders(
       }
       ctx.fillStyle = theme.headerLine;
       ctx.fillRect(Math.floor(x + w) - 1, 0, 1, hh);
+      if (w > 0) {
+        ctx.fillStyle = theme.accent;
+        // One mark per gap: at the right edge of the line before it, or at the left edge when the gap opens the sheet.
+        if (c + 1 < cols.count && cols.getSize(c + 1) === 0) drawHiddenMark(ctx, Math.floor(x + w) - 2, hh - 8, false, true);
+        if (c > 0 && cols.offsetOf(c) === 0) drawHiddenMark(ctx, Math.floor(x) + 1, hh - 8, false, false);
+      }
       x += w;
     }
     ctx.restore();
@@ -60,6 +88,7 @@ export function drawHeaders(
     let y = seg.origin + rows.offsetOf(seg.first) - seg.base;
     for (let r = seg.first; r <= seg.last; r++) {
       const h = rows.getSize(r);
+      if (h <= 0) continue;
       const active = highlight?.isRowSelected(r) === true;
       ctx.fillStyle = active ? theme.headerActive : theme.headerBackground;
       ctx.fillRect(0, y, hw, h);
@@ -67,6 +96,11 @@ export function drawHeaders(
       ctx.fillText(String(r + 1), hw / 2, y + h / 2 + 0.5);
       ctx.fillStyle = theme.headerLine;
       ctx.fillRect(0, Math.floor(y + h) - 1, hw, 1);
+      if (h > 0) {
+        ctx.fillStyle = theme.accent;
+        if (r + 1 < rows.count && rows.getSize(r + 1) === 0) drawHiddenMark(ctx, Math.floor(y + h) - 2, hw - 8, true, true);
+        if (r > 0 && rows.offsetOf(r) === 0) drawHiddenMark(ctx, Math.floor(y) + 1, hw - 8, true, false);
+      }
       y += h;
     }
     ctx.restore();

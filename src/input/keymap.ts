@@ -46,6 +46,8 @@ export type Action =
   | { type: 'pasteValues' }
   | { type: 'pasteFormat' }
   | { type: 'showShortcuts' }
+  | { type: 'hide'; axis: 'row' | 'col' }
+  | { type: 'unhide'; axis: 'row' | 'col' }
   | { type: 'scrollToActive' }
   | { type: 'pointMove'; dir: Direction; extend: boolean }
   | { type: 'toggleAbsolute' };
@@ -106,6 +108,11 @@ function navigatingKey(k: KeyInput): Action | null {
   }
   // Option+V types a symbol on a Mac, so paste-format is recognized by the physical key.
   if (k.mod && k.alt && k.code === 'KeyV') return { type: 'pasteFormat' };
+  // Same keys as Sheets; the digits are matched by physical key because Option/Shift change the character.
+  if (k.mod && k.alt && !k.shift && k.code === 'Digit9') return { type: 'hide', axis: 'row' };
+  if (k.mod && k.alt && !k.shift && k.code === 'Digit0') return { type: 'hide', axis: 'col' };
+  if (k.mod && k.shift && !k.alt && k.code === 'Digit9') return { type: 'unhide', axis: 'row' };
+  if (k.mod && k.shift && !k.alt && k.code === 'Digit0') return { type: 'unhide', axis: 'col' };
   switch (k.key) {
     case 'Tab':
       return { type: 'advance', horizontal: true, backward: k.shift };

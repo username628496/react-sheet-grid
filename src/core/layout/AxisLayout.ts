@@ -128,6 +128,21 @@ export class AxisLayout {
     this.setSize(viewIndex, this.defaultSize);
   }
 
+  /** Indices in [first, last] whose size is 0 (hidden). Cost scales with the overrides, not the range. */
+  hiddenIn(first: number, last: number): number[] {
+    const out: number[] = [];
+    for (let k = this.lowerBound(first); k < this.overrideIndex.length && (this.overrideIndex[k] as number) <= last; k++) {
+      if (this.overrideSize[k] === 0) out.push(this.overrideIndex[k] as number);
+    }
+    return out;
+  }
+
+  get hiddenCount(): number {
+    let n = 0;
+    for (const size of this.overrideSize) if (size === 0) n++;
+    return n;
+  }
+
   /** Start position of `viewIndex`; `offsetOf(count)` is the total size. */
   offsetOf(viewIndex: number): number {
     this.ensurePrefix();

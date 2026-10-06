@@ -1410,3 +1410,61 @@ test.describe('toolbar actions', () => {
     await expect.poll(() => cellValue(page, 4, 4)).toBe('carry');
   });
 });
+
+test.describe('hiding rows and columns', () => {
+  const rowHeight = (page: import('@playwright/test').Page, r: number) => page.evaluate((i) => window.__sheet!.rows.getSize(i), r);
+  const colWidth = (page: import('@playwright/test').Page, c: number) => page.evaluate((i) => window.__sheet!.cols.getSize(i), c);
+
+  test('the Show or hide menu hides the selected rows and arrows skip them', async ({ page }) => {
+    await page.evaluate(() => ['r1', 'r2', 'r3', 'r4'].forEach((v, r) => window.__sheet!.setCellInput(r, 0, v)));
+    await clickCell(page, 1, 0);
+    await page.keyboard.press('Shift+ArrowDown');
+    await page.getByRole('button', { name: 'Show or hide', exact: true }).click();
+    await page.getByRole('menuitem', { name: 'Hide rows 2–3' }).click();
+    expect([await rowHeight(page, 1), await rowHeight(page, 2)]).toEqual([0, 0]);
+    expect((await selection(page)).active).toEqual([3, 0]); // moved off the hidden row
+    await page.keyboard.press('ArrowUp');
+    expect((await selection(page)).active).toEqual([0, 0]);
+    await page.keyboard.press('ArrowDown');
+    expect((await selection(page)).active).toEqual([3, 0]);
+    // Clicking where row 4 now is selects row 4, and the grid still edits it.
+    await clickCell(page, 3, 0);
+    await page.keyboard.press('F2');
+    expect(await page.evaluate(() => window.__grid!.editor.text)).toBe('r4');
+    await page.keyboard.press('Escape');
+    // The hidden rows' content is untouched and they come back with the shortcut/menu.
+    await clickCell(page, 0, 0);
+    await page.keyboard.press('Shift+ArrowDown');
+    await page.keyboard.press('Shift+ArrowDown');
+    await page.keyboard.press('Shift+ArrowDown');
+    await page.getByRole('button', { name: 'Show or hide', exact: true }).click();
+    await page.getByRole('menuitem', { name: 'Show hidden rows' }).click();
+    expect([await rowHeight(page, 1), await rowHeight(page, 2)]).toEqual([21, 21]);
+    expect(await cellValue(page, 1, 0)).toBe('r2');
+  });
+
+  test('keyboard shortcuts hide and unhide columns, and undo brings them back', async ({ page }) => {
+    await clickCell(page, 0, 1);
+    await page.keyboard.press(`${mod}+Alt+Digit0`);
+    expect(await colWidth(page, 1)).toBe(0);
+    expect((await selection(page)).active).toEqual([0, 2]);
+    await page.keyboard.press('Shift+ArrowLeft');
+    await page.keyboard.press('Shift+ArrowLeft');
+    await page.keyboard.press(`${mod}+Shift+Digit0`);
+    expect(await colWidth(page, 1)).toBe(100);
+    await page.keyboard.press(`${mod}+Alt+Digit0`);
+    await page.keyboard.press(`${mod}+z`);
+    expect(await colWidth(page, 1)).toBe(100);
+  });
+
+  test('the header numbering shows a gap where rows are hidden', async ({ page }) => {
+    await page.evaluate(() => window.__sheet!.hideLines('row', 2, 3));
+    // Rows 3 and 4 have no height, so the row after them starts where row 3 would have.
+    const tops = await page.evaluate(() => {
+      const vp = window.__grid!.surface.viewport;
+      return [vp.rowTop(2), vp.rowTop(3), vp.rowTop(4)];
+    });
+    expect(tops[0]).toBe(tops[1]);
+    expect(tops[1]).toBe(tops[2]);
+  });
+});

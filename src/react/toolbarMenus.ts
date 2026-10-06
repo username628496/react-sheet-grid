@@ -4,7 +4,7 @@ import type { GridController } from '../input/GridController';
 import type { MenuEntry } from './Menu';
 import type { Messages } from './messages';
 
-export type MenuId = 'paste' | 'numberFormat' | 'insert' | 'delete' | 'freeze' | 'functions';
+export type MenuId = 'paste' | 'numberFormat' | 'insert' | 'delete' | 'visibility' | 'freeze' | 'functions';
 
 /** Number patterns offered by the "More formats" menu, in display order; '' is the automatic format. */
 export function numberFormatEntries(sheet: Spreadsheet, m: Messages): MenuEntry[] {
@@ -98,3 +98,19 @@ export function functionEntries(sheet: Spreadsheet, m: Messages): MenuEntry[] {
   });
   return [item('SUM', m.fnSum), item('AVERAGE', m.fnAverage), item('COUNT', m.fnCount), item('MAX', m.fnMax), item('MIN', m.fnMin)];
 }
+
+/** Hide/show for the rows and columns the selection covers (shown for whatever lines it spans, as Sheets does). */
+export function visibilityEntries(sheet: Spreadsheet, m: Messages): MenuEntry[] {
+  const p = sheet.selection.primary;
+  const a = columnLabel(sheet.mapping.toDataCol(p.startCol));
+  const b = columnLabel(sheet.mapping.toDataCol(p.endCol));
+  return [
+    { label: m.hideRows(p.startRow + 1, p.endRow + 1), shortcut: `${MOD}Alt+9`, run: () => void sheet.hideLines('row', p.startRow, p.endRow) },
+    { label: m.hideCols(a, b), shortcut: `${MOD}Alt+0`, run: () => void sheet.hideLines('col', p.startCol, p.endCol) },
+    'separator',
+    { label: m.showHiddenRows, shortcut: `${MOD}⇧9`, disabled: sheet.rows.hiddenIn(p.startRow, p.endRow).length === 0, run: () => void sheet.showLines('row', p.startRow, p.endRow) },
+    { label: m.showHiddenCols, shortcut: `${MOD}⇧0`, disabled: sheet.cols.hiddenIn(p.startCol, p.endCol).length === 0, run: () => void sheet.showLines('col', p.startCol, p.endCol) },
+  ];
+}
+
+const MOD = typeof navigator !== 'undefined' && /Mac|iPhone|iPad/.test(navigator.platform) ? '⌘' : 'Ctrl+';

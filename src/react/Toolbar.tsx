@@ -13,6 +13,7 @@ import {
   functionEntries,
   insertEntries,
   type MenuId,
+  visibilityEntries,
   numberFormatEntries,
   pasteEntries,
 } from './toolbarMenus';
@@ -173,6 +174,8 @@ export function Toolbar({ sheet, grid = null, onAction }: ToolbarProps) {
         return insertEntries(sheet, m);
       case 'delete':
         return deleteEntries(sheet, m);
+      case 'visibility':
+        return visibilityEntries(sheet, m);
       case 'freeze':
         return freezeEntries(sheet, m);
       case 'functions':
@@ -184,6 +187,7 @@ export function Toolbar({ sheet, grid = null, onAction }: ToolbarProps) {
     numberFormat: m.moreFormats,
     insert: m.insert,
     delete: m.delete,
+    visibility: m.visibility,
     freeze: m.freeze,
     functions: m.functions,
   };
@@ -273,6 +277,7 @@ export function Toolbar({ sheet, grid = null, onAction }: ToolbarProps) {
         <div className="rdg-group" role="group" aria-label={m.groupStructure}>
           {menuButton('insert', 'insert', m.insert, undefined)}
           {menuButton('delete', 'remove', m.delete, undefined)}
+          {menuButton('visibility', 'eyeOff', m.visibility, undefined)}
           {menuButton('freeze', 'freeze', m.freeze, undefined)}
           {menuButton('functions', 'sigma', m.functions, undefined)}
         </div>

@@ -35,6 +35,8 @@ export class KeyboardController {
         return sheet.colCount;
       },
       isEmpty: (r, c) => sheet.getCellByView(r, c).value === null,
+      rowHidden: (r) => sheet.rows.getSize(r) === 0,
+      colHidden: (c) => sheet.cols.getSize(c) === 0,
       usedEnd: () => {
         const used = sheet.model.getUsedRange();
         if (used === null) return null;
@@ -102,13 +104,13 @@ export class KeyboardController {
         moveByArrow(selection, action.dir, { extend: action.extend, jump: action.jump }, this.nav);
         break;
       case 'page':
-        moveByPage(selection, action.dir, this.pageRows(), action.extend);
+        moveByPage(selection, action.dir, this.pageRows(), action.extend, this.nav);
         break;
       case 'edge':
         moveToEdge(selection, action.edge, { ctrl: action.ctrl, extend: action.extend }, this.nav);
         break;
       case 'advance':
-        advanceActive(selection, { horizontal: action.horizontal, backward: action.backward });
+        advanceActive(selection, { horizontal: action.horizontal, backward: action.backward }, this.nav);
         break;
       case 'selectAll':
         selection.selectAll();
@@ -181,6 +183,14 @@ export class KeyboardController {
       case 'showShortcuts':
         this.deps.showShortcuts();
         return;
+      case 'hide':
+        if (action.axis === 'row') sheet.hideLines('row', selection.primary.startRow, selection.primary.endRow);
+        else sheet.hideLines('col', selection.primary.startCol, selection.primary.endCol);
+        break;
+      case 'unhide':
+        if (action.axis === 'row') sheet.showLines('row', selection.primary.startRow, selection.primary.endRow);
+        else sheet.showLines('col', selection.primary.startCol, selection.primary.endCol);
+        break;
       case 'pointMove':
         editor.pointMove(action.dir, action.extend);
         return;
@@ -207,16 +217,16 @@ export class KeyboardController {
     const { selection } = this.deps.sheet;
     switch (move) {
       case 'down':
-        advanceActive(selection, { horizontal: false, backward: false });
+        advanceActive(selection, { horizontal: false, backward: false }, this.nav);
         break;
       case 'up':
-        advanceActive(selection, { horizontal: false, backward: true });
+        advanceActive(selection, { horizontal: false, backward: true }, this.nav);
         break;
       case 'right':
-        advanceActive(selection, { horizontal: true, backward: false });
+        advanceActive(selection, { horizontal: true, backward: false }, this.nav);
         break;
       case 'left':
-        advanceActive(selection, { horizontal: true, backward: true });
+        advanceActive(selection, { horizontal: true, backward: true }, this.nav);
         break;
       case 'none':
         break;

@@ -45,6 +45,17 @@ export function buildMenuEntries(controller: GridController, openFilter: (viewCo
     const b = columnLabel(sheet.mapping.toDataCol(p.endCol));
     entries.push(structure(m.deleteCols(a, b), () => sheet.deleteCols(p.startCol, cols)));
   }
+  // Whole columns selected (column header): hide/show columns. Whole rows selected (row header): rows.
+  if (wholeCols) {
+    const a = columnLabel(sheet.mapping.toDataCol(p.startCol));
+    const b = columnLabel(sheet.mapping.toDataCol(p.endCol));
+    entries.push(structure(m.hideCols(a, b), () => void sheet.hideLines('col', p.startCol, p.endCol)));
+    if (sheet.cols.hiddenIn(p.startCol, p.endCol).length > 0) entries.push(structure(m.showHiddenCols, () => void sheet.showLines('col', p.startCol, p.endCol)));
+  }
+  if (wholeRows) {
+    entries.push(structure(m.hideRows(p.startRow + 1, p.endRow + 1), () => void sheet.hideLines('row', p.startRow, p.endRow)));
+    if (sheet.rows.hiddenIn(p.startRow, p.endRow).length > 0) entries.push(structure(m.showHiddenRows, () => void sheet.showLines('row', p.startRow, p.endRow)));
+  }
   entries.push({ label: m.clearContents, shortcut: 'Del', run: () => sheet.clearSelection() }, 'separator');
   entries.push(
     { label: m.sortSheetAsc(colName), run: () => sheet.sortByColumn(col, true) },

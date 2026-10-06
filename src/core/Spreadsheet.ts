@@ -21,6 +21,7 @@ import {
   InsertRowsCommand,
   type Axis,
 } from './commands/StructureCommand';
+import { ResizeCommand } from './commands/ResizeCommand';
 import { ViewStateCommand } from './commands/ViewStateCommand';
 import { fillCells, type FillDirection } from './fill';
 import { History } from './history/History';
@@ -191,6 +192,7 @@ export class Spreadsheet {
     const done = this.history.undo(this);
     if (done) {
       this.flushFormulas();
+      this.moveSelectionOffHidden();
       this.notify();
     }
     return done;
@@ -200,6 +202,7 @@ export class Spreadsheet {
     const done = this.history.redo(this);
     if (done) {
       this.flushFormulas();
+      this.moveSelectionOffHidden();
       this.notify();
     }
     return done;
@@ -289,6 +292,45 @@ export class Spreadsheet {
       return n;
     }
     return 0;
+  }
+
+  /**
+   * Hides the rows/columns `first..last` (view indices) as one undo step. Navigation skips hidden lines, and at least
+   * one line always stays visible. Returns how many were hidden.
+   */
+  hideLines(axis: Axis, first: number, last: number): number {
+    const layout = axis === 'row' ? this.rows : this.cols;
+    const from = Math.max(0, Math.min(first, last));
+    const to = Math.min(layout.count - 1, Math.max(first, last));
+    const already = new Set(layout.hiddenIn(from, to));
+    const targets: number[] = [];
+    for (let i = from; i <= to; i++) if (!already.has(i)) targets.push(i);
+    if (targets.length === 0 || layout.count - layout.hiddenCount - targets.length < 1) return 0;
+    this.execute(new ResizeCommand(axis, targets, 0));
+    this.moveSelectionOffHidden();
+    return targets.length;
+  }
+
+  /** Shows the hidden rows/columns inside `first..last` again, at the default size. Returns how many came back. */
+  showLines(axis: Axis, first: number, last: number): number {
+    const layout = axis === 'row' ? this.rows : this.cols;
+    const hidden = layout.hiddenIn(Math.max(0, Math.min(first, last)), Math.min(layout.count - 1, Math.max(first, last)));
+    if (hidden.length === 0) return 0;
+    this.execute(new ResizeCommand(axis, hidden, layout.defaultSize));
+    return hidden.length;
+  }
+
+  // The active cell must never sit in a hidden line: move it to the next visible one, or the previous when none follow.
+  private moveSelectionOffHidden(): void {
+    const { activeRow, activeCol } = this.selection;
+    const nearest = (layout: AxisLayout, at: number): number => {
+      for (let i = at; i < layout.count; i++) if (layout.getSize(i) > 0) return i;
+      for (let i = at - 1; i >= 0; i--) if (layout.getSize(i) > 0) return i;
+      return at;
+    };
+    const row = nearest(this.rows, activeRow);
+    const col = nearest(this.cols, activeCol);
+    if (row !== activeRow || col !== activeCol) this.selection.selectCell(row, col);
   }
 
   /** "Increase/decrease decimal places": the active cell decides the new pattern, the whole selection gets it. */

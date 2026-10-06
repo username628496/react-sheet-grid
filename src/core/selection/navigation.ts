@@ -8,6 +8,25 @@ export interface NavContext {
   isEmpty(viewRow: number, viewCol: number): boolean;
   /** Bottom-right view cell holding data, or null for an empty sheet. */
   usedEnd(): { row: number; col: number } | null;
+  /** Hidden rows/columns (size 0) are skipped by every move. Omitted means nothing is hidden. */
+  rowHidden?(viewRow: number): boolean;
+  colHidden?(viewCol: number): boolean;
+}
+
+type Hidden = ((index: number) => boolean) | undefined;
+
+/** The next visible index from `from` in direction `step` (±1), or null when the edge is reached first. */
+function visibleStep(from: number, step: 1 | -1, count: number, hidden: Hidden): number | null {
+  let i = from + step;
+  while (i >= 0 && i < count && hidden?.(i) === true) i += step;
+  return i >= 0 && i < count ? i : null;
+}
+
+/** `index` itself if visible, else the closest visible one looking in `step` direction first, then the other way. */
+function nearestVisible(index: number, step: 1 | -1, count: number, hidden: Hidden): number {
+  const at = Math.max(0, Math.min(count - 1, index));
+  if (hidden?.(at) !== true) return at;
+  return visibleStep(at, step, count, hidden) ?? visibleStep(at, step === 1 ? -1 : 1, count, hidden) ?? at;
 }
 
 const DELTA: Record<Direction, readonly [number, number]> = {
@@ -54,20 +73,32 @@ export function moveByArrow(
   const fromRow = opts.extend ? sel.focusRow : sel.activeRow;
   const fromCol = opts.extend ? sel.focusCol : sel.activeCol;
   let target: { row: number; col: number };
+  const [dr, dc] = DELTA[dir];
   if (opts.jump) {
     target = jump(fromRow, fromCol, dir, ctx);
+    // The scan treats hidden lines like any other; land on a visible one.
+    target = {
+      row: nearestVisible(target.row, dr === 0 ? 1 : (dr as 1 | -1), ctx.rowCount, ctx.rowHidden),
+      col: nearestVisible(target.col, dc === 0 ? 1 : (dc as 1 | -1), ctx.colCount, ctx.colHidden),
+    };
   } else {
-    const [dr, dc] = DELTA[dir];
-    target = { row: fromRow + dr, col: fromCol + dc };
+    // Out of range stays put (the selection clamps), hidden lines are stepped over.
+    // Nothing visible beyond (the edge, or only hidden lines left) means no move at all.
+    target = {
+      row: dr === 0 ? fromRow : (visibleStep(fromRow, dr as 1 | -1, ctx.rowCount, ctx.rowHidden) ?? fromRow),
+      col: dc === 0 ? fromCol : (visibleStep(fromCol, dc as 1 | -1, ctx.colCount, ctx.colHidden) ?? fromCol),
+    };
   }
   if (opts.extend) sel.extendTo(target.row, target.col);
   else sel.selectCell(target.row, target.col);
 }
 
-export function moveByPage(sel: SelectionModel, dir: 'up' | 'down', pageRows: number, extend: boolean): void {
+export function moveByPage(sel: SelectionModel, dir: 'up' | 'down', pageRows: number, extend: boolean, ctx?: NavContext): void {
   const delta = dir === 'down' ? pageRows : -pageRows;
-  if (extend) sel.extendTo(sel.focusRow + delta, sel.focusCol);
-  else sel.selectCell(sel.activeRow + delta, sel.activeCol);
+  const step = dir === 'down' ? 1 : -1;
+  const land = (row: number): number => (ctx === undefined ? row : nearestVisible(row, step, ctx.rowCount, ctx.rowHidden));
+  if (extend) sel.extendTo(land(sel.focusRow + delta), sel.focusCol);
+  else sel.selectCell(land(sel.activeRow + delta), sel.activeCol);
 }
 
 export function moveToEdge(
@@ -87,6 +118,8 @@ export function moveToEdge(
       col = end?.col ?? 0;
     }
   }
+  row = nearestVisible(row, edge === 'home' ? 1 : -1, ctx.rowCount, ctx.rowHidden);
+  col = nearestVisible(col, edge === 'home' ? 1 : -1, ctx.colCount, ctx.colHidden);
   if (opts.extend) sel.extendTo(row, col);
   else sel.selectCell(row, col);
 }
@@ -96,34 +129,42 @@ export function moveToEdge(
  * first for Tab, columns first for Enter) without changing it; with a single
  * cell selected they just move one step.
  */
-export function advanceActive(sel: SelectionModel, opts: { horizontal: boolean; backward: boolean }): void {
+export function advanceActive(sel: SelectionModel, opts: { horizontal: boolean; backward: boolean }, ctx?: NavContext): void {
   const step = opts.backward ? -1 : 1;
   if (sel.isSingleCell()) {
-    if (opts.horizontal) sel.selectCell(sel.activeRow, sel.activeCol + step);
-    else sel.selectCell(sel.activeRow + step, sel.activeCol);
+    const { activeRow: row, activeCol: col } = sel;
+    // Without a context the selection clamps at the edge itself; with one, "nothing visible ahead" means stay.
+    if (opts.horizontal) sel.selectCell(row, ctx === undefined ? col + step : (visibleStep(col, step, ctx.colCount, ctx.colHidden) ?? col));
+    else sel.selectCell(ctx === undefined ? row + step : (visibleStep(row, step, ctx.rowCount, ctx.rowHidden) ?? row), col);
     return;
   }
   const p = sel.primary;
   let r = sel.activeRow;
   let c = sel.activeCol;
-  if (opts.horizontal) {
-    c += step;
-    if (c > p.endCol) {
-      c = p.startCol;
-      r = r + 1 > p.endRow ? p.startRow : r + 1;
-    } else if (c < p.startCol) {
-      c = p.endCol;
-      r = r - 1 < p.startRow ? p.endRow : r - 1;
+  const hidden = (): boolean => ctx?.rowHidden?.(r) === true || ctx?.colHidden?.(c) === true;
+  const advance = (): void => {
+    if (opts.horizontal) {
+      c += step;
+      if (c > p.endCol) {
+        c = p.startCol;
+        r = r + 1 > p.endRow ? p.startRow : r + 1;
+      } else if (c < p.startCol) {
+        c = p.endCol;
+        r = r - 1 < p.startRow ? p.endRow : r - 1;
+      }
+    } else {
+      r += step;
+      if (r > p.endRow) {
+        r = p.startRow;
+        c = c + 1 > p.endCol ? p.startCol : c + 1;
+      } else if (r < p.startRow) {
+        r = p.endRow;
+        c = c - 1 < p.startCol ? p.endCol : c - 1;
+      }
     }
-  } else {
-    r += step;
-    if (r > p.endRow) {
-      r = p.startRow;
-      c = c + 1 > p.endCol ? p.startCol : c + 1;
-    } else if (r < p.startRow) {
-      r = p.endRow;
-      c = c - 1 < p.startCol ? p.endCol : c - 1;
-    }
-  }
+  };
+  advance();
+  // Hidden cells are skipped; the bound keeps a fully hidden range from looping forever.
+  for (let guard = (p.endRow - p.startRow + 1) * (p.endCol - p.startCol + 1); guard > 0 && hidden(); guard--) advance();
   sel.setActive(r, c);
 }

@@ -63,6 +63,11 @@ export interface Messages {
   freezeUpToRow: (n: number) => string;
   freezeUpToCol: (col: string) => string;
   functions: string;
+  visibility: string;
+  hideRows: (first: number, last: number) => string;
+  hideCols: (first: string, last: string) => string;
+  showHiddenRows: string;
+  showHiddenCols: string;
   fnSum: string;
   fnAverage: string;
   fnCount: string;
@@ -171,6 +176,11 @@ const en: Messages = {
   freezeUpToRow: (n) => `Up to row ${n}`,
   freezeUpToCol: (col) => `Up to column ${col}`,
   functions: 'Functions',
+  visibility: 'Show or hide',
+  hideRows: (a, b) => (a === b ? `Hide row ${a}` : `Hide rows ${a}–${b}`),
+  hideCols: (a, b) => (a === b ? `Hide column ${a}` : `Hide columns ${a}–${b}`),
+  showHiddenRows: 'Show hidden rows',
+  showHiddenCols: 'Show hidden columns',
   fnSum: 'SUM',
   fnAverage: 'AVERAGE',
   fnCount: 'COUNT',
@@ -243,6 +253,8 @@ const en: Messages = {
         ['Delete', 'Clear contents'],
         ['Mod+Z / Mod+Y', 'Undo / redo'],
         ['Mod+D / Mod+R', 'Fill down / fill right'],
+        ['Mod+Alt+9 / Mod+Alt+0', 'Hide rows / hide columns'],
+        ['Mod+Shift+9 / Mod+Shift+0', 'Show hidden rows / columns'],
       ],
     },
     {
@@ -328,6 +340,11 @@ const vi: Messages = {
   freezeUpToRow: (n) => `Đến dòng ${n}`,
   freezeUpToCol: (col) => `Đến cột ${col}`,
   functions: 'Hàm',
+  visibility: 'Hiện hoặc ẩn',
+  hideRows: (a, b) => (a === b ? `Ẩn dòng ${a}` : `Ẩn dòng ${a}–${b}`),
+  hideCols: (a, b) => (a === b ? `Ẩn cột ${a}` : `Ẩn cột ${a}–${b}`),
+  showHiddenRows: 'Hiện các dòng đã ẩn',
+  showHiddenCols: 'Hiện các cột đã ẩn',
   fnSum: 'SUM (tổng)',
   fnAverage: 'AVERAGE (trung bình)',
   fnCount: 'COUNT (đếm số)',
@@ -400,6 +417,8 @@ const vi: Messages = {
         ['Delete', 'Xóa nội dung'],
         ['Mod+Z / Mod+Y', 'Hoàn tác / làm lại'],
         ['Mod+D / Mod+R', 'Điền xuống / điền sang phải'],
+        ['Mod+Alt+9 / Mod+Alt+0', 'Ẩn dòng / ẩn cột'],
+        ['Mod+Shift+9 / Mod+Shift+0', 'Hiện dòng đã ẩn / cột đã ẩn'],
       ],
     },
     {
