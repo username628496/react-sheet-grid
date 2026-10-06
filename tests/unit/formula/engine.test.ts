@@ -88,6 +88,35 @@ describe('circular references', () => {
     expect(value(s, 'D1')).toBe(4);
   });
 
+  it('only cells ON a cycle are circular; cells that merely read them evaluate normally', () => {
+    const s = makeSheet({ A1: '=B1', B1: '=A1', C1: '=COUNTIF(A1:B1,">0")', D1: '=SUM(A1:B1)', E1: '=D1+1' });
+    expect(value(s, 'A1')).toEqual(e('#REF!'));
+    expect(value(s, 'C1')).toBe(0); // COUNTIF ignores error cells
+    expect(value(s, 'D1')).toEqual(e('#REF!')); // SUM propagates them
+    expect(value(s, 'E1')).toEqual(e('#REF!'));
+  });
+
+  it('gives the same result whether the dependent was entered before or after the cycle', () => {
+    const before = makeSheet({ C1: '=COUNTIF(A1:B1,">0")', A1: '=B1', B1: '=A1' });
+    const after = makeSheet({ A1: '=B1', B1: '=A1', C1: '=COUNTIF(A1:B1,">0")' });
+    expect(value(before, 'C1')).toBe(value(after, 'C1'));
+  });
+
+  it('a long chain behind a cycle does not overflow the stack', () => {
+    const s = new (makeSheet().constructor as new (o: { rowCount: number; colCount: number }) => ReturnType<typeof makeSheet>)({
+      rowCount: 10_000,
+      colCount: 3,
+    });
+    s.model.setCell(0, 0, { value: null, styleId: 0, formula: s.cellFromInput('=A2', 0, 0, 0).formula! });
+    s.model.setCell(1, 0, { value: null, styleId: 0, formula: s.cellFromInput('=A1', 1, 0, 0).formula! });
+    for (let r = 2; r < 8000; r++) {
+      s.model.setCell(r, 0, { value: null, styleId: 0, formula: s.cellFromInput(`=A${r}+1`, r, 0, 0).formula! });
+    }
+    s.recalculateAll();
+    expect(s.getCellByView(1, 0).value).toEqual(e('#REF!'));
+    expect(s.getCellByView(7999, 0).value).toEqual(e('#REF!')); // error flows down the chain
+  });
+
   it('a range that includes its own cell is circular', () => {
     const s = makeSheet({ A1: 1, A2: '=SUM(A1:A3)' });
     expect(value(s, 'A2')).toEqual(e('#REF!'));

@@ -2,7 +2,15 @@ import type { Command } from './commands/Command';
 import { type CellChange, SetCellsCommand } from './commands/SetCellsCommand';
 import { FormulaEngine } from '../formula/engine';
 import { parseFormulaSafe } from '../formula/parser';
+import { deleteMap, IDENTITY_MAP, insertMap, remapFormula } from '../formula/transform';
 import { printFormula } from '../formula/print';
+import {
+  DeleteColsCommand,
+  DeleteRowsCommand,
+  InsertColsCommand,
+  InsertRowsCommand,
+  type Axis,
+} from './commands/StructureCommand';
 import { ViewStateCommand } from './commands/ViewStateCommand';
 import { fillCells, type FillDirection } from './fill';
 import { History } from './history/History';
@@ -11,7 +19,7 @@ import { ViewMapping } from './mapping/ViewMapping';
 import type { Cell, CellValue } from './model/Cell';
 import { formatValue } from './model/format';
 import { parseInput } from './model/parseInput';
-import { cellKey, SheetModel } from './model/SheetModel';
+import { cellKey, MAX_COLS, MAX_ROWS, SheetModel } from './model/SheetModel';
 import { type Style, StyleTable } from './model/StyleTable';
 import { SelectionModel, type ViewRange } from './selection/SelectionModel';
 import {
@@ -371,6 +379,75 @@ export class Spreadsheet {
       return compareForSort(va, vb, true);
     });
     return { values: sorted.slice(0, limit), truncated: sorted.length > limit };
+  }
+
+  /** Inserting/deleting rows or columns is only defined on the natural order, so sort and filter must be cleared first. */
+  get canEditStructure(): boolean {
+    return this.mapping.isIdentity;
+  }
+
+  /** Inserts `count` blank rows before `viewRow`. Returns false when refused (view sorted/filtered, or sheet full). */
+  insertRows(viewRow: number, count: number): boolean {
+    if (!this.canEditStructure || count < 1 || viewRow < 0 || viewRow > this.rowCount) return false;
+    if (this.rowCount + count > MAX_ROWS) return false;
+    this.execute(new InsertRowsCommand(viewRow, count));
+    return true;
+  }
+
+  insertCols(viewCol: number, count: number): boolean {
+    if (!this.canEditStructure || count < 1 || viewCol < 0 || viewCol > this.colCount) return false;
+    if (this.colCount + count > MAX_COLS) return false;
+    this.execute(new InsertColsCommand(viewCol, count));
+    return true;
+  }
+
+  /** Deletes `count` rows from `viewRow`; the last remaining row can never be deleted. */
+  deleteRows(viewRow: number, count: number): boolean {
+    const n = Math.min(count, this.rowCount - viewRow);
+    if (!this.canEditStructure || n < 1 || viewRow < 0 || n >= this.rowCount) return false;
+    this.execute(new DeleteRowsCommand(viewRow, n));
+    return true;
+  }
+
+  deleteCols(viewCol: number, count: number): boolean {
+    const n = Math.min(count, this.colCount - viewCol);
+    if (!this.canEditStructure || n < 1 || viewCol < 0 || n >= this.colCount) return false;
+    this.execute(new DeleteColsCommand(viewCol, n));
+    return true;
+  }
+
+  /** Does the work of a StructureCommand: moves cells, rewrites formulas, resizes layouts and grid. */
+  applyStructure(axis: Axis, kind: 'insert' | 'delete', at: number, count: number): void {
+    const map = kind === 'insert' ? insertMap(at, count) : deleteMap(at, count);
+    const rowMap = axis === 'row' ? map : IDENTITY_MAP;
+    const colMap = axis === 'col' ? map : IDENTITY_MAP;
+    this.model.remapCells((row, col, cell) => {
+      const nr = rowMap.point(row);
+      const nc = colMap.point(col);
+      if (nr === null || nc === null) return null; // inside a deleted block
+      if (cell.formula === undefined) return { row: nr, col: nc, cell };
+      // The formula's own position changes too, so relative references are re-expressed from the new position.
+      return { row: nr, col: nc, cell: { ...cell, formula: remapFormula(cell.formula, row, col, nr, nc, rowMap, colMap) } };
+    });
+    const layout = axis === 'row' ? this.rows : this.cols;
+    if (kind === 'insert') layout.insertAt(at, count);
+    else layout.deleteAt(at, count);
+    const delta = kind === 'insert' ? count : -count;
+    this.mapping.resize(this.rowCount + (axis === 'row' ? delta : 0), this.colCount + (axis === 'col' ? delta : 0));
+    this.dirty.clear();
+    this.engine.rebuildAll();
+    if (kind === 'insert') {
+      // Sheets selects what was just added.
+      if (axis === 'row') {
+        this.selection.selectRow(at);
+        this.selection.selectRow(at + count - 1, true);
+      } else {
+        this.selection.selectCol(at);
+        this.selection.selectCol(at + count - 1, true);
+      }
+    } else {
+      this.selection.clamp();
+    }
   }
 
   /** Bottom-right of the data in view coordinates, or null for an empty sheet. */

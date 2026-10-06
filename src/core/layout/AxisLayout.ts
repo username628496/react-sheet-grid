@@ -57,6 +57,28 @@ export class AxisLayout {
     this.prefixDirty = true;
   }
 
+  /** Opens a gap of `count` default-sized items at `at`; sizes at or after it move with their items. */
+  insertAt(at: number, count: number): void {
+    for (let k = this.lowerBound(at); k < this.overrideIndex.length; k++) {
+      this.overrideIndex[k] = (this.overrideIndex[k] as number) + count;
+    }
+    this.itemCount += count;
+    this.prefixDirty = true;
+  }
+
+  /** Removes `count` items at `at`; later items (and their sizes) move up. */
+  deleteAt(at: number, count: number): void {
+    const from = this.lowerBound(at);
+    const to = this.lowerBound(at + count);
+    this.overrideIndex.splice(from, to - from);
+    this.overrideSize.splice(from, to - from);
+    for (let k = from; k < this.overrideIndex.length; k++) {
+      this.overrideIndex[k] = (this.overrideIndex[k] as number) - count;
+    }
+    this.itemCount -= count;
+    this.prefixDirty = true;
+  }
+
   /** Changes the number of items; overrides beyond the new count are dropped. */
   setCount(count: number): void {
     if (!Number.isInteger(count) || count < 0) throw new RangeError(`Invalid count: ${count}`);

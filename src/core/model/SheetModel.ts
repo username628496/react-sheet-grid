@@ -47,7 +47,7 @@ function assertInBounds(dataRow: number, dataCol: number): void {
  * coordinates. The low-level writers are meant to be called by commands only.
  */
 export class SheetModel {
-  private readonly cells = new Map<number, Cell>();
+  private cells = new Map<number, Cell>();
 
   /** Fired after every write so the formula engine can learn what to recompute. */
   onCellChange: ((dataRow: number, dataCol: number, cell: Cell) => void) | null = null;
@@ -89,6 +89,29 @@ export class SheetModel {
     const key = keyOf(dataRow, dataCol);
     const cell = this.cells.get(key);
     if (cell !== undefined) this.cells.set(key, { ...cell, value });
+  }
+
+  /** Cheap copy for undo: cells are immutable, so copying the map is enough. */
+  snapshotCells(): Map<number, Cell> {
+    return new Map(this.cells);
+  }
+
+  restoreCells(snapshot: ReadonlyMap<number, Cell>): void {
+    this.cells = new Map(snapshot);
+  }
+
+  /**
+   * Rebuilds the sheet by moving or dropping every stored cell (row/column
+   * insert and delete). Does not fire onCellChange: the caller recomputes formulas itself.
+   */
+  remapCells(fn: (dataRow: number, dataCol: number, cell: Cell) => { row: number; col: number; cell: Cell } | null): void {
+    const next = new Map<number, Cell>();
+    for (const [key, cell] of this.cells) {
+      const r = Math.floor(key / MAX_COLS);
+      const moved = fn(r, key - r * MAX_COLS, cell);
+      if (moved !== null) next.set(keyOf(moved.row, moved.col), moved.cell);
+    }
+    this.cells = next;
   }
 
   /** Visits every stored cell in no particular order. */

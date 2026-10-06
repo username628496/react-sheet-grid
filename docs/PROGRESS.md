@@ -15,6 +15,9 @@
 - Formula engine: tokenizer, parser (A1 → AST tương đối), printer (AST → A1), evaluator, dependency graph, tính lại theo thứ tự topo, phát hiện vòng. Hàm: `SUM`, `AVERAGE`, `COUNT`, `MIN`, `MAX`, `IF`, `ROUND`, `CONCAT`, `SUMIF`, `COUNTIF`, `VLOOKUP`. Có tham chiếu `A:A`, `1:1`, `$`, dấu `;` làm phân cách tham số (locale tiếng Việt).
 - 401 unit test (trong đó ~300 test công thức theo bảng) và 28 e2e (Chromium).
 - Fill handle: kéo ô vuông ở góc vùng chọn xuống/lên/trái/phải. Chuỗi số (hằng số bước hoặc xu hướng tuyến tính bình phương tối thiểu), chuỗi chữ có số cuối (`Item 1` → `Item 2`, giữ số 0 đệm), còn lại lặp vòng ô nguồn kèm style; công thức được copy nên tham chiếu tương đối tự dịch, `$` giữ nguyên. Một lần kéo là một bước undo.
+- Chèn/xóa dòng và cột: dữ liệu, kích thước dòng/cột và tham chiếu công thức cùng di chuyển (`remapFormula`): tham chiếu vào ô bị xóa thành `#REF!`, range co lại hoặc giãn ra, tham chiếu cả cột `A:A` giữ nguyên. Undo bằng snapshot nên khôi phục chính xác. Chỉ cho phép khi chưa sort/filter.
+- Sort và filter (theo giá trị hiển thị) qua `ViewMapping`, undo một bước; dòng tiêu đề (`headerRows`) và các dòng trống bên dưới dữ liệu được giữ nguyên; ô trống luôn nằm cuối khi sort.
+- Fuzz test: 80 chuỗi 120 thao tác ngẫu nhiên (nhập giá trị/công thức, chèn/xóa dòng/cột, sort, filter, paste, fill, resize, định dạng, undo, redo) kiểm tra model hợp lệ, giá trị công thức tăng dần khớp tính lại từ đầu, undo hết về đúng trạng thái đầu, redo hết về đúng trạng thái cuối; 60 chuỗi chèn/xóa với oracle độc lập kiểm tra công thức vẫn trỏ đúng ô đánh dấu.
 
 ## Quyết định kỹ thuật
 - Một `<textarea>` ẩn giữ focus mọi lúc và đồng thời là editor ô (`CellEditor.tsx` render, `EditorController` điều khiển). Gõ ký tự khi đang chọn ô chỉ đổi style textarea rồi để trình duyệt chèn ký tự mặc định, nên không mất ký tự đầu. IME vào edit qua `compositionstart`. Textarea luôn nằm đè lên ô active để cửa sổ gợi ý IME hiện đúng chỗ.
@@ -40,7 +43,7 @@
 - `readCells` cắt theo vùng dữ liệu khi vùng chọn > 100.000 ô, để copy cả cột không tạo ma trận 1M dòng.
 - Công thức lưu là cây AST bất biến với tham chiếu tương đối (offset), nên copy/fill chỉ chia sẻ cây; `$` lưu chỉ số tuyệt đối. Tham chiếu theo tọa độ dữ liệu (`dataRow`/`dataCol`) nên sort chỉ đổi mapping không làm công thức trỏ sai.
 - Kết quả công thức cache trong `Cell.value`; `SheetModel.onCellChange` ghi nhận ô bị đổi (chỉ khi đang có công thức), `Spreadsheet` tính lại sau mỗi `execute`/`undo`/`redo`. Nạp dữ liệu thẳng vào model thì gọi `recalculateAll()`.
-- Tính lại: BFS tìm mọi ô phụ thuộc rồi sắp xếp Kahn; ô còn sót (nằm trên hoặc sau một vòng) nhận `#REF!` như Sheets.
+- Tính lại: BFS tìm mọi ô phụ thuộc rồi sắp xếp Kahn. Khi kẹt, Tarjan (lặp, không đệ quy) tìm các ô thật sự nằm TRÊN vòng và gán `#REF!`; các ô chỉ đọc chúng vẫn tính bình thường (`SUM` lan truyền lỗi, `COUNTIF` bỏ qua). Quy tắc ban đầu "mọi ô sau vòng đều `#REF!`" bị fuzz test chỉ ra là sai vì làm tính tăng dần và tính từ đầu cho kết quả khác nhau.
 - Tham chiếu một ô khi làm đối số hàm được truyền như range 1×1 để `SUM(A1)` bỏ qua chữ giống Sheets; `IF` đánh giá lười.
 - Công thức sai cú pháp lưu thành `#ERROR!` kèm nguyên văn để sửa lại được.
 - Cut-paste công thức dùng `rebaseFormula` (giữ nguyên ô được trỏ tới) còn copy dùng tham chiếu tương đối. Tham chiếu từ ô khác tới vùng bị cut chưa được cập nhật.

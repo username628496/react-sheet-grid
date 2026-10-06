@@ -78,21 +78,45 @@ export class FormulaEngine {
     const ready: number[] = [];
     for (const key of visited) if ((indegree.get(key) ?? 0) === 0) ready.push(key);
     let processed = 0;
-    for (let i = 0; i < ready.length; i++) {
-      const key = ready[i] as number;
-      processed++;
-      this.evaluateCell(key);
+    const release = (key: number): void => {
       for (const to of successors.get(key) ?? []) {
         const left = (indegree.get(to) as number) - 1;
         indegree.set(to, left);
         if (left === 0) ready.push(to);
       }
-    }
+    };
+    let next = 0;
+    for (;;) {
+      while (next < ready.length) {
+        const key = ready[next++] as number;
+        processed++;
+        this.evaluateCell(key);
+        release(key);
+      }
+      if (processed >= visited.size) break;
 
-    if (processed < visited.size) {
-      for (const key of visited) {
-        if ((indegree.get(key) ?? 0) > 0 && this.formulaKeys.has(key)) {
-          this.model.setComputedValue(keyRow(key), keyCol(key), err('#REF!'));
+      // Out of ready cells but some remain: they are on a cycle or depend on one. Only cells ON a
+      // cycle are circular (#REF!, like Sheets); cells merely reading them are evaluated normally,
+      // so SUM propagates the error while COUNTIF just ignores it.
+      const stuck = new Set<number>();
+      for (const key of visited) if ((indegree.get(key) ?? 0) > 0) stuck.add(key);
+      const cyclic = cyclicNodes(stuck, successors);
+      if (cyclic.size === 0) {
+        // Cannot happen for a consistent graph; fail loudly in the sheet rather than loop forever.
+        for (const key of stuck) this.model.setComputedValue(keyRow(key), keyCol(key), err('#REF!'));
+        break;
+      }
+      for (const c of cyclic) {
+        processed++;
+        indegree.set(c, 0);
+        if (this.formulaKeys.has(c)) this.model.setComputedValue(keyRow(c), keyCol(c), err('#REF!'));
+      }
+      for (const c of cyclic) {
+        for (const to of successors.get(c) ?? []) {
+          if (cyclic.has(to)) continue;
+          const left = (indegree.get(to) as number) - 1;
+          indegree.set(to, left);
+          if (left === 0) ready.push(to);
         }
       }
     }
@@ -106,4 +130,61 @@ export class FormulaEngine {
     if (formula === undefined) return;
     this.model.setComputedValue(row, col, this.evaluator.evaluate(formula, row, col));
   }
+}
+
+/**
+ * Nodes of `nodes` that lie on a cycle (strongly connected components of size > 1, or a self loop),
+ * using an iterative Tarjan so a 100k-long chain cannot overflow the call stack.
+ */
+function cyclicNodes(nodes: ReadonlySet<number>, successors: ReadonlyMap<number, readonly number[]>): Set<number> {
+  const index = new Map<number, number>();
+  const low = new Map<number, number>();
+  const onStack = new Set<number>();
+  const stack: number[] = [];
+  const result = new Set<number>();
+  let counter = 0;
+
+  for (const root of nodes) {
+    if (index.has(root)) continue;
+    const work: Array<{ node: number; next: number }> = [{ node: root, next: 0 }];
+    index.set(root, counter);
+    low.set(root, counter++);
+    stack.push(root);
+    onStack.add(root);
+    while (work.length > 0) {
+      const frame = work[work.length - 1] as { node: number; next: number };
+      const edges = successors.get(frame.node) ?? [];
+      if (frame.next < edges.length) {
+        const to = edges[frame.next++] as number;
+        if (!nodes.has(to)) continue;
+        if (to === frame.node) result.add(to); // self reference
+        if (!index.has(to)) {
+          index.set(to, counter);
+          low.set(to, counter++);
+          stack.push(to);
+          onStack.add(to);
+          work.push({ node: to, next: 0 });
+        } else if (onStack.has(to)) {
+          low.set(frame.node, Math.min(low.get(frame.node) as number, index.get(to) as number));
+        }
+        continue;
+      }
+      work.pop();
+      const parent = work[work.length - 1];
+      if (parent !== undefined) {
+        low.set(parent.node, Math.min(low.get(parent.node) as number, low.get(frame.node) as number));
+      }
+      if (low.get(frame.node) === index.get(frame.node)) {
+        const component: number[] = [];
+        let member: number;
+        do {
+          member = stack.pop() as number;
+          onStack.delete(member);
+          component.push(member);
+        } while (member !== frame.node);
+        if (component.length > 1) for (const m of component) result.add(m);
+      }
+    }
+  }
+  return result;
 }

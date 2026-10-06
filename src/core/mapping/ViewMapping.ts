@@ -4,14 +4,26 @@
  * stored data never moves. Columns are identity for now.
  */
 export class ViewMapping {
-  readonly colCount: number;
+  private cols: number;
   private order: Int32Array | null = null; // viewRow -> dataRow
   private inverse: Int32Array | null = null; // dataRow -> viewRow, -1 when hidden
-  private readonly totalRows: number;
+  private totalRows: number;
 
   constructor(rowCount: number, colCount: number) {
     this.totalRows = rowCount;
-    this.colCount = colCount;
+    this.cols = colCount;
+  }
+
+  get colCount(): number {
+    return this.cols;
+  }
+
+  /** Row/column insert and delete change the grid size; they are only allowed with the identity mapping. */
+  resize(rowCount: number, colCount: number): void {
+    this.totalRows = rowCount;
+    this.cols = colCount;
+    this.order = null;
+    this.inverse = null;
   }
 
   /** Number of rows in the underlying data. */
