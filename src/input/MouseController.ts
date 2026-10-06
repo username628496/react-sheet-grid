@@ -1,5 +1,7 @@
 import { ResizeCommand } from '../core/commands/ResizeCommand';
 import type { AxisLayout } from '../core/layout/AxisLayout';
+import type { FillDirection } from '../core/fill';
+import type { ViewRange } from '../core/selection/SelectionModel';
 import type { Spreadsheet } from '../core/Spreadsheet';
 import type { GridSurface } from '../render/GridSurface';
 import type { EditorController } from './EditorController';
@@ -14,6 +16,7 @@ type Hit =
   | { zone: 'rowHeader'; row: number }
   | { zone: 'colResize'; col: number }
   | { zone: 'rowResize'; row: number }
+  | { zone: 'fillHandle' }
   | { zone: 'cell'; row: number; col: number }
   | { zone: 'none' };
 
@@ -21,6 +24,7 @@ type Drag =
   | { kind: 'cell' }
   | { kind: 'col' }
   | { kind: 'row' }
+  | { kind: 'fill'; source: ViewRange }
   | { kind: 'resize'; axis: 'col' | 'row'; indices: number[]; startPos: number; startSize: number };
 
 export interface MouseDeps {
@@ -30,6 +34,9 @@ export interface MouseDeps {
 }
 
 export class MouseController {
+  /** Dashed outline of source + area that would be filled; read by the overlay while dragging the handle. */
+  fillPreview: ViewRange | null = null;
+  private fillPlan: { direction: FillDirection; count: number } | null = null;
   private drag: Drag | null = null;
   private lastX = 0;
   private lastY = 0;
@@ -82,9 +89,24 @@ export class MouseController {
       if (resize !== null) return { zone: 'rowResize', row: resize };
       return { zone: 'rowHeader', row };
     }
+    if (this.overFillHandle(x, y)) return { zone: 'fillHandle' };
     const row = vp.rowAt(y);
     const col = vp.colAt(x);
     return row < 0 || col < 0 ? { zone: 'none' } : { zone: 'cell', row, col };
+  }
+
+  private overFillHandle(x: number, y: number): boolean {
+    const { sheet, editor, surface } = this.deps;
+    if (editor.editing) return false;
+    const vp = surface.viewport;
+    const p = sheet.selection.primary;
+    const right = vp.colLeft(p.endCol) + sheet.cols.getSize(p.endCol);
+    const bottom = vp.rowTop(p.endRow) + sheet.rows.getSize(p.endRow);
+    // A corner scrolled underneath the frozen area or the headers is not grabbable.
+    if (right < vp.headerWidth || bottom < vp.headerHeight) return false;
+    if (p.endCol >= vp.frozenCols && right < vp.headerWidth + vp.frozenWidth) return false;
+    if (p.endRow >= vp.frozenRows && bottom < vp.headerHeight + vp.frozenHeight) return false;
+    return Math.abs(x - right) <= 5 && Math.abs(y - bottom) <= 5;
   }
 
   // Returns the index whose trailing edge is under `pos`, if close enough to grab.
@@ -146,6 +168,9 @@ export class MouseController {
         });
         return;
       }
+      case 'fillHandle':
+        this.startDrag({ kind: 'fill', source: selection.primary });
+        return;
       case 'cell':
         if (e.shiftKey) selection.extendTo(hit.row, hit.col);
         else if (additive) selection.addCell(hit.row, hit.col);
@@ -205,6 +230,9 @@ export class MouseController {
       selection.selectCol(vp.colAtClamped(this.lastX), true);
     } else if (drag.kind === 'row') {
       selection.selectRow(vp.rowAtClamped(this.lastY), true);
+    } else if (drag.kind === 'fill') {
+      this.planFill(drag.source, vp.rowAtClamped(this.lastY), vp.colAtClamped(this.lastX));
+      sheet.notify();
     } else {
       const layout = drag.axis === 'col' ? sheet.cols : sheet.rows;
       const min = drag.axis === 'col' ? MIN_COL_WIDTH : MIN_ROW_HEIGHT;
@@ -213,6 +241,32 @@ export class MouseController {
       // Live preview writes the layout directly; the command is created once on mouse up.
       for (const i of drag.indices) layout.setSize(i, size);
       sheet.notify();
+    }
+  }
+
+  // Fills along whichever axis the pointer moved further from the source range.
+  private planFill(source: ViewRange, row: number, col: number): void {
+    const dr = row > source.endRow ? row - source.endRow : row < source.startRow ? row - source.startRow : 0;
+    const dc = col > source.endCol ? col - source.endCol : col < source.startCol ? col - source.startCol : 0;
+    if (dr === 0 && dc === 0) {
+      this.fillPlan = null;
+      this.fillPreview = null;
+      return;
+    }
+    if (Math.abs(dr) >= Math.abs(dc)) {
+      this.fillPlan = { direction: dr > 0 ? 'down' : 'up', count: Math.abs(dr) };
+      this.fillPreview = {
+        ...source,
+        startRow: dr < 0 ? source.startRow + dr : source.startRow,
+        endRow: dr > 0 ? source.endRow + dr : source.endRow,
+      };
+    } else {
+      this.fillPlan = { direction: dc > 0 ? 'right' : 'left', count: Math.abs(dc) };
+      this.fillPreview = {
+        ...source,
+        startCol: dc < 0 ? source.startCol + dc : source.startCol,
+        endCol: dc > 0 ? source.endCol + dc : source.endCol,
+      };
     }
   }
 
@@ -241,6 +295,14 @@ export class MouseController {
   private readonly onMouseUp = (): void => {
     const { drag } = this;
     this.stopDrag();
+    if (drag !== null && drag.kind === 'fill') {
+      const plan = this.fillPlan;
+      this.fillPlan = null;
+      this.fillPreview = null;
+      if (plan !== null) this.deps.sheet.fillRange(drag.source, plan.direction, plan.count);
+      else this.deps.sheet.notify();
+      return;
+    }
     if (drag === null || drag.kind !== 'resize') return;
     const { sheet } = this.deps;
     const layout = drag.axis === 'col' ? sheet.cols : sheet.rows;
@@ -259,13 +321,15 @@ export class MouseController {
       return;
     }
     const hit = this.locate(x, y);
-    this.host.style.cursor = hit.zone === 'colResize' ? 'col-resize' : hit.zone === 'rowResize' ? 'row-resize' : '';
+    this.host.style.cursor =
+      hit.zone === 'colResize' ? 'col-resize' : hit.zone === 'rowResize' ? 'row-resize' : hit.zone === 'fillHandle' ? 'crosshair' : '';
   };
 
   private readonly onDoubleClick = (e: MouseEvent): void => {
     const { x, y } = this.local(e);
     if (this.onScrollbar(x, y)) return;
-    if (this.locate(x, y).zone !== 'cell') return;
+    const zone = this.locate(x, y).zone;
+    if (zone !== 'cell') return;
     const { sheet, editor } = this.deps;
     const { selection } = sheet;
     editor.begin('caret', sheet.getEditText(selection.activeRow, selection.activeCol));

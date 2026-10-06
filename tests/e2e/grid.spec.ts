@@ -355,3 +355,61 @@ test.describe('formulas', () => {
     expect(await cellValue(page, 0, 0)).toBe('có');
   });
 });
+
+test.describe('fill handle', () => {
+  async function handlePos(page: import('@playwright/test').Page): Promise<{ x: number; y: number }> {
+    return page.evaluate(() => {
+      const g = window.__grid!;
+      const vp = g.surface.viewport;
+      const p = g.sheet.selection.primary;
+      const rect = g.surface.host.getBoundingClientRect();
+      return {
+        x: rect.left + vp.colLeft(p.endCol) + g.sheet.cols.getSize(p.endCol),
+        y: rect.top + vp.rowTop(p.endRow) + g.sheet.rows.getSize(p.endRow),
+      };
+    });
+  }
+
+  test('dragging the handle down continues a number series in one undo step', async ({ page }) => {
+    await page.evaluate(() => {
+      window.__sheet!.setCellInput(0, 0, '1');
+      window.__sheet!.setCellInput(1, 0, '2');
+    });
+    await clickCell(page, 0, 0);
+    await clickCell(page, 1, 0, { modifiers: ['Shift'] });
+    const h = await handlePos(page);
+    const target = await cellCenter(page, 5, 0);
+    await page.mouse.move(h.x, h.y);
+    await page.mouse.down();
+    await page.mouse.move(target.x, target.y, { steps: 6 });
+    expect(await page.evaluate(() => window.__grid!.mouse.fillPreview)).toMatchObject({ startRow: 0, endRow: 5 });
+    await page.mouse.up();
+    expect([2, 3, 4, 5].map((r) => r)).toEqual([2, 3, 4, 5]);
+    expect(await cellValue(page, 2, 0)).toBe(3);
+    expect(await cellValue(page, 5, 0)).toBe(6);
+    expect((await selection(page)).range).toMatchObject({ startRow: 0, endRow: 5 });
+    await page.keyboard.press(`${mod}+z`);
+    expect(await cellValue(page, 2, 0)).toBeNull();
+    expect(await cellValue(page, 1, 0)).toBe(2);
+  });
+
+  test('dragging sideways copies text', async ({ page }) => {
+    await page.evaluate(() => window.__sheet!.setCellInput(0, 0, 'abc'));
+    await clickCell(page, 0, 0);
+    const h = await handlePos(page);
+    const target = await cellCenter(page, 0, 3);
+    await page.mouse.move(h.x, h.y);
+    await page.mouse.down();
+    await page.mouse.move(target.x, target.y, { steps: 5 });
+    await page.mouse.up();
+    expect(await cellValue(page, 0, 3)).toBe('abc');
+    expect(await cellValue(page, 1, 0)).toBeNull();
+  });
+
+  test('the cursor changes over the handle', async ({ page }) => {
+    await clickCell(page, 0, 0);
+    const h = await handlePos(page);
+    await page.mouse.move(h.x, h.y);
+    expect(await page.evaluate(() => window.__grid!.surface.host.style.cursor)).toBe('crosshair');
+  });
+});

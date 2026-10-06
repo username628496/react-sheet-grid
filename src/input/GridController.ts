@@ -30,6 +30,8 @@ export class GridController {
       drawSelection(ctx, sheet, sheet.selection, rowSeg, colSeg, !this.editor.editing);
       const marquee = this.clipboard.visibleMarquee;
       if (marquee !== null) drawCopyMarquee(ctx, sheet, marquee, rowSeg, colSeg);
+      const fill = this.mouse.fillPreview;
+      if (fill !== null) drawCopyMarquee(ctx, sheet, fill, rowSeg, colSeg);
     };
 
     // The textarea follows the active cell through selection changes, resizes and scrolling.

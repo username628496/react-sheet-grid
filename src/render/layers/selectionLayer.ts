@@ -47,6 +47,7 @@ export function drawSelection(
     }
   }
   if (!showActiveBorder) return;
+  drawFillHandle(ctx, sheet, selection, rowSeg, colSeg);
   const ax = colSeg.origin + cols.offsetOf(selection.activeCol) - colSeg.base;
   const ay = rowSeg.origin + rows.offsetOf(selection.activeRow) - rowSeg.base;
   ctx.strokeStyle = theme.accent;
@@ -77,4 +78,25 @@ export function drawCopyMarquee(
   ctx.lineWidth = 2;
   ctx.strokeRect(x, y, w, h);
   ctx.restore();
+}
+
+export const FILL_HANDLE_SIZE = 7;
+
+/** Small square at the bottom-right corner of the primary range, the grab point for fill. */
+function drawFillHandle(
+  ctx: CanvasRenderingContext2D,
+  sheet: Spreadsheet,
+  selection: SelectionModel,
+  rowSeg: Segment,
+  colSeg: Segment,
+): void {
+  const p = selection.primary;
+  if (p.endRow < rowSeg.first || p.endRow > rowSeg.last || p.endCol < colSeg.first || p.endCol > colSeg.last) return;
+  const x = colSeg.origin + sheet.cols.offsetOf(p.endCol + 1) - colSeg.base;
+  const y = rowSeg.origin + sheet.rows.offsetOf(p.endRow + 1) - rowSeg.base;
+  const half = FILL_HANDLE_SIZE / 2;
+  ctx.fillStyle = theme.background;
+  ctx.fillRect(x - half - 1, y - half - 1, FILL_HANDLE_SIZE + 2, FILL_HANDLE_SIZE + 2);
+  ctx.fillStyle = theme.accent;
+  ctx.fillRect(x - half, y - half, FILL_HANDLE_SIZE, FILL_HANDLE_SIZE);
 }

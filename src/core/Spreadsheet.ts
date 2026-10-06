@@ -3,6 +3,7 @@ import { type CellChange, SetCellsCommand } from './commands/SetCellsCommand';
 import { FormulaEngine } from '../formula/engine';
 import { parseFormulaSafe } from '../formula/parser';
 import { printFormula } from '../formula/print';
+import { fillCells, type FillDirection } from './fill';
 import { History } from './history/History';
 import { AxisLayout } from './layout/AxisLayout';
 import { ViewMapping } from './mapping/ViewMapping';
@@ -302,6 +303,51 @@ export class Spreadsheet {
     this.selection.selectCell(startRow, startCol);
     this.selection.extendTo(endRow, endCol);
     return this.selection.primary;
+  }
+
+  /**
+   * Fill handle: extends `source` along one axis by `count` rows/columns in one
+   * undoable step and selects source plus the new area. Returns the new selection.
+   */
+  fillRange(source: ViewRange, direction: FillDirection, count: number): ViewRange | null {
+    if (count <= 0) return null;
+    const vertical = direction === 'down' || direction === 'up';
+    const forward = direction === 'down' || direction === 'right';
+    const limit = vertical ? this.rowCount : this.colCount;
+    const edge = vertical ? (forward ? source.endRow : source.startRow) : forward ? source.endCol : source.startCol;
+    const available = forward ? limit - 1 - edge : edge;
+    const lines = Math.min(count, available);
+    if (lines <= 0) return null;
+
+    const area = (source.endRow - source.startRow + 1) * (source.endCol - source.startCol + 1);
+    if (area > MAX_TILED_CELLS || area * lines > 4 * MAX_TILED_CELLS) return null;
+    const read = this.readCells(source).cells;
+    const filled = fillCells(read, direction, lines);
+
+    const changes: CellChange[] = [];
+    for (let k = 0; k < lines; k++) {
+      const line = filled[k] as Cell[];
+      for (let lane = 0; lane < line.length; lane++) {
+        const step = forward ? k + 1 : -(k + 1);
+        const viewRow = vertical ? (forward ? source.endRow : source.startRow) + step : source.startRow + lane;
+        const viewCol = vertical ? source.startCol + lane : (forward ? source.endCol : source.startCol) + step;
+        changes.push({
+          dataRow: this.mapping.toDataRow(viewRow),
+          dataCol: this.mapping.toDataCol(viewCol),
+          cell: line[lane] as Cell,
+        });
+      }
+    }
+    this.execute(new SetCellsCommand('Fill', changes));
+    const result: ViewRange = {
+      startRow: vertical && !forward ? source.startRow - lines : source.startRow,
+      endRow: vertical && forward ? source.endRow + lines : source.endRow,
+      startCol: !vertical && !forward ? source.startCol - lines : source.startCol,
+      endCol: !vertical && forward ? source.endCol + lines : source.endCol,
+    };
+    this.selection.selectCell(result.startRow, result.startCol);
+    this.selection.extendTo(result.endRow, result.endCol);
+    return result;
   }
 
   /** Pastes plain values (text typed into each cell the way the editor would); existing formatting is kept. */
