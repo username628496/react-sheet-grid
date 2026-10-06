@@ -76,7 +76,10 @@ export function DataGrid({ sheet, frozenRows, frozenCols, className, style, zoom
     const update = (): void => {
       const editing = controller?.editor.editing === true;
       const { activeRow, activeCol, primary } = sheet.selection;
-      const next = `${activeRow},${activeCol},${primary.startRow},${primary.startCol},${primary.endRow},${primary.endCol},${editing}`;
+      // The cell's text is part of the key: undo, a sort or data arriving changes what the active cell holds without moving
+      // the selection, and that has to be heard too.
+      const content = editing ? '' : sheet.getDisplayText(activeRow, activeCol);
+      const next = `${activeRow},${activeCol},${primary.startRow},${primary.startCol},${primary.endRow},${primary.endCol},${editing},${content}`;
       if (next === key) return; // typed text, scrolling and other notifications do not change what to say
       key = next;
       const startedEditing = editing && !wasEditing;

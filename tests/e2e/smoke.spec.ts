@@ -527,3 +527,19 @@ test.describe('accessibility', () => {
     await expect(page.getByRole('toolbar')).toBeVisible();
   });
 });
+
+test.describe('accessibility: content changes', () => {
+  type Handle = import('../../src/index').SheetGridHandle;
+  type W = { __handle?: Handle };
+
+  test('a change to the active cell without moving the selection is announced (undo, data arriving)', async ({ page }) => {
+    await page.goto('/demo/simple.html');
+    await page.waitForFunction(() => (window as unknown as W).__handle?.controller != null);
+    const announced = page.getByTestId('grid-announcer');
+    await expect(announced).toHaveText('A1, empty');
+    await page.evaluate(() => (window as unknown as W).__handle!.sheet.setCellInput(0, 0, 'Loaded'));
+    await expect(announced).toHaveText('A1, Loaded');
+    await page.evaluate(() => (window as unknown as W).__handle!.sheet.undo());
+    await expect(announced).toHaveText('A1, empty');
+  });
+});
