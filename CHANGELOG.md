@@ -3,7 +3,12 @@
 All notable changes to this project are documented here. The format follows [Keep a Changelog](https://keepachangelog.com/)
 and the project follows [Semantic Versioning](https://semver.org/). Before 1.0.0 minor versions may contain breaking changes.
 
-## [0.1.0] - unreleased
+## [0.1.1] - 2026-10-06
+
+### Changed
+- Package metadata: repository, homepage and bug tracker links.
+
+## [0.1.0] - 2026-10-06
 
 First public version.
 

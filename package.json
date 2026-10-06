@@ -1,6 +1,6 @@
 {
   "name": "react-sheet-grid",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "A Google Sheets-style spreadsheet grid for React: canvas rendering, one million rows at 60fps, formulas, undo/redo, sorting, filtering and Vietnamese IME support.",
   "keywords": [
     "react",
@@ -15,6 +15,14 @@
     "datagrid"
   ],
   "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/username628496/react-sheet-grid.git"
+  },
+  "homepage": "https://github.com/username628496/react-sheet-grid#readme",
+  "bugs": {
+    "url": "https://github.com/username628496/react-sheet-grid/issues"
+  },
   "type": "module",
   "sideEffects": false,
   "main": "./dist/index.cjs",

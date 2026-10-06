@@ -1,4 +1,4 @@
-export const VERSION = '0.1.0';
+export const VERSION = '0.1.1';
 export * from './core';
 export { DataGrid, type DataGridProps } from './react/DataGrid';
 export { GridController } from './input/GridController';
