@@ -118,9 +118,9 @@ docs/
 - [x] Khởi tạo dự án (Vite, TS strict, Vitest, Playwright, trang demo)
 - [x] `SheetModel` thưa + `StyleTable` + unit test
 - [x] `layout`: kích thước dòng/cột, tra vị trí theo pixel
-- [ ] Canvas renderer: lưới, header, nội dung ô, hỗ trợ DPR
-- [ ] Virtualization + cuộn mượt với 1.000.000 × 100 ô (dữ liệu demo sinh ngẫu nhiên)
-- [ ] Freeze dòng tiêu đề và cột đầu
+- [x] Canvas renderer: lưới, header, nội dung ô, hỗ trợ DPR
+- [x] Virtualization + cuộn mượt với 1.000.000 × 100 ô (dữ liệu demo sinh ngẫu nhiên)
+- [x] Freeze dòng tiêu đề và cột đầu
 - [ ] Chọn ô, kéo chọn vùng, Shift+click, chọn cả dòng/cột qua header
 - [ ] Di chuyển bằng phím: mũi tên, Tab, Enter, Ctrl+mũi tên, Home/End, PageUp/PageDown
 - [ ] Edit ô: gõ đè, F2, double-click, Enter/Esc, Delete, **IME tiếng Việt**

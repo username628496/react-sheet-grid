@@ -1,10 +1,20 @@
 import { DEFAULT_STYLE_ID } from './StyleTable';
 
-export type CellValue = string | number | boolean;
+export type ErrorCode = '#DIV/0!' | '#VALUE!' | '#REF!' | '#N/A' | '#NAME?' | '#NUM!' | '#ERROR!';
+
+export interface CellError {
+  readonly error: ErrorCode;
+}
+
+export type CellValue = string | number | boolean | CellError;
 
 export interface Cell {
   readonly value: CellValue | null;
   readonly styleId: number;
+}
+
+export function isCellError(value: unknown): value is CellError {
+  return typeof value === 'object' && value !== null && 'error' in value;
 }
 
 export function isEmptyCell(cell: Cell): boolean {

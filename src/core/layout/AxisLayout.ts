@@ -14,7 +14,7 @@ export interface VisibleRange {
  * A size of 0 means hidden.
  */
 export class AxisLayout {
-  readonly count: number;
+  private itemCount: number;
   readonly defaultSize: number;
 
   private readonly overrideIndex: number[] = [];
@@ -29,8 +29,24 @@ export class AxisLayout {
     if (!Number.isFinite(defaultSize) || defaultSize <= 0) {
       throw new RangeError(`Invalid default size: ${defaultSize}`);
     }
-    this.count = count;
+    this.itemCount = count;
     this.defaultSize = defaultSize;
+  }
+
+  get count(): number {
+    return this.itemCount;
+  }
+
+  /** Changes the number of items; overrides beyond the new count are dropped. */
+  setCount(count: number): void {
+    if (!Number.isInteger(count) || count < 0) throw new RangeError(`Invalid count: ${count}`);
+    if (count < this.itemCount) {
+      const keep = this.lowerBound(count);
+      this.overrideIndex.length = keep;
+      this.overrideSize.length = keep;
+      this.prefixDirty = true;
+    }
+    this.itemCount = count;
   }
 
   get totalSize(): number {

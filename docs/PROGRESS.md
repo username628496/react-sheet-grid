@@ -4,8 +4,15 @@
 - Khởi tạo dự án: Vite (library mode), TS strict, Vitest, Playwright, ESLint, trang demo.
 - `SheetModel` thưa + `StyleTable` + unit test (16 test pass).
 - `layout`: `AxisLayout` (kích thước dòng/cột thưa, offset, tra chỉ số theo pixel, visibleRange) + 11 unit test.
+- Canvas renderer (lưới, header, nội dung ô, DPR), virtualization 1M × 100, freeze dòng/cột (`frozenRows`/`frozenCols`). Đo thực tế trên Chromium: 16,5ms/khung khi cuộn (khóa 60fps).
+- Lõi bổ sung: `Spreadsheet` (headless), `ViewMapping`, `format`, `parseInput`, `address`.
 
 ## Quyết định kỹ thuật
+- Cuộn: một `div` cuộn native nằm trên canvas, canvas vẽ lại theo vị trí cuộn logic. Firefox giới hạn chiều cao phần tử ~17,9M px mà 1M dòng × 21px = 21M, nên host chỉ được tối đa 8M px vật lý và `logic = vật lý × scale` (`computeScrollMetrics`).
+- Vẽ theo "segment": mỗi trục có segment đóng băng và segment cuộn; vùng vẽ = tích hai trục, nên freeze không cần code riêng.
+- Dữ liệu demo là bản thưa (khối dày 5000×20 + 300k ô rải rác) vì 100M ô không thể lưu trong `Map`.
+- Chữ chỉ clip khi tràn ô; tràn sang ô trống bên cạnh để sau MVP.
+- Sort/filter dùng `ViewMapping` (`Int32Array` viewRow → dataRow); `AxisLayout.setCount` để filter đổi số dòng hiển thị.
 - `vitest` chạy môi trường `node` để đảm bảo `core/` và `formula/` không phụ thuộc DOM.
 - React được đặt `external` khi build thư viện.
 
@@ -19,4 +26,4 @@
 - `setSize` đánh dấu prefix sum bẩn, mỗi lần truy vấn sau đó tốn O(k) (k = số override). Cần chú ý khi kéo resize với rất nhiều override.
 
 ## Việc tiếp theo
-- Canvas renderer: lưới, header, nội dung ô, hỗ trợ DPR.
+- Chọn ô, kéo chọn vùng, Shift+click, chọn cả dòng/cột qua header.
