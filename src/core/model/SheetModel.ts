@@ -63,6 +63,14 @@ export class SheetModel {
     this.cells.delete(keyOf(dataRow, dataCol));
   }
 
+  /** Visits every stored cell in no particular order. */
+  forEachCell(visit: (dataRow: number, dataCol: number, cell: Cell) => void): void {
+    for (const [key, cell] of this.cells) {
+      const r = Math.floor(key / MAX_COLS);
+      visit(r, key - r * MAX_COLS, cell);
+    }
+  }
+
   /** Visits only stored cells inside `range`, in no particular order. */
   forEachCellInRange(
     range: CellRange,
