@@ -213,7 +213,47 @@ function sumIf(args: Arg[], ctx: FnContext): Value {
   return failure !== null ? failure : total;
 }
 
+function unary(op: (n: number) => Value): (args: Arg[], ctx: FnContext) => Value {
+  return (args, ctx) => {
+    const n = toNumber(scalar(args[0] as Arg, ctx));
+    return isCellError(n) ? n : op(n);
+  };
+}
+
+function binary(op: (a: number, b: number) => Value): (args: Arg[], ctx: FnContext) => Value {
+  return (args, ctx) => {
+    const a = toNumber(scalar(args[0] as Arg, ctx));
+    if (isCellError(a)) return a;
+    const b = toNumber(scalar(args[1] as Arg, ctx));
+    return isCellError(b) ? b : op(a, b);
+  };
+}
+
+function countA(args: Arg[], ctx: FnContext): Value {
+  let n = 0;
+  for (const arg of args) {
+    if (isRange(arg)) forEachStored(arg, ctx, (v) => { if (v !== '') n++; });
+    else if (arg !== null) n++;
+  }
+  return n;
+}
+
 export const MATH_FUNCTIONS: Record<string, FunctionDef> = {
+  ABS: { min: 1, max: 1, fn: unary(Math.abs) },
+  INT: { min: 1, max: 1, fn: unary(Math.floor) },
+  SQRT: { min: 1, max: 1, fn: unary((n) => (n < 0 ? err('#NUM!') : Math.sqrt(n))) },
+  // The result takes the divisor's sign, like Sheets (MOD(-3, 2) = 1).
+  MOD: { min: 2, max: 2, fn: binary((a, b) => (b === 0 ? err('#DIV/0!') : a - b * Math.floor(a / b))) },
+  POWER: {
+    min: 2,
+    max: 2,
+    fn: binary((a, b) => {
+      if (a === 0 && b < 0) return err('#DIV/0!');
+      const r = a ** b;
+      return Number.isFinite(r) ? r : err('#NUM!');
+    }),
+  },
+  COUNTA: { min: 1, max: Infinity, fn: countA },
   SUM: { min: 1, max: Infinity, fn: sum },
   AVERAGE: { min: 1, max: Infinity, fn: average },
   COUNT: { min: 1, max: Infinity, fn: count },

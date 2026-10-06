@@ -219,3 +219,94 @@ describe('VLOOKUP', () => {
     ['=VLOOKUP(2,A1:C4)', e('#N/A'), TABLE],
   ]);
 });
+
+describe('AND / OR / NOT', () => {
+  table([
+    ['=AND(TRUE,TRUE)', true],
+    ['=AND(TRUE,FALSE)', false],
+    ['=AND(1,2)', true],
+    ['=AND(A1:A3)', false, { A1: 'TRUE', A2: 'FALSE', A3: 'TRUE' }],
+    ['=AND(A1:A2)', e('#VALUE!'), { A1: 'x', A2: 'y' }], // text in ranges is ignored, nothing left
+    ['=AND("x")', e('#VALUE!')],
+    ['=OR(FALSE,FALSE)', false],
+    ['=OR(FALSE,1)', true],
+    ['=OR(A1:A2)', true, { A1: 0, A2: 3 }],
+    ['=OR(#N/A,TRUE)', e('#N/A')],
+    ['=NOT(TRUE)', false],
+    ['=NOT(0)', true],
+    ['=NOT("x")', e('#VALUE!')],
+  ]);
+});
+
+describe('IFERROR', () => {
+  table([
+    ['=IFERROR(1/0,"bad")', 'bad'],
+    ['=IFERROR(5,"bad")', 5],
+    ['=IFERROR(1/0)', ''],
+    ['=IFERROR(A1,0)', 0, { A1: '=#N/A' }],
+    ['=IFERROR(1,1/0)', 1], // the fallback is never evaluated
+    ['=IFERROR(1/0,1/0)', e('#DIV/0!')],
+  ]);
+});
+
+describe('number helpers', () => {
+  table([
+    ['=ABS(-3)', 3],
+    ['=ABS("x")', e('#VALUE!')],
+    ['=INT(-1.5)', -2],
+    ['=INT(2.9)', 2],
+    ['=SQRT(9)', 3],
+    ['=SQRT(-1)', e('#NUM!')],
+    ['=MOD(7,3)', 1],
+    ['=MOD(-3,2)', 1],
+    ['=MOD(3,-2)', -1],
+    ['=MOD(1,0)', e('#DIV/0!')],
+    ['=POWER(2,10)', 1024],
+    ['=POWER(0,-1)', e('#DIV/0!')],
+    ['=POWER(-8,0.5)', e('#NUM!')],
+    ['=COUNTA(A1:A4)', 2, { A1: 'x', A3: 5 }],
+    ['=COUNTA(1,"a",A1)', 3, { A1: 'x' }],
+  ]);
+});
+
+describe('text helpers', () => {
+  table([
+    ['=LEN("hello")', 5],
+    ['=LEN(123)', 3],
+    ['=LEN("")', 0],
+    ['=UPPER("aBc")', 'ABC'],
+    ['=LOWER("aBc")', 'abc'],
+    ['=TRIM("  a   b  ")', 'a b'],
+    ['=LEFT("hello",2)', 'he'],
+    ['=LEFT("hello")', 'h'],
+    ['=LEFT("hi",10)', 'hi'],
+    ['=LEFT("hi",-1)', e('#VALUE!')],
+    ['=RIGHT("hello",3)', 'llo'],
+    ['=RIGHT("hello",0)', ''],
+    ['=MID("hello",2,3)', 'ell'],
+    ['=MID("hello",10,3)', ''],
+    ['=MID("hello",0,3)', e('#VALUE!')],
+    ['=UPPER(#N/A)', e('#N/A')],
+  ]);
+});
+
+describe('INDEX / MATCH', () => {
+  const grid = { A1: 'a', A2: 'b', A3: 'c', B1: 1, B2: 2, B3: 3 };
+  table([
+    ['=INDEX(A1:B3,2,2)', 2, grid],
+    ['=INDEX(A1:A3,3)', 'c', grid],
+    ['=INDEX(A1:B1,2)', 'b', { A1: 'a', B1: 'b' }],
+    ['=INDEX(A1:B3,4,1)', e('#REF!'), grid],
+    ['=INDEX(A1:B3,0,1)', e('#VALUE!'), grid],
+    ['=MATCH("b",A1:A3,0)', 2, grid],
+    ['=MATCH("B",A1:A3,0)', 2, grid],
+    ['=MATCH("z",A1:A3,0)', e('#N/A'), grid],
+    ['=MATCH("c*",A1:A3,0)', 3, { A1: 'a', A2: 'b', A3: 'cat' }],
+    ['=MATCH(5,B1:B3,1)', 3, grid],
+    ['=MATCH(0,B1:B3,1)', e('#N/A'), grid],
+    ['=MATCH(2,B1:B3)', 2, grid],
+    ['=MATCH(2,B3:B1,-1)', 2, { B1: 3, B2: 2, B3: 1 }],
+    ['=MATCH(1,A1:B3,0)', e('#N/A'), grid],
+    ['=INDEX(A:A,MATCH("b",A:A,0))', 'b', grid],
+  ]);
+});

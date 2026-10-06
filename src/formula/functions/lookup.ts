@@ -101,6 +101,74 @@ function vlookup(args: Arg[], ctx: FnContext): Value {
   return found < 0 ? err('#N/A') : result(found);
 }
 
+function indexFn(args: Arg[], ctx: FnContext): Value {
+  const range = args[0] as Arg;
+  if (!isRange(range)) return err('#VALUE!');
+  const rows = range.r2 - range.r1 + 1;
+  const cols = range.c2 - range.c1 + 1;
+  const first = toNumber(scalar(args[1] as Arg, ctx));
+  if (isCellError(first)) return first;
+  let row = Math.trunc(first);
+  let col = 1;
+  if (args.length > 2) {
+    const c = toNumber(scalar(args[2] as Arg, ctx));
+    if (isCellError(c)) return c;
+    col = Math.trunc(c);
+  } else if (rows === 1 && cols > 1) {
+    // A single row with one index: the index runs along the row.
+    col = row;
+    row = 1;
+  }
+  if (row < 1 || col < 1) return err('#VALUE!');
+  if (row > rows || col > cols) return err('#REF!');
+  return ctx.model.getCell(range.r1 + row - 1, range.c1 + col - 1).value;
+}
+
+function match(args: Arg[], ctx: FnContext): Value {
+  const key = scalar(args[0] as Arg, ctx);
+  if (isErr(key)) return key;
+  const range = args[1] as Arg;
+  if (!isRange(range)) return err('#VALUE!');
+  const rows = range.r2 - range.r1 + 1;
+  const cols = range.c2 - range.c1 + 1;
+  if (rows > 1 && cols > 1) return err('#N/A');
+  let type = 1;
+  if (args.length > 2) {
+    const t = toNumber(scalar(args[2] as Arg, ctx));
+    if (isCellError(t)) return t;
+    type = Math.sign(t);
+  }
+  const used = ctx.model.getUsedRange();
+  if (used === null || key === null) return err('#N/A');
+  // Whole-column ranges are cut at the used area so the scan never walks empty rows.
+  const length = cols === 1 ? Math.min(range.r2, used.endRow) - range.r1 + 1 : Math.min(range.c2, used.endCol) - range.c1 + 1;
+  const at = (k: number): Value =>
+    cols === 1 ? ctx.model.getCell(range.r1 + k, range.c1).value : ctx.model.getCell(range.r1, range.c1 + k).value;
+
+  if (type === 0) {
+    const wild = typeof key === 'string' && /[*?]/.test(key) ? wildcardRegExp(key) : null;
+    for (let k = 0; k < length; k++) {
+      const v = at(k);
+      if (v === null || isCellError(v)) continue;
+      const hit = wild !== null ? typeof v === 'string' && wild.test(v) : typeRank(v) === typeRank(key) && compareValues(v, key) === 0;
+      if (hit) return k + 1;
+    }
+    return err('#N/A');
+  }
+  // type 1: last value <= key in ascending data; type -1: last value >= key in descending data.
+  let found = -1;
+  for (let k = 0; k < length; k++) {
+    const v = at(k);
+    if (v === null || isCellError(v) || typeRank(v) !== typeRank(key)) continue;
+    const c = compareValues(v, key);
+    if (type === 1 ? c <= 0 : c >= 0) found = k;
+    else break;
+  }
+  return found < 0 ? err('#N/A') : found + 1;
+}
+
 export const LOOKUP_FUNCTIONS: Record<string, FunctionDef> = {
+  INDEX: { min: 2, max: 3, fn: indexFn },
+  MATCH: { min: 2, max: 3, fn: match },
   VLOOKUP: { min: 3, max: 4, fn: vlookup },
 };

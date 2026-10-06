@@ -166,6 +166,7 @@ export class Evaluator {
     if (def === undefined) return err('#NAME?');
     if (args.length < def.min || args.length > def.max) return err('#N/A');
     if (name === 'IF') return this.lazyIf(args);
+    if (name === 'IFERROR') return this.lazyIfError(args);
     // References are passed as 1x1 ranges so SUM(A1) treats A1 like range membership, as Sheets does.
     const evaluated = args.map((a) => this.arg(a));
     return def.fn(evaluated, this.ctx);
@@ -177,6 +178,13 @@ export class Evaluator {
       return p === null ? err('#REF!') : { kind: 'range', r1: p.r, c1: p.c, r2: p.r, c2: p.c };
     }
     return this.eval(e);
+  }
+
+  // The fallback is only evaluated when the first argument is an error.
+  private lazyIfError(args: readonly Expr[]): Value {
+    const v = this.value(args[0] as Expr);
+    if (!isCellError(v)) return v;
+    return args[1] === undefined ? '' : this.value(args[1]);
   }
 
   // Only the taken branch is evaluated, so IF(A1=0, "n/a", 1/A1) never divides by zero.
