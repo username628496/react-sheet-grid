@@ -93,7 +93,7 @@ Chưa có: Mod+; (ngày hiện tại), Mod+K (liên kết), Mod+T (trình duyệ
 ## Lỗi đã biết / giới hạn
 
 - e2e đã chạy xanh trên cả 3 engine: Chromium 48/48, WebKit 46 pass + 2 skip, Firefox 46 pass + 2 skip (2 test giả lập IME qua CDP chỉ chạy trên Chromium). IME thật vẫn cần thử tay.
-- Khi đang sort/filter, cut-paste chưa cập nhật tham chiếu từ ô khác tới vùng bị cắt (chỉ làm khi thứ tự dòng tự nhiên).
+- Khi đang sort/filter, cut-paste cập nhật tham chiếu theo từng ô (`followMovedCellsScattered`, tối đa 200k ô); vùng tham chiếu chỉ đi theo nếu mọi ô trong đó (≤10k ô) dịch chuyển cùng một đoạn, ngược lại giữ nguyên.
 - Công thức tham chiếu theo tọa độ dữ liệu: khi đang sort, nhãn A1 trong công thức là vị trí dữ liệu gốc, không phải vị trí đang hiển thị.
 - Chiều cao dòng gắn với vị trí hiển thị, không đi theo dữ liệu khi sort.
 - Ngày tháng chưa có chuỗi. Double-click viền dòng đưa chiều cao về mặc định (ô không wrap và không đổi cỡ chữ nên đó là chiều cao vừa nội dung).

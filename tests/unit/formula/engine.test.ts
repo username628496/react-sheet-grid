@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { Cell } from '../../../src/core/model/Cell';
+import type { ViewRange } from '../../../src/core/selection/SelectionModel';
 import { DependencyGraph } from '../../../src/formula/dependency';
 import { rebaseFormula } from '../../../src/formula/transform';
 import { addr, e, makeSheet, set, value } from './helpers';
@@ -369,5 +370,69 @@ describe('cut-paste moves references with the cells', () => {
     s.selection.selectCell(...addr('D1'));
     s.pasteMatrix(rows, cols, (i, j) => cells[i]?.[j] as Cell);
     expect(s.getEditText(...addr('B1'))).toBe('=A1+1');
+  });
+});
+
+describe('cut-paste in a sorted view', () => {
+  // Data rows 0..2 hold 3, 1, 2 in column A; sorted ascending the view shows data rows 1, 2, 0.
+  function sortedSheet(extra: Record<string, string | number>): ReturnType<typeof makeSheet> {
+    const s = makeSheet({ A1: 3, A2: 1, A3: 2, ...extra });
+    s.sortByColumn(0, true);
+    return s;
+  }
+
+  // Formulas sit in column E of data rows 0..2; the sort moved them in the view, so read them by data row.
+  const formulaAt = (s: ReturnType<typeof makeSheet>, dataRow: number): string => s.getEditText(s.mapping.toViewRow(dataRow), 4);
+
+  function cutPasteView(s: ReturnType<typeof makeSheet>, source: ViewRange, toRow: number, toCol: number): void {
+    const { rows, cols, cells } = s.readCells(source);
+    s.selection.selectCell(toRow, toCol);
+    s.pasteMatrix(
+      rows,
+      cols,
+      (i, j, _existing, dataRow, dataCol) => {
+        const cell = cells[i]?.[j] as Cell;
+        if (cell.formula === undefined) return cell;
+        const srcRow = s.mapping.toDataRow(source.startRow + i);
+        const srcCol = s.mapping.toDataCol(source.startCol + j);
+        return { ...cell, formula: rebaseFormula(cell.formula, srcRow, srcCol, dataRow, dataCol) };
+      },
+      source,
+    );
+  }
+
+  it('a single cell moved along a column is followed by formulas pointing at it', () => {
+    const s = sortedSheet({ E1: '=A2', E2: '=A1' });
+    // View row 0 is data row 1 (value 1); paste it into view column C, same view row.
+    cutPasteView(s, { startRow: 0, startCol: 0, endRow: 0, endCol: 0 }, 0, 2);
+    expect(formulaAt(s, 0)).toBe('=C2');
+    expect(formulaAt(s, 1)).toBe('=A1'); // A1 did not move
+    expect(s.model.getCell(1, 2).value).toBe(1);
+    expect(s.model.hasCell(1, 0)).toBe(false);
+  });
+
+  it('a range follows when all its cells moved by the same amount, and stays otherwise', () => {
+    const s = sortedSheet({ E1: '=SUM(A2:A3)', E2: '=SUM(A1:A2)' });
+    cutPasteView(s, { startRow: 0, startCol: 0, endRow: 1, endCol: 0 }, 0, 2); // data rows 1 and 2 -> column C
+    expect(formulaAt(s, 0)).toBe('=SUM(C2:C3)');
+    expect(formulaAt(s, 1)).toBe('=SUM(A1:A2)'); // A1 stayed, so the range is only partly moved
+  });
+
+  it('cells scattered by the view each carry their own references', () => {
+    const s = sortedSheet({ E1: '=A2', E2: '=A3', E3: '=SUM(A2:A3)' });
+    // Source: view rows 0..1 (data rows 1, 2). Target: view rows 1..2 of column C (data rows 2, 0).
+    cutPasteView(s, { startRow: 0, startCol: 0, endRow: 1, endCol: 0 }, 1, 2);
+    expect(formulaAt(s, 0)).toBe('=C3'); // A2 (data row 1) went to C3 (data row 2)
+    expect(formulaAt(s, 1)).toBe('=C1'); // A3 (data row 2) went to C1 (data row 0)
+    expect(formulaAt(s, 2)).toBe('=SUM(A2:A3)'); // the two cells moved by different amounts: range stays
+  });
+
+  it('is one undo step', () => {
+    const s = sortedSheet({ E1: '=A2' });
+    cutPasteView(s, { startRow: 0, startCol: 0, endRow: 0, endCol: 0 }, 0, 2);
+    s.undo();
+    expect(s.model.getCell(1, 0).value).toBe(1);
+    expect(s.model.hasCell(1, 2)).toBe(false);
+    expect(formulaAt(s, 0)).toBe('=A2');
   });
 });

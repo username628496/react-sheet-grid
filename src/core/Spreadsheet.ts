@@ -2,7 +2,16 @@ import type { Command } from './commands/Command';
 import { type CellChange, SetCellsCommand } from './commands/SetCellsCommand';
 import { FormulaEngine } from '../formula/engine';
 import { parseFormulaSafe } from '../formula/parser';
-import { deleteMap, deleteSetMap, IDENTITY_MAP, insertMap, moveReferences, remapFormula } from '../formula/transform';
+import {
+  deleteMap,
+  deleteSetMap,
+  IDENTITY_MAP,
+  insertMap,
+  moveReferences,
+  moveReferencesWith,
+  remapFormula,
+  type Shift,
+} from '../formula/transform';
 import { printFormula } from '../formula/print';
 import {
   DeleteColsCommand,
@@ -49,6 +58,8 @@ export interface SpreadsheetOptions {
 type Listener = () => void;
 
 const FORMAT_FILL_LIMIT = 50_000;
+const MAX_SCATTERED_MOVE = 200_000; // cut-paste cells followed one by one in a sorted/filtered view
+const MAX_RANGE_CHECK = 10_000; // largest range inspected cell by cell for the same move
 const MAX_TILED_CELLS = 1_000_000;
 const MAX_READ_CELLS = 100_000;
 
@@ -666,8 +677,9 @@ export class Spreadsheet {
         changes.push({ dataRow, dataCol, cell });
       }
     }
-    if (cutFrom !== null && !tiled && this.mapping.isIdentity) {
-      this.followMovedCells(changes, cutFrom, startRow, startCol, endRow, endCol);
+    if (cutFrom !== null && !tiled) {
+      if (this.mapping.isIdentity) this.followMovedCells(changes, cutFrom, startRow, startCol, endRow, endCol);
+      else this.followMovedCellsScattered(changes, cutFrom, startRow, startCol, endRow, endCol);
     }
     this.execute(new SetCellsCommand('Paste', changes));
     this.selection.selectCell(startRow, startCol);
@@ -749,6 +761,65 @@ export class Spreadsheet {
     this.model.forEachCell((row, col, cell) => {
       if (cell.formula === undefined || written.has(cellKey(row, col))) return;
       const moved = moveReferences(cell.formula, row, col, rect, dr, dc);
+      if (moved !== cell.formula) changes.push({ dataRow: row, dataCol: col, cell: { ...cell, formula: moved } });
+    });
+  }
+
+  /**
+   * Same as followMovedCells for a sorted or filtered view, where a block of view cells is scattered in data
+   * coordinates, so the move is described cell by cell. A range follows only if every cell in it moved by the same
+   * amount (and it is small enough to check); otherwise it stays, as a partially moved range does.
+   */
+  private followMovedCellsScattered(
+    changes: CellChange[],
+    from: ViewRange,
+    toRow: number,
+    toCol: number,
+    toEndRow: number,
+    toEndCol: number,
+  ): void {
+    const height = Math.min(from.endRow - from.startRow, toEndRow - toRow) + 1;
+    const width = Math.min(from.endCol - from.startCol, toEndCol - toCol) + 1;
+    if (height * width > MAX_SCATTERED_MOVE) return;
+    const shifts = new Map<number, Shift>();
+    const targets = new Set<number>();
+    for (let i = 0; i < height; i++) {
+      const sourceRow = this.mapping.toDataRow(from.startRow + i);
+      const targetRow = this.mapping.toDataRow(toRow + i);
+      for (let j = 0; j < width; j++) {
+        const sourceCol = this.mapping.toDataCol(from.startCol + j);
+        const targetCol = this.mapping.toDataCol(toCol + j);
+        targets.add(cellKey(targetRow, targetCol));
+        if (sourceRow !== targetRow || sourceCol !== targetCol) {
+          shifts.set(cellKey(sourceRow, sourceCol), [targetRow - sourceRow, targetCol - sourceCol]);
+        }
+      }
+    }
+    if (shifts.size === 0) return;
+    const cellShift = (r: number, c: number): Shift | null => shifts.get(cellKey(r, c)) ?? null;
+    const rangeShift = (r1: number, c1: number, r2: number, c2: number): Shift | null => {
+      if ((r2 - r1 + 1) * (c2 - c1 + 1) > MAX_RANGE_CHECK) return null;
+      const first = cellShift(r1, c1);
+      if (first === null) return null;
+      for (let r = r1; r <= r2; r++) {
+        for (let c = c1; c <= c2; c++) {
+          const s = cellShift(r, c);
+          if (s === null || s[0] !== first[0] || s[1] !== first[1]) return null;
+        }
+      }
+      return first;
+    };
+    const written = new Set(changes.map((c) => cellKey(c.dataRow, c.dataCol)));
+    for (let i = 0; i < changes.length; i++) {
+      const change = changes[i] as CellChange;
+      const f = change.cell.formula;
+      if (f === undefined || !targets.has(cellKey(change.dataRow, change.dataCol))) continue;
+      const moved = moveReferencesWith(f, change.dataRow, change.dataCol, cellShift, rangeShift);
+      if (moved !== f) changes[i] = { ...change, cell: { ...change.cell, formula: moved } };
+    }
+    this.model.forEachCell((row, col, cell) => {
+      if (cell.formula === undefined || written.has(cellKey(row, col))) return;
+      const moved = moveReferencesWith(cell.formula, row, col, cellShift, rangeShift);
       if (moved !== cell.formula) changes.push({ dataRow: row, dataCol: col, cell: { ...cell, formula: moved } });
     });
   }

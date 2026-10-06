@@ -142,15 +142,40 @@ export interface CellRect {
  */
 export function moveReferences(expr: Expr, row: number, col: number, rect: CellRect, dr: number, dc: number): Expr {
   const inside = (r: number, c: number): boolean => r >= rect.r1 && r <= rect.r2 && c >= rect.c1 && c <= rect.c2;
+  const shift: Shift = [dr, dc];
+  return moveReferencesWith(
+    expr,
+    row,
+    col,
+    (r, c) => (inside(r, c) ? shift : null),
+    (r1, c1, r2, c2) => (inside(r1, c1) && inside(r2, c2) ? shift : null),
+  );
+}
+
+export type Shift = readonly [dr: number, dc: number];
+
+/**
+ * Generalisation of moveReferences for moves that are not one rectangle shifted as a whole (cut-paste in a sorted
+ * or filtered view scatters the cells in data coordinates). `cellShift` tells how far a cell moved (null: it did not),
+ * `rangeShift` the shift of a whole range, or null when the range must stay as it is.
+ */
+export function moveReferencesWith(
+  expr: Expr,
+  row: number,
+  col: number,
+  cellShift: (r: number, c: number) => Shift | null,
+  rangeShift: (r1: number, c1: number, r2: number, c2: number) => Shift | null,
+): Expr {
   const store = (a: Axis, abs: number, base: number): Axis => (a.abs ? { abs: true, n: abs } : { abs: false, n: abs - base });
   const visit = (e: Expr): Expr => {
     switch (e.t) {
       case 'ref': {
         const r = resolveAxis(e.row, row);
         const c = resolveAxis(e.col, col);
-        if (!inside(r, c)) return e;
-        const nr = r + dr;
-        const nc = c + dc;
+        const shift = cellShift(r, c);
+        if (shift === null) return e;
+        const nr = r + shift[0];
+        const nc = c + shift[1];
         if (nr < 0 || nc < 0 || nr >= MAX_ROWS || nc >= MAX_COLS) return REF_ERROR;
         return { t: 'ref', row: store(e.row, nr, row), col: store(e.col, nc, col) };
       }
@@ -159,7 +184,9 @@ export function moveReferences(expr: Expr, row: number, col: number, rect: CellR
         const rb = resolveAxis(e.r2, row);
         const ca = resolveAxis(e.c1, col);
         const cb = resolveAxis(e.c2, col);
-        if (!(inside(Math.min(ra, rb), Math.min(ca, cb)) && inside(Math.max(ra, rb), Math.max(ca, cb)))) return e;
+        const shift = rangeShift(Math.min(ra, rb), Math.min(ca, cb), Math.max(ra, rb), Math.max(ca, cb));
+        if (shift === null) return e;
+        const [dr, dc] = shift;
         const out = [ra + dr, rb + dr, ca + dc, cb + dc];
         if (out[0] as number < 0 || out[1] as number < 0 || out[2] as number < 0 || out[3] as number < 0) return REF_ERROR;
         return {
