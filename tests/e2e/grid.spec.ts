@@ -1031,6 +1031,9 @@ test.describe('fill handle double-click, shortcut help, paste format', () => {
         return dark;
       }, [row, col]);
 
+    // Keep the selection away from the cells measured: its border and fill handle are drawn in blue and spill
+    // a few pixels over the neighbouring cell, which engines round differently.
+    await page.evaluate(() => window.__sheet!.selection.selectCell(8, 8));
     await page.evaluate(() => window.__sheet!.setCellInput(0, 0, 'A rather long piece of text that cannot fit in one cell at all'));
     expect(await darkPixels(0, 1)).toBeGreaterThan(20); // spilled into B
     expect(await darkPixels(0, 2)).toBeGreaterThan(20); // and into C
@@ -1041,6 +1044,7 @@ test.describe('fill handle double-click, shortcut help, paste format', () => {
       sheet.setCellInput(2, 0, '123456789012');
       sheet.selection.selectCell(2, 0);
       sheet.formatSelection({ numberFormat: '$#,##0.00' }); // "$123,456,789,012.00" is wider than the cell
+      sheet.selection.selectCell(8, 8);
     });
     expect(await darkPixels(2, 1)).toBe(0); // numbers are clipped, never spilled
   });
