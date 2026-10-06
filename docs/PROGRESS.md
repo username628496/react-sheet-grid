@@ -21,7 +21,7 @@ Toàn bộ lộ trình MVP trong CLAUDE.md (tuần 1 và tuần 2) đã xong.
 - Chèn/xóa dòng và cột, có cập nhật tham chiếu công thức.
 - Context menu chuột phải; thanh thống kê (tổng, trung bình, đếm).
 
-**Kiểm thử**: 625 unit test (gồm ~300 test công thức theo bảng, 80 chuỗi fuzz × 120 thao tác, 60 chuỗi fuzz chèn/xóa với oracle độc lập) và 48 e2e test (Chromium).
+**Kiểm thử**: 625 unit test (gồm ~300 test công thức theo bảng, 80 chuỗi fuzz × 120 thao tác, 60 chuỗi fuzz chèn/xóa với oracle độc lập) và 48 e2e test chạy trên Chromium, Firefox và WebKit.
 
 **Hiệu năng đo trên Chromium với dữ liệu demo ~400k ô trong lưới 1.000.000 × 100**: cuộn dọc và chéo 16,6ms/khung (khóa 60fps), sort 1M dòng 155ms, filter 42ms, chèn dòng 47ms, thống kê khi chọn tất cả 20ms.
 
@@ -59,7 +59,7 @@ Toàn bộ lộ trình MVP trong CLAUDE.md (tuần 1 và tuần 2) đã xong.
 
 ## Lỗi đã biết / giới hạn
 
-- e2e đã chạy trên cả 3 engine trên máy bạn: Chromium 48/48, WebKit 46 pass + 2 skip (2 test CDP chỉ chạy trên Chromium), Firefox 42 pass + 2 skip, 4 test clipboard lỗi do test dùng `ClipboardEvent` giả lập mà Firefox bỏ qua `clipboardData`; đã sửa test để gọi `copyTo/cutTo/pasteFrom` của controller (cần chạy lại trên Firefox để xác nhận).
+- e2e đã chạy xanh trên cả 3 engine: Chromium 48/48, WebKit 46 pass + 2 skip, Firefox 46 pass + 2 skip (2 test giả lập IME qua CDP chỉ chạy trên Chromium). IME thật vẫn cần thử tay.
 - Chèn/xóa dòng/cột bị chặn khi đang sort/filter (cần bỏ sort/filter trước).
 - Tham chiếu từ ô khác tới vùng bị cut chưa được cập nhật (Sheets cập nhật).
 - Công thức tham chiếu theo tọa độ dữ liệu: khi đang sort, nhãn A1 trong công thức là vị trí dữ liệu gốc, không phải vị trí đang hiển thị.
