@@ -1,11 +1,12 @@
-import { type CSSProperties, useCallback, useEffect, useRef, useState } from 'react';
+import { type CSSProperties, useCallback, useEffect, useId, useRef, useState } from 'react';
 import type { Spreadsheet } from '../core/Spreadsheet';
 import { GridController } from '../input/GridController';
 import { GridSurface } from '../render/GridSurface';
 import { applyCanvasTheme } from '../render/theme';
 import { CellEditor } from './CellEditor';
+import { describeEditing, describeSelection } from './a11y';
 import { ChromeStyles } from './chrome';
-import { useTheme } from './GridProvider';
+import { useMessages, useTheme } from './GridProvider';
 import { ContextMenu } from './ContextMenu';
 import { FilterDialog } from './FilterDialog';
 import { ShortcutsDialog } from './ShortcutsDialog';
@@ -34,6 +35,9 @@ export function DataGrid({ sheet, frozenRows, frozenCols, className, style, zoom
   const mountRef = useRef<HTMLDivElement>(null);
   const editorRef = useRef<HTMLTextAreaElement>(null);
   const colorTheme = useTheme();
+  const m = useMessages();
+  const hintId = useId();
+  const [announcement, setAnnouncement] = useState('');
   const [controller, setController] = useState<GridController | null>(null);
   const [menu, setMenu] = useState<{ x: number; y: number } | null>(null);
   const [filter, setFilter] = useState<{ col: number; x: number; y: number } | null>(null);
@@ -61,6 +65,32 @@ export function DataGrid({ sheet, frozenRows, frozenCols, className, style, zoom
     controller?.editor.reposition();
   }, [colorTheme, controller]);
 
+  // Tell assistive technology what the canvas shows: the active cell (or the selection) after each change, and when an
+  // edit starts. Debounced so holding an arrow key speaks the cell you land on, not every cell you pass.
+  useEffect(() => {
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    let key = '';
+    let wasEditing = false;
+    const update = (): void => {
+      const editing = controller?.editor.editing === true;
+      const { activeRow, activeCol, primary } = sheet.selection;
+      const next = `${activeRow},${activeCol},${primary.startRow},${primary.startCol},${primary.endRow},${primary.endCol},${editing}`;
+      if (next === key) return; // typed text, scrolling and other notifications do not change what to say
+      key = next;
+      const startedEditing = editing && !wasEditing;
+      wasEditing = editing;
+      clearTimeout(timer);
+      if (editing && !startedEditing) return;
+      timer = setTimeout(() => setAnnouncement(editing ? describeEditing(sheet, m) : describeSelection(sheet, m)), 60);
+    };
+    update();
+    const off = sheet.subscribe(update);
+    return () => {
+      off();
+      clearTimeout(timer);
+    };
+  }, [sheet, controller, m]);
+
   useEffect(() => {
     const mount = mountRef.current;
     const textarea = editorRef.current;
@@ -84,8 +114,23 @@ export function DataGrid({ sheet, frozenRows, frozenCols, className, style, zoom
   return (
     <>
       <ChromeStyles />
-      <div ref={mountRef} className={className} style={{ width: '100%', height: '100%', ...style }} data-testid="grid">
-        <CellEditor ref={editorRef} />
+      <div
+        ref={mountRef}
+        className={className}
+        style={{ width: '100%', height: '100%', ...style }}
+        data-testid="grid"
+        role="application"
+        aria-roledescription={m.a11yRoleDescription}
+        aria-label={m.a11yLabel}
+        aria-describedby={hintId}
+      >
+        <CellEditor ref={editorRef} label={m.a11yEditorLabel} />
+        <span id={hintId} className="rdg-chrome rdg-sr-only">
+          {m.a11yHint}
+        </span>
+        <div className="rdg-chrome rdg-sr-only" aria-live="polite" aria-atomic="true" data-testid="grid-announcer">
+          {announcement}
+        </div>
       </div>
       {controller !== null && menu !== null && (
         <ContextMenu

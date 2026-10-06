@@ -456,7 +456,7 @@ function ColorButton({ icon, title, disabled = false, value, active, onPick, onC
         <Icon name={icon} />
         <span className="rdg-swatch" style={{ ['--rdg-swatch' as string]: value }} />
       </button>
-      <input ref={input} type="color" aria-label={m.colorPicker(title)} defaultValue={value} key={value} tabIndex={-1} />
+      <input ref={input} type="color" aria-hidden="true" aria-label={m.colorPicker(title)} defaultValue={value} key={value} tabIndex={-1} />
       {active && !disabled && (
         <button
           type="button"

@@ -1,3 +1,4 @@
+import { focusOutside } from './focusOutside';
 import {
   advanceActive,
   moveByArrow,
@@ -183,6 +184,11 @@ export class KeyboardController {
       case 'showShortcuts':
         this.deps.showShortcuts();
         return;
+      case 'leaveGrid': {
+        const root = this.deps.surface.host.parentElement;
+        if (root !== null) focusOutside(root, action.backward);
+        return;
+      }
       case 'hide':
         if (action.axis === 'row') sheet.hideLines('row', selection.primary.startRow, selection.primary.endRow);
         else sheet.hideLines('col', selection.primary.startCol, selection.primary.endCol);

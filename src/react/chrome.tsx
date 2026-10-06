@@ -129,6 +129,16 @@ const CSS = `
 .rdg-kbd { font: inherit; background: var(--rdg-hover); border-radius: 4px; padding: 1px 6px; white-space: nowrap; }
 .rdg-muted { color: var(--rdg-muted); }
 
+.rdg-sr-only { position: absolute; width: 1px; height: 1px; margin: -1px; padding: 0; overflow: hidden; clip: rect(0 0 0 0); clip-path: inset(50%); white-space: nowrap; border: 0; }
+@media (prefers-reduced-motion: reduce) {
+  .rdg-chrome * { transition: none !important; animation: none !important; }
+}
+@media (forced-colors: active) {
+  .rdg-btn, .rdg-textbtn, .rdg-select, .rdg-count-input, .rdg-field { border: 1px solid ButtonText; }
+  .rdg-btn[aria-pressed='true'], .rdg-menuitem[aria-checked='true'] { outline: 2px solid Highlight; }
+  .rdg-swatch { forced-color-adjust: none; }
+}
+
 .rdg-statusbar { display: flex; align-items: center; gap: 18px; min-height: 28px; padding: 0 14px; border-top: 1px solid var(--rdg-border); font-size: 12px; color: var(--rdg-muted); }
 .rdg-statusbar b { color: var(--rdg-text); font-weight: 600; font-variant-numeric: tabular-nums; }
 `;

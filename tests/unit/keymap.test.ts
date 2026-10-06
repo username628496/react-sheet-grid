@@ -179,3 +179,12 @@ describe('keymap: help and paste format', () => {
     expect(resolveKey('navigating', key('v', { mod: true, alt: true }))).toBeNull();
   });
 });
+
+describe('keymap: leaving the grid', () => {
+  it('Mod+Alt+Shift+Down/Up leave the grid forward/backward, only while navigating', () => {
+    expect(resolveKey('navigating', key('ArrowDown', { mod: true, alt: true, shift: true }))).toEqual({ type: 'leaveGrid', backward: false });
+    expect(resolveKey('navigating', key('ArrowUp', { mod: true, alt: true, shift: true }))).toEqual({ type: 'leaveGrid', backward: true });
+    expect(resolveKey('navigating', key('ArrowDown', { alt: true, shift: true }))).not.toEqual({ type: 'leaveGrid', backward: false });
+    expect(resolveKey('editing', key('ArrowDown', { mod: true, alt: true, shift: true }), { arrowsCommit: false })).not.toEqual({ type: 'leaveGrid', backward: false });
+  });
+});

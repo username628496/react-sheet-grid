@@ -10,6 +10,14 @@ export interface ShortcutGroup {
  * (English pluralises, Vietnamese does not). Hosts can override single entries through GridProvider's `messages`.
  */
 export interface Messages {
+  // accessibility
+  a11yLabel: string;
+  a11yRoleDescription: string;
+  a11yHint: string;
+  a11yEditorLabel: string;
+  a11yCell: (address: string, text: string, kind: 'text' | 'formula' | 'empty') => string;
+  a11yRange: (from: string, to: string, cells: number, active: string) => string;
+  a11yEditing: (address: string) => string;
   // toolbar
   toolbar: string;
   groupHistory: string;
@@ -128,6 +136,13 @@ export interface Messages {
 const plural = (n: number, one: string, many: string): string => `${n} ${n === 1 ? one : many}`;
 
 const en: Messages = {
+  a11yLabel: 'Spreadsheet',
+  a11yRoleDescription: 'spreadsheet',
+  a11yHint: 'Use the arrow keys to move between cells, F2 to edit, and Ctrl or Command plus slash for all shortcuts. Press Ctrl+Alt+Shift+Down arrow to leave the spreadsheet.',
+  a11yEditorLabel: 'Cell editor',
+  a11yCell: (address, text, kind) => (kind === 'empty' ? `${address}, empty` : `${address}, ${text}${kind === 'formula' ? ', formula' : ''}`),
+  a11yRange: (from, to, cells, active) => `Selected ${from} to ${to}, ${plural(cells, 'cell', 'cells')}. Active cell ${active}`,
+  a11yEditing: (address) => `Editing ${address}`,
   toolbar: 'Formatting',
   groupHistory: 'History',
   groupSort: 'Sort',
@@ -291,11 +306,18 @@ const en: Messages = {
         ['Mod+\\', 'Clear formatting'],
       ],
     },
-    { title: 'Help', items: [['Mod+/', 'Show this list']] },
+    { title: 'Help', items: [['Mod+/', 'Show this list'], ['Mod+Alt+Shift+Down / Up', 'Leave the grid: focus the next / previous control on the page']] },
   ],
 };
 
 const vi: Messages = {
+  a11yLabel: 'Bảng tính',
+  a11yRoleDescription: 'bảng tính',
+  a11yHint: 'Dùng phím mũi tên để di chuyển giữa các ô, F2 để sửa, Ctrl hoặc Command cùng dấu gạch chéo để xem mọi phím tắt. Nhấn Ctrl+Alt+Shift+mũi tên xuống để thoát khỏi bảng tính.',
+  a11yEditorLabel: 'Ô soạn thảo',
+  a11yCell: (address, text, kind) => (kind === 'empty' ? `${address}, trống` : `${address}, ${text}${kind === 'formula' ? ', công thức' : ''}`),
+  a11yRange: (from, to, cells, active) => `Đã chọn ${from} đến ${to}, ${cells} ô. Ô đang chọn ${active}`,
+  a11yEditing: (address) => `Đang sửa ${address}`,
   toolbar: 'Định dạng',
   groupHistory: 'Lịch sử',
   groupSort: 'Sắp xếp',
@@ -459,7 +481,7 @@ const vi: Messages = {
         ['Mod+\\', 'Xóa định dạng'],
       ],
     },
-    { title: 'Trợ giúp', items: [['Mod+/', 'Hiện danh sách này']] },
+    { title: 'Trợ giúp', items: [['Mod+/', 'Hiện danh sách này'], ['Mod+Alt+Shift+Down / Up', 'Thoát khỏi bảng: chuyển tới điều khiển kế tiếp / trước đó trên trang']] },
   ],
 };
 

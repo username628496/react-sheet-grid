@@ -46,6 +46,7 @@ export type Action =
   | { type: 'pasteValues' }
   | { type: 'pasteFormat' }
   | { type: 'showShortcuts' }
+  | { type: 'leaveGrid'; backward: boolean }
   | { type: 'hide'; axis: 'row' | 'col' }
   | { type: 'unhide'; axis: 'row' | 'col' }
   | { type: 'scrollToActive' }
@@ -101,6 +102,8 @@ export function resolveKey(
 }
 
 function navigatingKey(k: KeyInput): Action | null {
+  // The way out of the grid for keyboard users (Tab moves between cells here).
+  if (k.mod && k.alt && k.shift && (k.key === 'ArrowDown' || k.key === 'ArrowUp')) return { type: 'leaveGrid', backward: k.key === 'ArrowUp' };
   const arrow = ARROWS[k.key];
   if (arrow !== undefined) {
     if (k.alt) return null;

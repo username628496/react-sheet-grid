@@ -51,12 +51,14 @@ const count = Math.max(1, Math.min(4, Number(params.get('count') ?? 1)));
 
 function App() {
   return (
-    <div style={{ height: '100%', display: 'grid', gridTemplateRows: `repeat(${count}, 1fr)` }}>
+    <div style={{ height: '100%', display: 'grid', gridTemplateRows: `auto repeat(${count}, 1fr) auto` }}>
+      <button type="button" id="before-grid">Before</button>
       {Array.from({ length: count }, (_, i) => (
         <div key={i} style={{ minHeight: 0 }} data-testid={`sheet-${i}`}>
           <Grid index={i} />
         </div>
       ))}
+      <button type="button" id="after-grid">After</button>
     </div>
   );
 }

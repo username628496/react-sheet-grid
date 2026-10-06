@@ -436,3 +436,94 @@ test.describe('failures stay contained', () => {
     expect(await page.evaluate(() => (window as unknown as W).__handle!.sheet.model.cellCount)).toBe(0);
   });
 });
+
+test.describe('accessibility', () => {
+  type Handle = import('../../src/index').SheetGridHandle;
+  type W = { __handle?: Handle };
+  const ready = async (page: import('@playwright/test').Page, query = ''): Promise<void> => {
+    await page.goto(`/demo/simple.html${query}`);
+    await page.waitForFunction(() => (window as unknown as W).__handle?.controller != null);
+  };
+  const announced = (page: import('@playwright/test').Page) => page.getByTestId('grid-announcer');
+
+  test('the grid is an application region with a name, a description and a hint', async ({ page }) => {
+    await ready(page);
+    const grid = page.getByTestId('grid');
+    await expect(grid).toHaveAttribute('role', 'application');
+    await expect(grid).toHaveAttribute('aria-roledescription', 'spreadsheet');
+    await expect(grid).toHaveAttribute('aria-label', 'Spreadsheet');
+    const hintId = await grid.getAttribute('aria-describedby');
+    await expect(page.locator(`[id="${hintId}"]`)).toContainText('arrow keys');
+    // Pixels are hidden from assistive technology and the scroller is not a tab stop.
+    await expect(grid.locator('canvas')).toHaveAttribute('aria-hidden', 'true');
+    const tabStops = await grid.evaluate((el) => Array.from(el.querySelectorAll('*')).filter((n) => (n as HTMLElement).tabIndex >= 0).map((n) => n.tagName));
+    expect(tabStops).toEqual(['TEXTAREA']);
+  });
+
+  test('moving the selection announces the cell, its value and ranges, once things settle', async ({ page }) => {
+    await ready(page);
+    await page.evaluate(() => {
+      const h = (window as unknown as W).__handle!;
+      h.sheet.setCellInput(0, 0, 'Total');
+      h.sheet.setCellInput(1, 0, '=1+2');
+    });
+    await page.getByTestId('grid').click({ position: { x: 80, y: 34 } }); // A1
+    await expect(announced(page)).toHaveText('A1, Total');
+    await page.keyboard.press('ArrowDown');
+    await expect(announced(page)).toHaveText('A2, 3, formula');
+    await page.keyboard.press('ArrowRight');
+    await expect(announced(page)).toHaveText('B2, empty');
+    await page.keyboard.press('Shift+ArrowDown');
+    await page.keyboard.press('Shift+ArrowRight');
+    await expect(announced(page)).toHaveText(/^Selected B2 to C3, 4 cells\. Active cell B2, empty$/);
+    await expect(announced(page)).toHaveAttribute('aria-live', 'polite');
+  });
+
+  test('starting an edit is announced, and typing text is not read out cell by cell', async ({ page }) => {
+    await ready(page);
+    await page.getByTestId('grid').click({ position: { x: 80, y: 34 } });
+    await page.keyboard.press('F2');
+    await expect(announced(page)).toHaveText('Editing A1');
+    await page.keyboard.type('abc');
+    await page.waitForTimeout(150);
+    await expect(announced(page)).toHaveText('Editing A1');
+    await page.keyboard.press('Enter');
+    await expect(announced(page)).toHaveText('A2, empty');
+  });
+
+  test('Ctrl+Alt+Shift+Down leaves the grid for the next control, and Up for the previous one', async ({ page }) => {
+    await ready(page);
+    await page.getByTestId('grid').click({ position: { x: 80, y: 34 } });
+    const mod = (await page.evaluate(() => /Mac|iPhone|iPad/.test(navigator.platform))) ? 'Meta' : 'Control';
+    await page.keyboard.press(`${mod}+Alt+Shift+ArrowDown`);
+    // The toolbar, formula bar and status bar come before the grid in the page; "next" after it is the last button.
+    await expect(page.locator('#after-grid')).toBeFocused();
+    await page.getByTestId('grid').click({ position: { x: 80, y: 34 } });
+    await page.keyboard.press(`${mod}+Alt+Shift+ArrowUp`);
+    const focused = await page.evaluate(() => document.activeElement?.closest('[data-testid=status-bar], [data-testid=formula-bar], [data-testid=toolbar]') !== null || document.activeElement?.id === 'before-grid');
+    expect(focused).toBe(true);
+    expect(await page.evaluate(() => document.activeElement === (window as unknown as W).__handle!.controller!.editor.textarea)).toBe(false);
+  });
+
+  test('the editor textarea and the announcements follow the UI language', async ({ page }) => {
+    await page.goto('/demo/?mode=empty');
+    await page.waitForFunction(() => window.__grid !== undefined);
+    await page.getByLabel('Language').selectOption('vi');
+    await expect(page.getByLabel('Ô soạn thảo')).toBeAttached();
+    await expect(page.getByTestId('grid')).toHaveAttribute('aria-label', 'Bảng tính');
+    await page.getByTestId('grid').click({ position: { x: 80, y: 34 } });
+    await expect(page.getByTestId('grid-announcer')).toHaveText('A1, trống');
+  });
+
+  test('toolbar controls are reachable and named: every button has an accessible name and a role', async ({ page }) => {
+    await ready(page);
+    const unnamed = await page.evaluate(() =>
+      Array.from(document.querySelectorAll('[data-testid=toolbar] button, [data-testid=toolbar] input')).filter((el) => {
+        const label = el.getAttribute('aria-label') ?? el.getAttribute('title') ?? el.textContent ?? '';
+        return label.trim() === '';
+      }).length,
+    );
+    expect(unnamed).toBe(0);
+    await expect(page.getByRole('toolbar')).toBeVisible();
+  });
+});

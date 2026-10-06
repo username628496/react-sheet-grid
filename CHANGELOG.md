@@ -3,6 +3,13 @@
 All notable changes to this project are documented here. The format follows [Keep a Changelog](https://keepachangelog.com/)
 and the project follows [Semantic Versioning](https://semver.org/). Before 1.0.0 minor versions may contain breaking changes.
 
+## [Unreleased]
+
+### Added
+- Accessibility: named `application` region with usage hint, live region announcing the active cell/selection/editing,
+  keyboard way out of the grid (Ctrl/⌘+Alt+Shift+↓/↑), canvas and scroller hidden from the accessibility tree,
+  reduced-motion and forced-colors styles, localized editor label.
+
 ## [0.1.1] - 2026-10-06
 
 ### Changed

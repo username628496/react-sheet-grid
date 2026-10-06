@@ -52,8 +52,13 @@ export class GridSurface {
 
     this.canvas = document.createElement('canvas');
     this.canvas.style.cssText = 'position:absolute;left:0;top:0;display:block;';
+    // Pixels carry no meaning for assistive technology; the live region and the editor describe the active cell instead.
+    this.canvas.setAttribute('aria-hidden', 'true');
     this.host = document.createElement('div');
     this.host.style.cssText = 'position:absolute;inset:0;overflow:scroll;';
+    // Scrollable regions are keyboard-focusable in some browsers; focus belongs to the editor textarea only.
+    this.host.tabIndex = -1;
+    this.host.setAttribute('aria-hidden', 'true');
     this.spacer = document.createElement('div');
     this.spacer.style.cssText = 'width:1px;height:1px;';
     this.host.appendChild(this.spacer);

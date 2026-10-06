@@ -149,6 +149,23 @@ makes the cells on the cycle `#REF!`.
 Press <kbd>Ctrl/⌘</kbd>+<kbd>/</kbd> in the grid for the full list. The usual ones work: arrows, Tab/Enter, F2,
 Ctrl+arrows, Shift+arrows, Ctrl+Z/Y, Ctrl+C/X/V (Ctrl+Shift+V values only), Ctrl+D/R fill, Ctrl+B/I/U, F4 for `$`.
 
+## Accessibility
+
+The grid is drawn on a canvas, so it describes itself to assistive technology in other ways:
+
+- The grid region is a named `application` ("Spreadsheet") with a hint on how to use it.
+- A polite live region announces the active cell and its displayed value on every move ("B3, 1,234.50"), the extent of a
+  range selection, and when editing starts. It waits for the selection to settle, so holding an arrow key speaks the cell
+  you land on rather than every cell you pass.
+- Focus lives in one editor `<textarea>`; the canvas and the scroller are hidden from the accessibility tree and are not tab stops.
+- Because Tab moves between cells inside the grid, <kbd>Ctrl/⌘</kbd>+<kbd>Alt</kbd>+<kbd>Shift</kbd>+<kbd>↓</kbd> moves focus to the
+  next control on the page and <kbd>↑</kbd> to the previous one.
+- The toolbar follows the WAI-ARIA toolbar pattern (arrow keys, Home/End), menus and dialogs are keyboard operable, and
+  animations stop when the system asks for reduced motion.
+
+Not covered yet: screen-reader navigation by row and column (the canvas has no per-cell DOM), and the canvas does not adapt to
+forced-colors mode. Please report what you find with your screen reader.
+
 ## Next.js and server rendering
 
 The package is marked `'use client'`. In the App Router import it from a Client Component or from a file that starts with
