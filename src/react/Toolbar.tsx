@@ -86,6 +86,7 @@ export function Toolbar({ sheet, grid = null, onAction }: ToolbarProps) {
   const raw = useSyncExternalStore(
     (listener) => sheet.subscribe(listener),
     () => snapshot(sheet, grid),
+    () => snapshot(sheet, null), // server render: no controller exists yet
   );
   const m = useMessages();
   const theme = useTheme();

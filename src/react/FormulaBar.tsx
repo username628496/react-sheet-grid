@@ -62,6 +62,7 @@ export function FormulaBar({ sheet, grid }: FormulaBarProps) {
   const readOnly = useSyncExternalStore(
     (listener) => sheet.subscribe(listener),
     () => sheet.readOnly,
+    () => sheet.readOnly, // server render: the sheet is the same object there
   );
   const pushToEditor = (): void => {
     const text = textRef.current;
