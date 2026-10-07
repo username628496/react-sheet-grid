@@ -26,6 +26,8 @@ export class GridController {
   onOpenList: ((viewRow: number, viewCol: number) => void) | null = null;
   /** Set by the host to show its data validation dialog for the selection. */
   onOpenValidation: (() => void) | null = null;
+  /** Set by the toolbar to open its command search (Alt+/). */
+  onOpenCommands: (() => void) | null = null;
   /** Set by the host to show its conditional formatting dialog for the selection. */
   onOpenConditional: (() => void) | null = null;
   onOpenFilter: ((viewCol: number, x: number, y: number) => void) | null = null;
@@ -41,7 +43,7 @@ export class GridController {
     this.clipboard = new ClipboardController(sheet, this.editor);
     this.painter = new FormatPainter(sheet, surface);
     this.find = new FindSession(sheet, surface);
-    this.keyboard = new KeyboardController({ sheet, surface, editor: this.editor, clipboard: this.clipboard, showShortcuts: () => this.onShowShortcuts?.(), openFind: (replace) => this.onOpenFind?.(replace), openList: () => this.onOpenList?.(sheet.selection.activeRow, sheet.selection.activeCol) });
+    this.keyboard = new KeyboardController({ sheet, surface, editor: this.editor, clipboard: this.clipboard, showShortcuts: () => this.onShowShortcuts?.(), openFind: (replace) => this.onOpenFind?.(replace), openList: () => this.onOpenList?.(sheet.selection.activeRow, sheet.selection.activeCol), openCommands: () => this.onOpenCommands?.() });
 
     surface.renderer.highlight = {
       isRowSelected: (r) => sheet.selection.isRowSelected(r),

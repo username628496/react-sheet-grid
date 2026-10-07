@@ -49,6 +49,7 @@ export type Action =
   | { type: 'fontSize'; direction: 1 | -1 }
   | { type: 'find'; replace: boolean }
   | { type: 'openList' }
+  | { type: 'openCommands' }
   | { type: 'leaveGrid'; backward: boolean }
   | { type: 'hide'; axis: 'row' | 'col' }
   | { type: 'unhide'; axis: 'row' | 'col' }
@@ -105,6 +106,8 @@ export function resolveKey(
 }
 
 function navigatingKey(k: KeyInput): Action | null {
+  // Alt+/ (Option+/ on a Mac, where the character differs, so the physical key is used): search commands, as in Sheets.
+  if (k.alt && !k.mod && !k.shift && k.code === 'Slash') return { type: 'openCommands' };
   // The way out of the grid for keyboard users (Tab moves between cells here).
   if (k.mod && k.alt && k.shift && (k.key === 'ArrowDown' || k.key === 'ArrowUp')) return { type: 'leaveGrid', backward: k.key === 'ArrowUp' };
   const arrow = ARROWS[k.key];

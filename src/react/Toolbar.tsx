@@ -1,4 +1,4 @@
-import { type KeyboardEvent, type ReactNode, useEffect, useRef, useState, useSyncExternalStore } from 'react';
+import { type KeyboardEvent, type ReactNode, useEffect, useLayoutEffect, useRef, useState, useSyncExternalStore } from 'react';
 import type { Spreadsheet } from '../core/Spreadsheet';
 import type { Workbook } from '../core/Workbook';
 import { type Border, DEFAULT_BORDER } from '../core/model/borders';
@@ -6,11 +6,14 @@ import { DEFAULT_FONT_SIZE, MAX_FONT_SIZE, MIN_FONT_SIZE } from '../core/model/f
 import { parseNumberFormat } from '../core/model/format';
 import type { HorizontalAlign, Style } from '../core/model/StyleTable';
 import type { GridController } from '../input/GridController';
+import { columnLabel } from '../core/model/address';
 import { ChromeStyles } from './chrome';
 import { useMessages, useTheme } from './GridProvider';
+import { CommandPalette } from './CommandPalette';
 import { ConfirmDialog } from './ConfirmDialog';
 import { downloadBytes, downloadText, MAX_IMPORT_BYTES, readTextFile } from './csvFile';
 import { Icon, type IconName } from './icons';
+import { buildCommands, type Command } from './toolbarCommands';
 import { Menu, type MenuEntry } from './Menu';
 import {
   deleteEntries,
@@ -56,6 +59,8 @@ interface ToolbarState {
   readOnly: boolean;
   canMerge: boolean;
   inMerge: boolean;
+  formatted: boolean;
+  activeColumn: number;
 }
 
 // Reading from the sheet through one string keeps useSyncExternalStore's snapshot comparison trivial and stable.
@@ -75,6 +80,8 @@ function snapshot(sheet: Spreadsheet, grid: GridController | null | undefined): 
     readOnly: sheet.readOnly,
     canMerge: sheet.canMerge(),
     inMerge: sheet.hasMergeInSelection(),
+    formatted: sheet.selectionHasFormatting(),
+    activeColumn: selection.activeCol,
   };
   return JSON.stringify(state);
 }
@@ -111,7 +118,7 @@ export function Toolbar({ sheet, grid = null, onAction, onImportWorkbook }: Tool
   );
   const m = useMessages();
   const theme = useTheme();
-  const { canUndo, canRedo, style, rows, cols, painting, viewActive, columnFiltered, zoom, readOnly, canMerge, inMerge } = JSON.parse(raw) as ToolbarState;
+  const { canUndo, canRedo, style, rows, cols, painting, viewActive, columnFiltered, zoom, readOnly, canMerge, inMerge, formatted, activeColumn } = JSON.parse(raw) as ToolbarState;
   const [notice, setNotice] = useState<string | null>(null);
   const [menu, setMenu] = useState<OpenMenu | null>(null);
   // What the Borders menu draws next: remembered between uses, like the pen in a paint program.
@@ -120,6 +127,11 @@ export function Toolbar({ sheet, grid = null, onAction, onImportWorkbook }: Tool
   const fileInput = useRef<HTMLInputElement>(null);
   const xlsxInput = useRef<HTMLInputElement>(null);
   const [xlsxPending, setXlsxPending] = useState<File | null>(null);
+  const [palette, setPalette] = useState<readonly Command[] | null>(null);
+  const toolbarRef = useRef<HTMLDivElement>(null);
+  // When the groups do not fit in one row the toolbar offers "more tools", which wraps them onto several rows.
+  const [expanded, setExpanded] = useState(false);
+  const [crowded, setCrowded] = useState(false);
   // Things the sheet refused to do (an oversized paste) are announced in the same place as the size notice.
   useEffect(
     () => sheet.subscribeNotices((n) =>
@@ -142,6 +154,22 @@ export function Toolbar({ sheet, grid = null, onAction, onImportWorkbook }: Tool
     const timer = setTimeout(() => setNotice(null), 8000);
     return () => clearTimeout(timer);
   }, [notice]);
+
+  useLayoutEffect(() => {
+    const el = toolbarRef.current;
+    if (el === null) return;
+    // Only a single row can be measured: wrapped, everything "fits", so the button stays while expanded.
+    const measure = (): void => setCrowded(el.scrollWidth > el.clientWidth + 1);
+    if (expanded) {
+      setCrowded(true);
+      return;
+    }
+    measure();
+    if (typeof ResizeObserver === 'undefined') return;
+    const observer = new ResizeObserver(measure);
+    observer.observe(el);
+    return () => observer.disconnect();
+  }, [expanded, m, readOnly, rows, cols, zoom, inMerge, canMerge]);
 
   const run = (fn: () => void): void => {
     fn();
@@ -181,11 +209,13 @@ export function Toolbar({ sheet, grid = null, onAction, onImportWorkbook }: Tool
     onClick: () => void,
     disabled = false,
     extra?: ReactNode,
+    /** Context for the tooltip only (the accessible name stays the plain label), e.g. which column a sort acts on. */
+    hint?: string,
   ): ReactNode => (
     <button
       type="button"
       className="rdg-btn"
-      title={tip(label, shortcut)}
+      title={hint === undefined ? tip(label, shortcut) : `${tip(label, shortcut)} · ${hint}`}
       aria-label={label}
       aria-pressed={active}
       disabled={disabled || (readOnly && mutating.has(label))}
@@ -305,6 +335,18 @@ export function Toolbar({ sheet, grid = null, onAction, onImportWorkbook }: Tool
 
   const text = (glyph: string): ReactNode => <span className="rdg-glyph">{glyph}</span>;
   const noGrid = grid === null;
+  const openPalette = (): void => {
+    setPalette(buildCommands({ sheet, grid, m, fileEntries: entriesFor('file') }));
+  };
+  // Alt+/ in the grid opens the command search.
+  useEffect(() => {
+    if (grid === null) return;
+    grid.onOpenCommands = openPalette;
+    return () => {
+      grid.onOpenCommands = null;
+    };
+    // openPalette closes over the current messages and file inputs; re-binding on every render is what keeps it current.
+  });
   const openFilter = (e: { currentTarget: HTMLElement }): void => {
     const rect = e.currentTarget.getBoundingClientRect();
     grid?.onOpenFilter?.(sheet.selection.activeCol, rect.left, rect.bottom + 4);
@@ -313,9 +355,11 @@ export function Toolbar({ sheet, grid = null, onAction, onImportWorkbook }: Tool
   return (
     <div className="rdg-chrome rdg-toolbar-wrap" data-rdg-theme={theme}>
       <ChromeStyles />
-      <div role="toolbar" aria-label={m.toolbar} aria-orientation="horizontal" className="rdg-toolbar" data-testid="toolbar" onKeyDown={onKeyDown}>
+      <div className="rdg-toolbar-row">
+      <div ref={toolbarRef} role="toolbar" aria-label={m.toolbar} aria-orientation="horizontal" className="rdg-toolbar" data-expanded={expanded} data-testid="toolbar" onKeyDown={onKeyDown}>
         <div className="rdg-group" role="group" aria-label={m.file}>
           {menuButton('file', 'file', m.file, undefined)}
+          {button('command', m.commandSearch, 'Alt+/', undefined, openPalette, noGrid)}
           {button('search', m.findAndReplace, 'Mod+F', undefined, () => grid?.onOpenFind?.(false), noGrid)}
           <input
             ref={xlsxInput}
@@ -355,7 +399,7 @@ export function Toolbar({ sheet, grid = null, onAction, onImportWorkbook }: Tool
           {button('undo', m.undo, 'Mod+Z', undefined, () => sheet.undo(), !canUndo)}
           {button('redo', m.redo, 'Mod+Y', undefined, () => sheet.redo(), !canRedo)}
           {button('paintFormat', m.paintFormat, undefined, painting, () => grid?.painter.toggle(), noGrid)}
-          {button('clearFormat', m.clearFormatting, 'Mod+\\', undefined, () => sheet.clearFormatting())}
+          {button('clearFormat', m.clearFormatting, 'Mod+\\', undefined, () => sheet.clearFormatting(), !formatted)}
         </div>
         <span className="rdg-sep" aria-hidden />
         <div className="rdg-group" role="group" aria-label={m.groupClipboard}>
@@ -365,8 +409,8 @@ export function Toolbar({ sheet, grid = null, onAction, onImportWorkbook }: Tool
         </div>
         <span className="rdg-sep" aria-hidden />
         <div className="rdg-group" role="group" aria-label={m.groupSort}>
-          {button('sortAsc', m.sortAsc, undefined, undefined, () => sheet.sortByColumn(sheet.selection.activeCol, true))}
-          {button('sortDesc', m.sortDesc, undefined, undefined, () => sheet.sortByColumn(sheet.selection.activeCol, false))}
+          {button('sortAsc', m.sortAsc, undefined, undefined, () => sheet.sortByColumn(sheet.selection.activeCol, true), false, undefined, columnLabel(sheet.mapping.toDataCol(activeColumn)))}
+          {button('sortDesc', m.sortDesc, undefined, undefined, () => sheet.sortByColumn(sheet.selection.activeCol, false), false, undefined, columnLabel(sheet.mapping.toDataCol(activeColumn)))}
           <button
             type="button"
             className="rdg-btn"
@@ -481,6 +525,29 @@ export function Toolbar({ sheet, grid = null, onAction, onImportWorkbook }: Tool
           />
         </div>
       </div>
+      {(crowded || expanded) && (
+        <button
+          type="button"
+          className="rdg-btn rdg-toolbar-more"
+          title={expanded ? m.fewerTools : m.moreTools}
+          aria-label={expanded ? m.fewerTools : m.moreTools}
+          aria-expanded={expanded}
+          onMouseDown={(e) => e.preventDefault()}
+          onClick={() => setExpanded(!expanded)}
+        >
+          <Icon name="chevron" />
+        </button>
+      )}
+      </div>
+      {palette !== null && (
+        <CommandPalette
+          commands={palette}
+          onClose={() => {
+            setPalette(null);
+            onAction?.();
+          }}
+        />
+      )}
       {notice !== null && (
         <div className="rdg-notice" role="status">
           {notice}

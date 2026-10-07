@@ -20,6 +20,7 @@ export interface KeyboardDeps {
   showShortcuts: () => void;
   openFind: (replace: boolean) => void;
   openList: () => void;
+  openCommands: () => void;
 }
 
 export class KeyboardController {
@@ -191,6 +192,9 @@ export class KeyboardController {
         break;
       case 'find':
         this.deps.openFind(action.replace);
+        return;
+      case 'openCommands':
+        this.deps.openCommands();
         return;
       case 'openList':
         this.deps.openList();

@@ -39,11 +39,27 @@ const CSS = `
 }
 .rdg-chrome *, .rdg-chrome *::before, .rdg-chrome *::after { box-sizing: border-box; }
 
+.rdg-toolbar-row { display: flex; align-items: flex-start; border-bottom: 1px solid var(--rdg-border); }
+.rdg-toolbar-row > .rdg-toolbar { flex: 1; min-width: 0; }
 .rdg-toolbar {
   display: flex; align-items: center; gap: 2px; padding: 5px 10px;
-  border-bottom: 1px solid var(--rdg-border);
-  overflow-x: auto; scrollbar-width: thin; white-space: nowrap;
+  overflow: hidden; white-space: nowrap;
 }
+/* Too narrow for one row: the "more tools" button wraps the groups onto as many rows as they need. */
+.rdg-toolbar[data-expanded='true'] { flex-wrap: wrap; row-gap: 3px; white-space: normal; }
+.rdg-toolbar-more { margin: 5px 8px 5px 0; flex: none; }
+.rdg-toolbar-more svg { transition: transform .15s; }
+.rdg-toolbar-more[aria-expanded='true'] svg { transform: rotate(180deg); }
+.rdg-palette-overlay { align-items: flex-start; padding-top: 12vh; }
+.rdg-palette { position: static; width: min(560px, calc(100vw - 24px)); padding: 10px; }
+.rdg-palette-input { margin-bottom: 6px; }
+.rdg-palette-list { max-height: min(55vh, 420px); overflow: auto; }
+.rdg-palette-item { display: flex; align-items: center; gap: 10px; padding: 6px 8px; border-radius: 6px; cursor: pointer; }
+.rdg-palette-item[data-active='true'] { background: var(--rdg-hover); }
+.rdg-palette-item[aria-disabled='true'] { opacity: .45; cursor: default; }
+.rdg-palette-check { width: 14px; flex: none; color: var(--rdg-accent); font-weight: 700; }
+.rdg-palette-label { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.rdg-palette-group { flex: none; font-size: 12px; }
 .rdg-group { display: flex; align-items: center; gap: 1px; flex: none; }
 .rdg-sep { width: 1px; height: 20px; margin: 0 6px; background: var(--rdg-border); flex: none; }
 
@@ -87,7 +103,7 @@ const CSS = `
 
 .rdg-spacer { flex: 1; min-width: 12px; }
 .rdg-toolbar-wrap { position: relative; z-index: 5; }
-.rdg-toolbar-wrap > .rdg-toolbar { background: var(--rdg-surface); }
+.rdg-toolbar-wrap > .rdg-toolbar-row, .rdg-toolbar-wrap .rdg-toolbar { background: var(--rdg-surface); }
 .rdg-notice { position: absolute; right: 12px; top: calc(100% + 6px); padding: 5px 12px; border-radius: 14px; background: var(--rdg-notice-bg); color: var(--rdg-notice-text); font-size: 12px; box-shadow: 0 2px 8px var(--rdg-shadow); }
 .rdg-count { display: inline-flex; align-items: center; gap: 6px; flex: none; margin-left: 6px; color: var(--rdg-muted); font-size: 12px; }
 .rdg-count-input {

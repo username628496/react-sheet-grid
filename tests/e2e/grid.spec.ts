@@ -2288,3 +2288,94 @@ test.describe('formulas in a sorted sheet read the rows on screen', () => {
     expect(state).toEqual({ value: 20, text: '=A2' });
   });
 });
+
+test.describe('a smarter toolbar', () => {
+  test.beforeEach(async ({ page }) => {
+    await page.goto('/demo/?mode=empty');
+    await page.waitForFunction(() => window.__grid !== undefined);
+  });
+
+  test('Alt+/ opens the command search: type, arrow, Enter runs the command; Escape closes', async ({ page }) => {
+    await clickCell(page, 1, 1);
+    await page.keyboard.type('5');
+    await page.keyboard.press('Enter');
+    await clickCell(page, 1, 1);
+    await page.keyboard.press('Alt+Slash');
+    const palette = page.getByTestId('command-palette');
+    await expect(palette).toBeVisible();
+    await expect(palette.getByRole('combobox')).toBeFocused();
+    await page.keyboard.type('bold');
+    await expect(palette.getByRole('option').first()).toContainText('Bold');
+    await page.keyboard.press('Enter');
+    await expect(palette).toBeHidden();
+    expect(await page.evaluate(() => window.__sheet!.styles.get(window.__sheet!.getCellByView(1, 1).styleId).bold)).toBe(true);
+
+    await page.keyboard.press('Alt+Slash');
+    await page.keyboard.type('zzzz');
+    await expect(palette.getByText('No command matches.')).toBeVisible();
+    await page.keyboard.press('Escape');
+    await expect(palette).toBeHidden();
+  });
+
+  test('it finds commands without accents in Vietnamese, shows state and shortcuts, and remembers what you use', async ({ page }) => {
+    await page.getByLabel('Language').selectOption('vi');
+    await page.getByRole('button', { name: 'Tìm lệnh' }).click();
+    const palette = page.getByTestId('command-palette');
+    await page.keyboard.type('chen dong');
+    await expect(palette.getByRole('option').first()).toBeVisible();
+    await expect(palette.getByRole('option').filter({ hasText: /Chèn 1 dòng/ }).first()).toBeVisible();
+    await page.keyboard.press('Escape');
+
+    // Running a command moves it to the top of the empty search next time.
+    await page.getByRole('button', { name: 'Tìm lệnh' }).click();
+    await page.keyboard.type('nghieng');
+    await page.keyboard.press('Enter');
+    await page.getByRole('button', { name: 'Tìm lệnh' }).click();
+    await expect(palette.getByRole('option').first()).toContainText('Nghiêng');
+  });
+
+  test('a disabled command cannot be run, and a read-only sheet disables the ones that change it', async ({ page }) => {
+    await page.goto('/demo/simple.html?readonly=1');
+    await page.waitForFunction(() => (window as unknown as { __handle?: { controller: unknown } }).__handle?.controller != null);
+    await page.getByRole('button', { name: 'Search commands' }).click();
+    await page.keyboard.type('bold');
+    const option = page.getByTestId('command-palette').getByRole('option').first();
+    await expect(option).toHaveAttribute('aria-disabled', 'true');
+    await page.keyboard.press('Enter');
+    await expect(page.getByTestId('command-palette')).toBeVisible(); // nothing ran, nothing closed
+  });
+
+  test('in a narrow window the toolbar keeps one row and "More tools" wraps it onto several', async ({ page }) => {
+    await page.setViewportSize({ width: 700, height: 600 });
+    const toolbar = page.getByTestId('toolbar');
+    const more = page.getByRole('button', { name: 'More tools' });
+    await expect(more).toBeVisible();
+    const singleRow = (await toolbar.boundingBox())!.height;
+    expect(singleRow).toBeLessThan(50);
+    await more.click();
+    await expect(page.getByRole('button', { name: 'Fewer tools' })).toBeVisible();
+    expect((await toolbar.boundingBox())!.height).toBeGreaterThan(singleRow * 1.5);
+    // Everything is reachable once it wraps: the last group's buttons are inside the toolbar's box.
+    const box = (await toolbar.boundingBox())!;
+    const last = (await page.getByRole('button', { name: 'Freeze' }).boundingBox())!;
+    expect(last.x + last.width).toBeLessThanOrEqual(box.x + box.width + 1);
+    await page.getByRole('button', { name: 'Fewer tools' }).click();
+    expect((await toolbar.boundingBox())!.height).toBeLessThan(50);
+  });
+
+  test('a wide window shows no "More tools" button', async ({ page }) => {
+    await page.setViewportSize({ width: 2400, height: 800 });
+    await expect(page.getByRole('button', { name: 'More tools' })).toHaveCount(0);
+  });
+
+  test('the sort buttons say which column they act on, and clear formatting is off until there is something to clear', async ({ page }) => {
+    await clickCell(page, 1, 2);
+    await expect(page.getByRole('button', { name: 'Sort A to Z' })).toHaveAttribute('title', /· C$/);
+    const clear = page.getByRole('button', { name: 'Clear formatting' });
+    await expect(clear).toBeDisabled();
+    await page.keyboard.press(`${await modKey(page)}+b`);
+    await expect(clear).toBeEnabled();
+    await clear.click();
+    await expect(clear).toBeDisabled();
+  });
+});

@@ -892,6 +892,19 @@ export class Spreadsheet {
     return true;
   }
 
+  /**
+   * Whether "clear formatting" would change anything: some selected cell has a style. A big selection is assumed to
+   * (looking would cost more than the button is worth); the answer is only used to grey the button out.
+   */
+  selectionHasFormatting(): boolean {
+    const p = this.selection.primary;
+    if ((p.endRow - p.startRow + 1) * (p.endCol - p.startCol + 1) > 1000) return true;
+    for (let r = p.startRow; r <= p.endRow; r++) {
+      for (let c = p.startCol; c <= p.endCol; c++) if (this.getCellByView(r, c).styleId !== DEFAULT_STYLE_ID) return true;
+    }
+    return false;
+  }
+
   /** Mod+\: back to the default look; values and formulas stay. */
   clearFormatting(): void {
     const targets = this.formatTargets().filter((t) => t.cell.styleId !== 0);

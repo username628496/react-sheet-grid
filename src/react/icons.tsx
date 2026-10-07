@@ -38,6 +38,8 @@ const PATHS: Record<string, string[]> = {
   validation: ['M4 5h16v14H4z', 'M9 12l2.2 2.2L15.5 9.5'],
   conditional: ['M4 4h7v7H4z', 'M13 13h7v7h-7z', 'M13 4h7v7h-7z', 'M4 13h7v7H4z'],
   merge: ['M4 5h16v14H4z', 'M9 12H4', 'M20 12h-5', 'm7 10-2 2 2 2', 'm17 10 2 2-2 2'],
+  command: ['M9 6a3 3 0 1 0-3 3h12a3 3 0 1 0-3-3v12a3 3 0 1 0 3-3H6a3 3 0 1 0 3 3V6z'],
+  more: ['M5 12h.01', 'M12 12h.01', 'M19 12h.01'],
   sigma: ['M18 5H6l6.5 7L6 19h12'],
 };
 

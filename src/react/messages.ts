@@ -192,6 +192,11 @@ export interface Messages {
   exportCsvRaw: string;
   importEmpty: string;
   importTooBig: string;
+  commandSearch: string;
+  commandSearchPlaceholder: string;
+  noCommands: string;
+  moreTools: string;
+  fewerTools: string;
   importXlsx: string;
   exportXlsx: string;
   importXlsxTitle: string;
@@ -453,6 +458,11 @@ const en: Messages = {
   exportCsvRaw: 'Download as CSV (plain values)',
   importEmpty: 'The file has no data to import.',
   importTooBig: 'That file is too large to import (over 50 MB).',
+  commandSearch: 'Search commands',
+  commandSearchPlaceholder: 'Search for a command…',
+  noCommands: 'No command matches.',
+  moreTools: 'More tools',
+  fewerTools: 'Fewer tools',
   importXlsx: 'Open .xlsx file…',
   exportXlsx: 'Download as .xlsx',
   importXlsxTitle: 'Replace everything with this file?',
@@ -557,7 +567,7 @@ const en: Messages = {
         ['Mod+\\', 'Clear formatting'],
       ],
     },
-    { title: 'Help', items: [['Mod+/', 'Show this list'], ['Mod+Alt+Shift+Down / Up', 'Leave the grid: focus the next / previous control on the page']] },
+    { title: 'Help', items: [['Mod+/', 'Show this list'], ['Alt+/', 'Search commands: type a few words, Enter runs the command'], ['Mod+Alt+Shift+Down / Up', 'Leave the grid: focus the next / previous control on the page']] },
   ],
 };
 
@@ -752,6 +762,11 @@ const vi: Messages = {
   exportCsvRaw: 'Tải xuống CSV (giá trị thô)',
   importEmpty: 'Tệp không có dữ liệu để nhập.',
   importTooBig: 'Tệp quá lớn để nhập (hơn 50 MB).',
+  commandSearch: 'Tìm lệnh',
+  commandSearchPlaceholder: 'Tìm một lệnh…',
+  noCommands: 'Không có lệnh nào khớp.',
+  moreTools: 'Thêm công cụ',
+  fewerTools: 'Thu gọn công cụ',
   importXlsx: 'Mở tệp .xlsx…',
   exportXlsx: 'Tải xuống .xlsx',
   importXlsxTitle: 'Thay toàn bộ bằng tệp này?',
@@ -856,7 +871,7 @@ const vi: Messages = {
         ['Mod+\\', 'Xóa định dạng'],
       ],
     },
-    { title: 'Trợ giúp', items: [['Mod+/', 'Hiện danh sách này'], ['Mod+Alt+Shift+Down / Up', 'Thoát khỏi bảng: chuyển tới điều khiển kế tiếp / trước đó trên trang']] },
+    { title: 'Trợ giúp', items: [['Mod+/', 'Hiện danh sách này'], ['Alt+/', 'Tìm lệnh: gõ vài chữ, Enter để chạy lệnh'], ['Mod+Alt+Shift+Down / Up', 'Thoát khỏi bảng: chuyển tới điều khiển kế tiếp / trước đó trên trang']] },
   ],
 };
 
