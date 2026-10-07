@@ -153,13 +153,8 @@ export class EditorController {
   private writePointedRef(): void {
     const span = this.pointSpan;
     if (span === null) return;
-    const { mapping } = this.sheet;
-    const text = refToText(
-      mapping.toDataRow(this.pointAnchor.row),
-      mapping.toDataCol(this.pointAnchor.col),
-      mapping.toDataRow(this.pointFocus.row),
-      mapping.toDataCol(this.pointFocus.col),
-    );
+    // Formulas are written in displayed rows and columns, the ones the user clicked.
+    const text = refToText(this.pointAnchor.row, this.pointAnchor.col, this.pointFocus.row, this.pointFocus.col);
     this.textarea.setRangeText(text, span.start, span.end, 'end');
     this.pointSpan = { start: span.start, end: span.start + text.length };
     this.surface.scrollCellIntoView(this.pointFocus.row, this.pointFocus.col);

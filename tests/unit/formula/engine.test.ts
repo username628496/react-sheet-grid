@@ -375,6 +375,7 @@ describe('cut-paste moves references with the cells', () => {
 
 describe('cut-paste in a sorted view', () => {
   // Data rows 0..2 hold 3, 1, 2 in column A; sorted ascending the view shows data rows 1, 2, 0.
+  // Formulas read as the rows on screen: data row 1 is displayed row 1 (A1 / C1 below), data row 2 is row 2, data row 0 is row 3.
   function sortedSheet(extra: Record<string, string | number>): ReturnType<typeof makeSheet> {
     const s = makeSheet({ A1: 3, A2: 1, A3: 2, ...extra });
     s.sortByColumn(0, true);
@@ -405,8 +406,8 @@ describe('cut-paste in a sorted view', () => {
     const s = sortedSheet({ E1: '=A2', E2: '=A1' });
     // View row 0 is data row 1 (value 1); paste it into view column C, same view row.
     cutPasteView(s, { startRow: 0, startCol: 0, endRow: 0, endCol: 0 }, 0, 2);
-    expect(formulaAt(s, 0)).toBe('=C2');
-    expect(formulaAt(s, 1)).toBe('=A1'); // A1 did not move
+    expect(formulaAt(s, 0)).toBe('=C1'); // the moved cell (data row 1) is displayed in row 1
+    expect(formulaAt(s, 1)).toBe('=A3'); // the cell that did not move (data row 0) is displayed in row 3
     expect(s.model.getCell(1, 2).value).toBe(1);
     expect(s.model.hasCell(1, 0)).toBe(false);
   });
@@ -414,17 +415,19 @@ describe('cut-paste in a sorted view', () => {
   it('a range follows when all its cells moved by the same amount, and stays otherwise', () => {
     const s = sortedSheet({ E1: '=SUM(A2:A3)', E2: '=SUM(A1:A2)' });
     cutPasteView(s, { startRow: 0, startCol: 0, endRow: 1, endCol: 0 }, 0, 2); // data rows 1 and 2 -> column C
-    expect(formulaAt(s, 0)).toBe('=SUM(C2:C3)');
-    expect(formulaAt(s, 1)).toBe('=SUM(A1:A2)'); // A1 stayed, so the range is only partly moved
+    expect(formulaAt(s, 0)).toBe('=SUM(C1:C2)');
+    // Only partly moved, so the range stays on data rows 0 and 1. They are displayed in rows 3 and 1, not as one block
+    // on screen, so there is no faithful way to label it by displayed rows: it keeps its data rows.
+    expect(formulaAt(s, 1)).toBe('=SUM(A1:A2)');
   });
 
   it('cells scattered by the view each carry their own references', () => {
     const s = sortedSheet({ E1: '=A2', E2: '=A3', E3: '=SUM(A2:A3)' });
     // Source: view rows 0..1 (data rows 1, 2). Target: view rows 1..2 of column C (data rows 2, 0).
     cutPasteView(s, { startRow: 0, startCol: 0, endRow: 1, endCol: 0 }, 1, 2);
-    expect(formulaAt(s, 0)).toBe('=C3'); // A2 (data row 1) went to C3 (data row 2)
-    expect(formulaAt(s, 1)).toBe('=C1'); // A3 (data row 2) went to C1 (data row 0)
-    expect(formulaAt(s, 2)).toBe('=SUM(A2:A3)'); // the two cells moved by different amounts: range stays
+    expect(formulaAt(s, 0)).toBe('=C2'); // data row 1 went to column C of data row 2, displayed in row 2
+    expect(formulaAt(s, 1)).toBe('=C3'); // data row 2 went to column C of data row 0, displayed in row 3
+    expect(formulaAt(s, 2)).toBe('=SUM(A1:A2)'); // the two cells moved by different amounts: the range stays on data rows 1-2 (displayed rows 1-2)
   });
 
   it('is one undo step', () => {
@@ -433,6 +436,6 @@ describe('cut-paste in a sorted view', () => {
     s.undo();
     expect(s.model.getCell(1, 0).value).toBe(1);
     expect(s.model.hasCell(1, 2)).toBe(false);
-    expect(formulaAt(s, 0)).toBe('=A2');
+    expect(formulaAt(s, 0)).toBe('=A1'); // back to data row 1, displayed in row 1
   });
 });

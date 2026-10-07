@@ -2269,3 +2269,22 @@ test.describe('.xlsx files', () => {
     expect(await page.evaluate(() => window.__sheet!.getCellByView(0, 0).value)).toBe('keep me');
   });
 });
+
+test.describe('formulas in a sorted sheet read the rows on screen', () => {
+  test('clicking a cell while typing a formula refers to the cell you clicked, even after sorting', async ({ page }) => {
+    await page.goto('/demo/?mode=empty');
+    await page.waitForFunction(() => window.__grid !== undefined);
+    await page.evaluate(() => {
+      const s = window.__sheet!;
+      [30, 10, 20].forEach((v, i) => s.setCellInput(i, 0, String(v)));
+      s.sortByColumn(0, true); // on screen: 10, 20, 30
+      s.selection.selectCell(0, 1);
+    });
+    await clickCell(page, 0, 1);
+    await page.keyboard.type('=');
+    await clickCell(page, 1, 0); // the 20 on screen
+    await page.keyboard.press('Enter');
+    const state = await page.evaluate(() => ({ value: window.__sheet!.getCellByView(0, 1).value, text: window.__sheet!.getEditText(0, 1) }));
+    expect(state).toEqual({ value: 20, text: '=A2' });
+  });
+});

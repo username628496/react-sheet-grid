@@ -3,7 +3,8 @@ import { BatchCommand } from './commands/BatchCommand';
 import { SetMergesCommand } from './commands/SetMergesCommand';
 import type { Command } from './commands/Command';
 import { type CellChange, SetCellsCommand } from './commands/SetCellsCommand';
-import { sameSheetName } from '../formula/ast';
+import { sameSheetName, type Expr } from '../formula/ast';
+import { convertFormula } from '../formula/viewMap';
 import { FormulaEngine } from '../formula/engine';
 import type { Workbook } from './Workbook';
 import { parseFormulaSafe } from '../formula/parser';
@@ -77,6 +78,23 @@ const MAX_SCATTERED_MOVE = 200_000; // cut-paste cells followed one by one in a 
 const MAX_RANGE_CHECK = 10_000; // largest range inspected cell by cell for the same move
 const MAX_TILED_CELLS = 1_000_000;
 const EMPTY_CELL: Cell = Object.freeze({ value: null, styleId: DEFAULT_STYLE_ID });
+function hasRefError(e: Expr): boolean {
+  switch (e.t) {
+    case 'err':
+      return e.v === '#REF!';
+    case 'un':
+      return hasRefError(e.e);
+    case 'bin':
+      return hasRefError(e.l) || hasRefError(e.r);
+    case 'call':
+      return e.args.some(hasRefError);
+    default:
+      return false;
+  }
+}
+
+/** Ranges longer than this (in rows) are translated by their end rows only; scanning them row by row would stall. */
+const MAX_RANGE_SCAN = 200_000;
 const DATE_FORMULA = /^=\s*(TODAY|NOW|DATE|EDATE|EOMONTH|DATEVALUE)\s*\(/i;
 
 /** Borders create a cell for every cell they touch, so a range this big is refused instead of filling memory. */
@@ -268,7 +286,8 @@ export class Spreadsheet {
   getEditText(viewRow: number, viewCol: number): string {
     const cell = this.getCellByView(viewRow, viewCol);
     if (cell.formula !== undefined) {
-      return printFormula(cell.formula, this.mapping.toDataRow(viewRow), this.mapping.toDataCol(viewCol));
+      // References read as the rows and columns on screen, whatever the sheet is sorted or filtered by.
+      return printFormula(this.formulaToView(cell.formula, this.mapping.toDataRow(viewRow), this.mapping.toDataCol(viewCol)), viewRow, viewCol);
     }
     const { value } = cell;
     if (value === null) return '';
@@ -376,6 +395,102 @@ export class Spreadsheet {
     return done;
   }
 
+  /**
+   * The formula as seen from the screen: references in displayed rows, relative to the cell's displayed position.
+   * Unchanged (same object) for a sheet that is not sorted or filtered. A reference to a row that is filtered out has
+   * no displayed row, so it keeps its data row.
+   */
+  private formulaToView(formula: Expr, dataRow: number, dataCol: number): Expr {
+    if (this.mapping.isIdentity) return formula;
+    const viewRow = this.mapping.toViewRow(dataRow);
+    return convertFormula(
+      formula,
+      { row: dataRow, col: dataCol },
+      { row: viewRow < 0 ? dataRow : viewRow, col: this.mapping.toViewCol(dataCol) },
+      (d) => {
+        const v = this.mapping.toViewRow(d);
+        return v < 0 ? d : v;
+      },
+      (c) => this.mapping.toViewCol(c),
+      this.ownRefs,
+      // A data range shows as the displayed block of its visible rows; if sorting scattered them it keeps its data rows.
+      (first, last) => this.displayedBlock(first, last),
+    );
+  }
+
+  /** The first and last displayed row of the visible rows among data rows first..last, if they are consecutive on screen. */
+  private displayedBlock(first: number, last: number): readonly [number, number] {
+    if (last - first > MAX_RANGE_SCAN) return [first, last];
+    let lo = Infinity;
+    let hi = -Infinity;
+    let count = 0;
+    for (let d = first; d <= last; d++) {
+      const v = this.mapping.toViewRow(d);
+      if (v < 0) continue;
+      count++;
+      if (v < lo) lo = v;
+      if (v > hi) hi = v;
+    }
+    return count > 0 && hi - lo + 1 === count ? [lo, hi] : [first, last];
+  }
+
+  /** The reverse: a formula written in displayed rows, relative to a displayed position, stored in data coordinates. */
+  private formulaFromView(formula: Expr, viewRow: number, viewCol: number, dataRow: number, dataCol: number): Expr {
+    if (this.mapping.isIdentity) return formula;
+    return convertFormula(
+      formula,
+      { row: viewRow, col: viewCol },
+      { row: dataRow, col: dataCol },
+      (v) => {
+        const d = this.mapping.toDataRow(v);
+        return d < 0 ? v : d;
+      },
+      (c) => this.mapping.toDataCol(c),
+      this.ownRefs,
+      // The displayed rows of a range must be exactly the data rows between its ends: a range over rows that sorting
+      // or filtering has separated would silently cover other rows than the ones on screen.
+      (first, last) => this.dataBlock(first, last),
+    );
+  }
+
+  /** The first and last data row behind displayed rows first..last, or null when they are not one block of data rows. */
+  private dataBlock(first: number, last: number): readonly [number, number] | null {
+    if (last - first > MAX_RANGE_SCAN) return null;
+    let lo = Infinity;
+    let hi = -Infinity;
+    for (let v = first; v <= last; v++) {
+      const d = this.mapping.toDataRow(v);
+      if (d < 0) return null;
+      if (d < lo) lo = d;
+      if (d > hi) hi = d;
+    }
+    return hi - lo === last - first ? [lo, hi] : null;
+  }
+
+  /**
+   * A formula copied from the cell at data position `from` to the one at `to`, as copy-paste and fill do: references
+   * shift by the distance between the two cells *on screen*. Identical to sharing the formula when nothing is sorted
+   * or filtered, because then screen and data coincide.
+   */
+  translateFormula(formula: Expr, fromDataRow: number, fromDataCol: number, toDataRow: number, toDataCol: number): Expr {
+    if (this.mapping.isIdentity) return formula;
+    const toViewRow = this.mapping.toViewRow(toDataRow);
+    const inView = this.formulaToView(formula, fromDataRow, fromDataCol);
+    return this.formulaFromView(inView, toViewRow < 0 ? toDataRow : toViewRow, toDataCol, toDataRow, toDataCol);
+  }
+
+  /** A formula typed at the cell (data position given): its references name displayed rows. */
+  private parseTyped(text: string, dataRow: number, dataCol: number): Expr {
+    if (this.mapping.isIdentity) return parseFormulaSafe(text, dataRow, dataCol);
+    const viewRow = this.mapping.toViewRow(dataRow);
+    const row = viewRow < 0 ? dataRow : viewRow;
+    const col = this.mapping.toViewCol(dataCol);
+    const parsed = parseFormulaSafe(text, row, col);
+    const stored = this.formulaFromView(parsed, row, col, dataRow, dataCol);
+    // A range over rows that are not one block of data cannot be stored: keep the text and show #REF!, never a wrong sum.
+    return hasRefError(stored) && !hasRefError(parsed) ? { t: 'err', v: '#REF!', raw: text } : stored;
+  }
+
   /** Turns what the user typed into a cell: `=...` becomes a formula (stored relative to its position), anything else a value. */
   cellFromInput(text: string, dataRow: number, dataCol: number, styleId: number): Cell {
     if (text.length > 1 && text.startsWith('=')) {
@@ -383,7 +498,7 @@ export class Spreadsheet {
       const kind = DATE_FORMULA.exec(text)?.[1]?.toUpperCase();
       const format = kind === undefined ? undefined : kind === 'NOW' ? DATE_TIME_FORMAT : DATE_FORMAT;
       const dated = format !== undefined && this.styles.get(styleId).numberFormat === undefined;
-      return { value: null, styleId: dated ? this.styles.derive(styleId, { numberFormat: format }) : styleId, formula: parseFormulaSafe(text, dataRow, dataCol) };
+      return { value: null, styleId: dated ? this.styles.derive(styleId, { numberFormat: format }) : styleId, formula: this.parseTyped(text, dataRow, dataCol) };
     }
     const typed = parseTypedInput(text, this.dateOrder);
     // A typed date gives the cell a date format, unless the user already chose a format for it.
@@ -818,14 +933,21 @@ export class Spreadsheet {
     const p = this.selection.primary;
     if ((p.endRow - p.startRow + 1) * (p.endCol - p.startCol + 1) > MAX_TILED_CELLS) return false;
     // Parsed once at the active cell: the relative references are then shared, so every cell adapts as if filled.
-    const base = this.cellFromInput(text, this.mapping.toDataRow(this.selection.activeRow), this.mapping.toDataCol(this.selection.activeCol), 0);
+    const baseRow = this.mapping.toDataRow(this.selection.activeRow);
+    const baseCol = this.mapping.toDataCol(this.selection.activeCol);
+    const base = this.cellFromInput(text, baseRow, baseCol, 0);
     const changes: CellChange[] = [];
     for (let r = p.startRow; r <= p.endRow; r++) {
       const dataRow = this.mapping.toDataRow(r);
       for (let c = p.startCol; c <= p.endCol; c++) {
         const dataCol = this.mapping.toDataCol(c);
         const styleId = this.model.getCell(dataRow, dataCol).styleId;
-        changes.push({ dataRow, dataCol, cell: { ...base, styleId } });
+        // Each cell parses the text at its own place when sorted or filtered; otherwise one shared parse adapts by offset.
+        const cell: Cell =
+          base.formula === undefined || this.mapping.isIdentity
+            ? { ...base, styleId }
+            : { ...base, styleId, formula: this.translateFormula(base.formula, baseRow, baseCol, dataRow, dataCol) };
+        changes.push({ dataRow, dataCol, cell });
       }
     }
     this.execute(new SetCellsCommand('Fill selection', changes));
@@ -1409,7 +1531,15 @@ export class Spreadsheet {
     const area = (source.endRow - source.startRow + 1) * (source.endCol - source.startCol + 1);
     if (area > MAX_TILED_CELLS || area * lines > 4 * MAX_TILED_CELLS) return null;
     const read = this.readCells(source).cells;
-    const filled = fillCells(read, direction, lines, (id) => isDateFormat(this.styles.get(id).numberFormat));
+    // In a sorted or filtered sheet a copied formula moves by the distance on screen, so it is re-expressed per target cell.
+    const copied: Array<Array<number | undefined>> = [];
+    const filled = fillCells(
+      read,
+      direction,
+      lines,
+      (id) => isDateFormat(this.styles.get(id).numberFormat),
+      this.mapping.isIdentity ? undefined : (line, lane, index) => ((copied[line] ??= [])[lane] = index),
+    );
 
     const changes: CellChange[] = [];
     for (let k = 0; k < lines; k++) {
@@ -1418,11 +1548,16 @@ export class Spreadsheet {
         const step = forward ? k + 1 : -(k + 1);
         const viewRow = vertical ? (forward ? source.endRow : source.startRow) + step : source.startRow + lane;
         const viewCol = vertical ? source.startCol + lane : (forward ? source.endCol : source.startCol) + step;
-        changes.push({
-          dataRow: this.mapping.toDataRow(viewRow),
-          dataCol: this.mapping.toDataCol(viewCol),
-          cell: line[lane] as Cell,
-        });
+        const dataRow = this.mapping.toDataRow(viewRow);
+        const dataCol = this.mapping.toDataCol(viewCol);
+        let cell = line[lane] as Cell;
+        const sourceIndex = copied[k]?.[lane];
+        if (cell.formula !== undefined && sourceIndex !== undefined) {
+          const srcRow = vertical ? source.startRow + sourceIndex : source.startRow + lane;
+          const srcCol = vertical ? source.startCol + lane : source.startCol + sourceIndex;
+          cell = { ...cell, formula: this.translateFormula(cell.formula, this.mapping.toDataRow(srcRow), this.mapping.toDataCol(srcCol), dataRow, dataCol) };
+        }
+        changes.push({ dataRow, dataCol, cell });
       }
     }
     this.execute(new SetCellsCommand('Fill', changes));

@@ -7,7 +7,9 @@ rows by a hundred columns scrolls at 60 fps; editing, menus and the toolbar are 
 - Undo/redo, copy/cut/paste (Excel and Google Sheets compatible), fill handle, paint format, sort, filter, insert/delete, hide, freeze, zoom
 - Formatting: bold/italic/underline/strikethrough, font size, colors, borders, alignment, text wrapping, number formats
 - Find and replace (with accent-insensitive search), CSV import and export
-- Real dates and times (date formats, `DATE`/`TODAY`/… functions, date fill series), data validation (dropdown lists, number and date rules)
+- Real dates and times (date formats, `DATE`/`TODAY`/… functions, date fill series)
+- Data validation (dropdown lists, number and date rules), conditional formatting, merged cells
+- Multiple sheets with formulas across them (`=Sheet2!A1`), and `.xlsx` import and export with no extra dependency
 - Accessible to screen readers and the keyboard
 - Vietnamese (Telex/VNI) and other IME input works while typing in a cell
 - Toolbar, formula bar and status bar included (and usable on their own)
@@ -57,8 +59,12 @@ function Editor({ saved }: { saved?: unknown }) {
 }
 ```
 
-A snapshot is plain JSON: cells (values and formulas as text), formatting, sizes, sort/filter, frozen panes. Formulas are
-recalculated when it is loaded. The undo history and the selection are not saved.
+A snapshot is plain JSON: cells (values and formulas as text), formatting, validation and conditional rules, merged
+cells, sizes, sort/filter, frozen panes. Formulas are recalculated when it is loaded. The undo history and the selection
+are not saved.
+
+With several sheets, save `getWorkbookSnapshot()` instead (every sheet, its name and which one is active); `defaultValue`
+and `load` accept either kind, so a single-sheet snapshot from an older version keeps loading.
 
 `onChange` fires after the document changed (edits, paste, formatting, undo, freezing), never for selection or scrolling and never while `readOnly` is on.
 Calls are batched (`changeDelay`, 300 ms by default) and one more call is made on unmount if changes are still pending.
@@ -74,7 +80,8 @@ Calls are batched (`changeDelay`, 300 ms by default) and one more call is made o
 | `locale` | `'en' \| 'vi'` | UI language (default `'en'`). |
 | `messages` | `Partial<Messages>` | Overrides single UI strings. |
 | `theme` | `'light' \| 'dark' \| 'auto'` | Default `'light'`; `'auto'` follows the operating system. |
-| `toolbar`, `formulaBar`, `statusBar` | `boolean` | Show or hide each bar (all `true`). |
+| `toolbar`, `formulaBar`, `statusBar`, `sheetTabs` | `boolean` | Show or hide each bar (all `true`). |
+| `dateOrder` | `'dmy' \| 'mdy'` | How an ambiguous typed date such as `3/4/2026` reads: day first (default) or month first. |
 | `frozenRows`, `frozenCols` | `number` | Initial frozen panes. |
 | `zoom`, `onZoomChange` | `number`, `(zoom) => void` | Zoom factor from 0.5 to 2. |
 | `onChange`, `changeDelay` | | See above. |
@@ -85,10 +92,12 @@ Calls are batched (`changeDelay`, 300 ms by default) and one more call is made o
 
 ```ts
 interface SheetGridHandle {
-  sheet: Spreadsheet;                 // the headless model: read cells, run commands, subscribe
+  sheet: Spreadsheet;                 // the sheet that is showing: read cells, run commands, subscribe
+  workbook: Workbook;                 // all the sheets (add, rename, delete, reorder, find by name)
   controller: GridController | null;  // input and rendering controller (null until mounted)
-  getSnapshot(): SheetSnapshot;
-  load(snapshot: unknown): void;      // throws SnapshotError for bad data and leaves the sheet untouched
+  getSnapshot(): SheetSnapshot;       // the showing sheet only
+  getWorkbookSnapshot(): WorkbookSnapshot;
+  load(snapshot: unknown): void;      // a workbook or a single sheet; throws SnapshotError for bad data and leaves the sheet untouched
   focus(): void;
 }
 ```
@@ -166,7 +175,47 @@ sheet.importCsv(text);                                              // { rows, c
 sheet.transaction('My change', () => { /* several commands, one undo step */ });
 ```
 
+## Sheets and workbooks
+
+`SheetGrid` shows tabs under the grid: add, switch, rename (double-click or F2), duplicate, delete and reorder from the tab
+menu. A formula can read another sheet: `=Sheet2!A1`, `=SUM('My data'!A1:A10)` (names with spaces or symbols go in quotes;
+names are not case sensitive). Renaming a sheet rewrites the formulas that mention it, deleting it turns them into `#REF!`,
+and inserting or deleting rows and columns in a sheet moves the references that point into it.
+
+```ts
+const { workbook } = ref.current!;
+workbook.addSheet({ name: 'Totals' });
+workbook.sheetByName('Data')?.setCellInput(0, 0, '42');
+```
+
+Adding, renaming, deleting and moving sheets are not part of the undo history; each sheet has its own undo. A cycle through
+several sheets is not detected (the values settle after a few passes instead of showing `#REF!`).
+
+## Excel files
+
+The File menu opens and downloads `.xlsx`. The code behind it is its own entry point, loaded only when used (about 15 kB gzipped):
+
+```ts
+import { exportXlsx, importXlsx } from 'react-sheet-grid/xlsx';
+
+const { data, warnings } = await exportXlsx(workbook);          // Uint8Array
+const { workbook: opened, warnings: notes } = await importXlsx(await file.arrayBuffer());
+```
+
+What travels: all sheets, values, formulas (also across sheets), fonts, colors, fills, borders, alignment, wrapping, number
+formats and dates, row heights and column widths, hidden rows and columns, frozen panes, merged cells, data validation
+(lists, numbers, dates) and conditional formatting (value, text and blank rules). Anything that could not be carried over is
+listed in `warnings`. Charts, images, comments, named ranges, tables, colour scales and print settings are dropped. A
+formula using a function this grid does not have keeps its last saved value. The zip, XML and OOXML code is in this
+package (it needs `CompressionStream`: Node 18+, Chrome 80+, Firefox 113+, Safari 16.4+). Files are limited in size and
+checked on the way in.
+
 ## Formulas
+
+Typed, shown and clicked references always use the rows you see: in a sorted or filtered sheet `A2` is the cell displayed
+in row 2, and the formula keeps following that cell when the sheet is sorted again. A range typed over rows that sorting
+or filtering has separated (so that they are no longer one block of data) is refused with `#REF!`. Clear the sort or
+filter, or select the whole block.
 
 References: `A1`, `$A$1`, `A1:B5`, `A:A`, `3:3`. Arguments may be separated by `,` or `;`.
 
@@ -210,9 +259,10 @@ Current Chrome, Edge, Firefox and Safari. The test suite runs on Chromium, Firef
 
 ## Limits to know about
 
-- Dates are not a separate type yet (no date series in the fill handle, no date formats).
-- No merged cells, multiple sheets, charts, conditional formatting or data validation.
-- Formulas refer to cells by their data position, so when the view is sorted the A1 labels do not follow the displayed order.
+- Dates are numbers shown through a date format (like Sheets and Excel); month and weekday names are English only; no time zones.
+- No charts, pivot tables, comments or named ranges. Conditional formatting has no colour scales; validation has no custom formulas.
+- Merged cells cannot be combined with sorting or filtering.
+- Sorting and filtering are views: a formula follows its cells, not screen positions, so after a re-sort a formula range over scattered rows keeps its data rows.
 - The canvas theme is page-wide: two grids on one page cannot use different themes.
 - Cut and copy include rows hidden with "Hide rows".
 

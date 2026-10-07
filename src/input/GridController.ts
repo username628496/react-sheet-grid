@@ -58,12 +58,8 @@ export class GridController {
       const marquee = this.clipboard.visibleMarquee;
       if (marquee !== null) drawCopyMarquee(ctx, sheet, marquee, rowSeg, colSeg);
       for (const ref of this.editor.refs) {
-        // Formulas hold data coordinates; the grid is drawn in view coordinates.
-        const { mapping } = sheet;
-        const startRow = mapping.toViewRow(ref.r1);
-        const endRow = mapping.toViewRow(ref.r2);
-        if (startRow < 0 || endRow < 0) continue;
-        drawFormulaRef(ctx, sheet, { startRow, endRow, startCol: mapping.toViewCol(ref.c1), endCol: mapping.toViewCol(ref.c2) }, ref.color, rowSeg, colSeg);
+        // The references in the text being edited name displayed rows and columns, which is what the grid is drawn in.
+        drawFormulaRef(ctx, sheet, { startRow: ref.r1, endRow: ref.r2, startCol: ref.c1, endCol: ref.c2 }, ref.color, rowSeg, colSeg);
       }
       if (this.find.isOpen) drawFindMatches(ctx, sheet, this.find, rowSeg, colSeg);
       const fill = this.mouse.fillPreview;

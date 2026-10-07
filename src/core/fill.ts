@@ -104,6 +104,8 @@ export function fillCells(
   direction: FillDirection,
   count: number,
   isDateStyle: (styleId: number) => boolean = () => false,
+  /** Told which source cell (index along its lane) each result cell was copied from, when it was copied rather than computed. */
+  copiedFrom?: (line: number, lane: number, sourceIndex: number) => void,
 ): Cell[][] {
   const vertical = direction === 'down' || direction === 'up';
   const forward = direction === 'down' || direction === 'right';
@@ -121,6 +123,7 @@ export function fillCells(
       const template = cells[((j % n) + n) % n] as Cell;
       const made = series?.(j, template.styleId) ?? null;
       (result[k] as Cell[])[lane] = made ?? template;
+      if (made === null) copiedFrom?.(k, lane, ((j % n) + n) % n);
     }
   }
   return result;

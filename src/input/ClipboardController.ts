@@ -14,6 +14,8 @@ interface InternalClip {
   text: string;
   source: ViewRange;
   cut: boolean;
+  /** Data row/column of the copied cells at copy time, kept only for a sorted or filtered sheet (copied formulas move by screen distance). */
+  origins: Array<Array<{ row: number; col: number }>> | null;
 }
 
 /** The slice of DataTransfer the controller needs; lets tests drive it without synthetic clipboard events. */
@@ -108,7 +110,11 @@ export class ClipboardController {
     const { rows, cols, cells } = this.sheet.readCells(range);
     if (rows === 0 || cols === 0) return null;
     const text = cells.map((line) => line.map((cell) => formatValue(cell.value, this.sheet.styles.get(cell.styleId).numberFormat)));
-    return { rows, cols, cells, text: toTsv(text), source: range, cut };
+    const { mapping } = this.sheet;
+    const origins = mapping.isIdentity
+      ? null
+      : cells.map((line, i) => line.map((_cell, j) => ({ row: mapping.toDataRow(range.startRow + i), col: mapping.toDataCol(range.startCol + j) })));
+    return { rows, cols, cells, text: toTsv(text), source: range, cut, origins };
   }
 
   private write(data: ClipboardWriter, clip: InternalClip): void {
@@ -184,7 +190,12 @@ export class ClipboardController {
           if (valuesOnly) return { value: cell.value, styleId: existing.styleId };
           // Format only: the target keeps its content (and formula) and takes the source's formatting.
           if (mode === 'format') return { ...existing, styleId: cell.styleId };
-          if (!clip.cut || cell.formula === undefined) return cell; // a copied formula adapts to its new place via relative refs
+          if (cell.formula === undefined) return cell;
+          if (!clip.cut) {
+            // A copied formula adapts to its new place: by offset, or when sorted/filtered by the distance on screen.
+            const origin = clip.origins?.[i]?.[j];
+            return origin === undefined ? cell : { ...cell, formula: sheet.translateFormula(cell.formula, origin.row, origin.col, dataRow, dataCol) };
+          }
           // A moved formula keeps pointing at the same cells, so it is rebased rather than shifted.
           const fromRow = sheet.mapping.toDataRow(clip.source.startRow + i);
           const fromCol = sheet.mapping.toDataCol(clip.source.startCol + j);
