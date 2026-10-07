@@ -1,4 +1,5 @@
 import { type CSSProperties, useCallback, useEffect, useId, useRef, useState } from 'react';
+import { formatValue } from '../core/model/format';
 import type { Spreadsheet } from '../core/Spreadsheet';
 import { GridController } from '../input/GridController';
 import { GridSurface } from '../render/GridSurface';
@@ -9,6 +10,8 @@ import { ChromeStyles } from './chrome';
 import { useMessages, useTheme } from './GridProvider';
 import { ContextMenu } from './ContextMenu';
 import { FilterDialog } from './FilterDialog';
+import { Menu, type MenuEntry } from './Menu';
+import { ValidationDialog } from './ValidationDialog';
 import { FindDialog } from './FindDialog';
 import { ShortcutsDialog } from './ShortcutsDialog';
 
@@ -43,6 +46,8 @@ export function DataGrid({ sheet, frozenRows, frozenCols, className, style, zoom
   const [menu, setMenu] = useState<{ x: number; y: number } | null>(null);
   const [filter, setFilter] = useState<{ col: number; x: number; y: number } | null>(null);
   const [help, setHelp] = useState(false);
+  const [list, setList] = useState<{ row: number; col: number; x: number; y: number } | null>(null);
+  const [validation, setValidation] = useState(false);
   const [find, setFind] = useState<{ anchor: DOMRect; token: number } | null>(null);
   const closeHelp = useCallback(() => {
     setHelp(false);
@@ -105,6 +110,16 @@ export function DataGrid({ sheet, frozenRows, frozenCols, className, style, zoom
     ctrl.mouse.onContext = (x, y) => setMenu({ x, y });
     ctrl.onShowShortcuts = () => setHelp(true);
     ctrl.onOpenFilter = (col, x, y) => setFilter({ col, x, y });
+    ctrl.onOpenValidation = () => setValidation(true);
+    ctrl.onOpenList = (row, col) => {
+      if (sheet.readOnly || sheet.styles.get(sheet.getCellByView(row, col).styleId).validation?.kind !== 'list') return;
+      ctrl.editor.commit();
+      ctrl.surface.scrollCellIntoView(row, col);
+      const rect = mount.getBoundingClientRect();
+      const z = ctrl.surface.zoom;
+      const vp = ctrl.surface.viewport;
+      setList({ row, col, x: rect.left + vp.colLeft(col) * z, y: rect.top + (vp.rowTop(row) + sheet.rows.getSize(row)) * z });
+    };
     ctrl.onOpenFind = (replace) => {
       ctrl.find.show(replace);
       setFind((current) => ({ anchor: mount.getBoundingClientRect(), token: (current?.token ?? 0) + 1 }));
@@ -117,6 +132,8 @@ export function DataGrid({ sheet, frozenRows, frozenCols, className, style, zoom
       setController(null);
       setMenu(null);
       setFind(null);
+      setList(null);
+      setValidation(false);
     };
     // onReady is intentionally not a dependency: a new callback identity must not rebuild the grid.
   }, [sheet, frozenRows, frozenCols]);
@@ -162,8 +179,39 @@ export function DataGrid({ sheet, frozenRows, frozenCols, className, style, zoom
           }}
         />
       )}
+      {list !== null && (
+        <Menu
+          label={m.validationList}
+          testId="list-menu"
+          x={list.x}
+          y={list.y}
+          entries={listEntries(sheet, list.row, list.col)}
+          onClose={() => {
+            setList(null);
+            editorRef.current?.focus({ preventScroll: true });
+          }}
+        />
+      )}
+      {validation && (
+        <ValidationDialog
+          sheet={sheet}
+          onClose={() => {
+            setValidation(false);
+            editorRef.current?.focus({ preventScroll: true });
+          }}
+        />
+      )}
       {help && <ShortcutsDialog onClose={closeHelp} />}
       {filter !== null && <FilterDialog sheet={sheet} viewCol={filter.col} x={filter.x} y={filter.y} onClose={closeFilter} />}
     </>
   );
+}
+
+/** The choices of a list cell; the one the cell holds is marked. */
+function listEntries(sheet: Spreadsheet, viewRow: number, viewCol: number): MenuEntry[] {
+  const cell = sheet.getCellByView(viewRow, viewCol);
+  const rule = sheet.styles.get(cell.styleId).validation;
+  if (rule?.kind !== 'list') return [];
+  const current = formatValue(cell.value);
+  return rule.items.map((item) => ({ label: item, checked: item === current, run: () => void sheet.setCellInput(viewRow, viewCol, item) }));
 }

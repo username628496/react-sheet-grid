@@ -107,7 +107,15 @@ export function Toolbar({ sheet, grid = null, onAction }: ToolbarProps) {
   // Things the sheet refused to do (an oversized paste) are announced in the same place as the size notice.
   useEffect(
     () => sheet.subscribeNotices((n) =>
-        setNotice(n.code === 'exportTooLarge' ? m.exportTooLarge(n.limit) : n.code === 'formatTooLarge' ? m.formatTooLarge(n.limit) : m.pasteTooLarge(n.limit)),
+        setNotice(
+          n.code === 'validationRejected'
+            ? m.validationRejected(m.describeValidation(n.rule))
+            : n.code === 'exportTooLarge'
+              ? m.exportTooLarge(n.limit)
+              : n.code === 'formatTooLarge'
+                ? m.formatTooLarge(n.limit)
+                : m.pasteTooLarge(n.limit),
+        ),
       ),
     [sheet, m],
   );
@@ -143,7 +151,7 @@ export function Toolbar({ sheet, grid = null, onAction }: ToolbarProps) {
   // In a read-only sheet everything that would change the document is disabled; viewing controls stay usable.
   const mutating = new Set([
     m.undo, m.redo, m.paintFormat, m.clearFormatting, m.cut, m.formatCurrencyButton, m.formatPercentButton, m.decreaseDecimals,
-    m.increaseDecimals, m.decreaseFontSize, m.increaseFontSize, m.bold, m.italic, m.underline, m.strike, m.alignLeft, m.alignCenter, m.alignRight,
+    m.increaseDecimals, m.dataValidation, m.decreaseFontSize, m.increaseFontSize, m.bold, m.italic, m.underline, m.strike, m.alignLeft, m.alignCenter, m.alignRight,
   ]);
   const mutatingMenus: ReadonlySet<MenuId> = new Set<MenuId>(['paste', 'numberFormat', 'insert', 'delete', 'functions', 'wrap', 'valign', 'borders']);
 
@@ -313,6 +321,7 @@ export function Toolbar({ sheet, grid = null, onAction }: ToolbarProps) {
           >
             <Icon name="filter" />
           </button>
+          {button('validation', m.dataValidation, undefined, undefined, () => grid?.onOpenValidation?.(), noGrid)}
           {button('clearFilter', m.removeSortAndFilters, undefined, undefined, () => {
             sheet.clearSort();
             sheet.clearFilters();

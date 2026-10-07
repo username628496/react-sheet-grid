@@ -2,6 +2,8 @@ import { DEFAULT_FONT_SIZE, lineHeightFor } from '../../core/model/font';
 import { wrapLines } from '../../core/layout/wrap';
 import { BORDER_SIDES, type Borders } from '../../core/model/borders';
 import { DEFAULT_STYLE_ID, type Style, type VerticalAlign } from '../../core/model/StyleTable';
+import type { CellValue } from '../../core/model/Cell';
+import { type Validation, isValid } from '../../core/model/validation';
 import { defaultAlign, formatValue } from '../../core/model/format';
 import type { Spreadsheet } from '../../core/Spreadsheet';
 import { fontFor, theme } from '../theme';
@@ -47,9 +49,41 @@ export function drawCellBackgrounds(
           ctx.fillRect(x, y, w, h);
         }
       }
+      if (cell.styleId !== DEFAULT_STYLE_ID && w > 0 && h > 0) {
+        const rule = styles.get(cell.styleId).validation;
+        if (rule !== undefined) drawValidationMarks(ctx, rule, cell.value, x, y, w, h);
+      }
       x += w;
     }
     y += h;
+  }
+}
+
+/** Width of the dropdown arrow zone at the right of a list cell; a click inside it opens the list. */
+export const LIST_ARROW_WIDTH = 16;
+const INVALID_COLOR = '#d93025';
+
+/** A red corner on a cell that breaks its rule, and a small arrow on cells that offer a list. */
+function drawValidationMarks(ctx: CanvasRenderingContext2D, rule: Validation, value: CellValue | null, x: number, y: number, w: number, h: number): void {
+  if (!isValid(rule, value)) {
+    ctx.fillStyle = INVALID_COLOR;
+    ctx.beginPath();
+    ctx.moveTo(x + w - 7, y);
+    ctx.lineTo(x + w, y);
+    ctx.lineTo(x + w, y + 7);
+    ctx.closePath();
+    ctx.fill();
+  }
+  if (rule.kind === 'list' && w > LIST_ARROW_WIDTH * 2) {
+    const cx = x + w - LIST_ARROW_WIDTH / 2;
+    const cy = y + h / 2;
+    ctx.fillStyle = theme.headerText;
+    ctx.beginPath();
+    ctx.moveTo(cx - 3.5, cy - 1.5);
+    ctx.lineTo(cx + 3.5, cy - 1.5);
+    ctx.lineTo(cx, cy + 2.5);
+    ctx.closePath();
+    ctx.fill();
   }
 }
 

@@ -48,6 +48,7 @@ export type Action =
   | { type: 'showShortcuts' }
   | { type: 'fontSize'; direction: 1 | -1 }
   | { type: 'find'; replace: boolean }
+  | { type: 'openList' }
   | { type: 'leaveGrid'; backward: boolean }
   | { type: 'hide'; axis: 'row' | 'col' }
   | { type: 'unhide'; axis: 'row' | 'col' }
@@ -108,7 +109,8 @@ function navigatingKey(k: KeyInput): Action | null {
   if (k.mod && k.alt && k.shift && (k.key === 'ArrowDown' || k.key === 'ArrowUp')) return { type: 'leaveGrid', backward: k.key === 'ArrowUp' };
   const arrow = ARROWS[k.key];
   if (arrow !== undefined) {
-    if (k.alt) return null;
+    // Alt+Down opens the dropdown of a list cell, as in Sheets.
+    if (k.alt) return k.key === 'ArrowDown' && !k.mod && !k.shift ? { type: 'openList' } : null;
     return { type: 'move', dir: arrow, extend: k.shift, jump: k.mod };
   }
   // Option+V types a symbol on a Mac, so paste-format is recognized by the physical key.

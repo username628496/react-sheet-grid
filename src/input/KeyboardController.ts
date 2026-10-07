@@ -19,6 +19,7 @@ export interface KeyboardDeps {
   clipboard: ClipboardController;
   showShortcuts: () => void;
   openFind: (replace: boolean) => void;
+  openList: () => void;
 }
 
 export class KeyboardController {
@@ -190,6 +191,9 @@ export class KeyboardController {
         break;
       case 'find':
         this.deps.openFind(action.replace);
+        return;
+      case 'openList':
+        this.deps.openList();
         return;
       case 'leaveGrid': {
         const root = this.deps.surface.host.parentElement;

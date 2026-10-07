@@ -35,6 +35,7 @@ import type { Cell, CellValue } from './model/Cell';
 import { CELL_HORIZONTAL_PADDING, CELL_VERTICAL_PADDING, DEFAULT_FONT_SIZE, fontString, lineHeightFor, stepFontSize } from './model/font';
 import { formatValue, shiftDecimals } from './model/format';
 import { wrapLines } from './layout/wrap';
+import { type Validation, isValid } from './model/validation';
 import { parseInput, parseTypedInput } from './model/parseInput';
 import { DATE_FORMAT, DATE_TIME_FORMAT, type DateOrder, dateEditText, isDateFormat, parseDateInput } from './model/dates';
 import { cellKey, MAX_COLS, MAX_ROWS, SheetModel } from './model/SheetModel';
@@ -91,7 +92,9 @@ const MAX_READ_CELLS = 100_000;
 export type SheetNotice =
   | { code: 'pasteTooLarge'; cells: number; limit: number }
   | { code: 'exportTooLarge'; cells: number; limit: number }
-  | { code: 'formatTooLarge'; cells: number; limit: number };
+  | { code: 'formatTooLarge'; cells: number; limit: number }
+  /** Typed input broke a strict validation rule and was discarded. */
+  | { code: 'validationRejected'; rule: Validation };
 
 export interface FindOptions extends TextSearchOptions {
   query: string;
@@ -372,12 +375,31 @@ export class Spreadsheet {
   }
 
   /** Types `text` into a cell the way the editor does. */
-  setCellInput(viewRow: number, viewCol: number, text: string): void {
+  setCellInput(viewRow: number, viewCol: number, text: string): boolean {
     const dataRow = this.mapping.toDataRow(viewRow);
     const dataCol = this.mapping.toDataCol(viewCol);
     const old = this.model.getCell(dataRow, dataCol);
-    const change: CellChange = { dataRow, dataCol, cell: this.cellFromInput(text, dataRow, dataCol, old.styleId) };
-    this.execute(new SetCellsCommand('Edit cell', [change]));
+    const cell = this.cellFromInput(text, dataRow, dataCol, old.styleId);
+    const rule = this.styles.get(old.styleId).validation;
+    // Formulas are not checked (their result can change later); a rejected edit leaves the cell as it was.
+    if (rule !== undefined && rule.strict && cell.formula === undefined && !isValid(rule, cell.value)) {
+      for (const listener of this.noticeListeners) listener({ code: 'validationRejected', rule });
+      return false;
+    }
+    this.execute(new SetCellsCommand('Edit cell', [{ dataRow, dataCol, cell }]));
+    return true;
+  }
+
+  /** Sets (or with null removes) the validation rule of the selected cells. */
+  setValidation(rule: Validation | null): void {
+    this.formatSelection({ validation: rule ?? undefined }, 'Data validation');
+  }
+
+  /** Whether the cell's value breaks its own rule (what the red corner marks); false when it has no rule. */
+  isInvalid(viewRow: number, viewCol: number): boolean {
+    const cell = this.getCellByView(viewRow, viewCol);
+    const rule = this.styles.get(cell.styleId).validation;
+    return rule !== undefined && !isValid(rule, cell.value);
   }
 
   /**

@@ -5,6 +5,7 @@ import type { AxisLayout } from '../core/layout/AxisLayout';
 import type { FillDirection } from '../core/fill';
 import type { ViewRange } from '../core/selection/SelectionModel';
 import type { Spreadsheet } from '../core/Spreadsheet';
+import { LIST_ARROW_WIDTH } from '../render/layers/cellsLayer';
 import type { GridSurface } from '../render/GridSurface';
 import type { EditorController } from './EditorController';
 
@@ -34,6 +35,8 @@ export interface MouseDeps {
   sheet: Spreadsheet;
   surface: GridSurface;
   editor: EditorController;
+  /** Opens the dropdown of a list cell (its arrow was clicked). */
+  openList?: (viewRow: number, viewCol: number) => void;
 }
 
 export class MouseController {
@@ -115,6 +118,15 @@ export class MouseController {
     return Math.abs(x - right) <= 5 && Math.abs(y - bottom) <= 5;
   }
 
+  private overListArrow(x: number, viewRow: number, viewCol: number): boolean {
+    const { sheet, surface } = this.deps;
+    if (sheet.readOnly) return false;
+    if (sheet.styles.get(sheet.getCellByView(viewRow, viewCol).styleId).validation?.kind !== 'list') return false;
+    const right = surface.viewport.colLeft(viewCol) + sheet.cols.getSize(viewCol);
+    const width = sheet.cols.getSize(viewCol);
+    return width > LIST_ARROW_WIDTH * 2 && right - x <= LIST_ARROW_WIDTH;
+  }
+
   // Returns the index whose trailing edge is under `pos`, if close enough to grab.
   private edgeHit(
     pos: number,
@@ -191,7 +203,13 @@ export class MouseController {
       case 'cell':
         if (e.shiftKey) selection.extendTo(hit.row, hit.col);
         else if (additive) selection.addCell(hit.row, hit.col);
-        else selection.selectCell(hit.row, hit.col);
+        else {
+          selection.selectCell(hit.row, hit.col);
+          if (this.overListArrow(x, hit.row, hit.col)) {
+            this.deps.openList?.(hit.row, hit.col);
+            return;
+          }
+        }
         this.startDrag({ kind: 'cell' });
         return;
       default:

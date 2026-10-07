@@ -131,11 +131,13 @@ Chạy `pnpm dev` rồi mở http://localhost:5173/demo/ (mặc định là tran
 9. **Trình đọc màn hình**: bật VoiceOver (Cmd+F5) trên Safari/Chrome, Tab vào lưới và dùng mũi tên: có đọc đúng "A1, nội dung" không; Ctrl+Option+Shift+↓ có thoát ra điều khiển kế tiếp không.
 10. **Tìm và thay thế**: Cmd+F trong lưới (không phải thanh tìm của trình duyệt); thử "bỏ qua dấu" với dữ liệu tiếng Việt; Thay tất cả rồi Cmd+Z; bấm nút rồi nhấn Esc trên Safari/Firefox.
 12. **Ngày tháng**: gõ `7/10/2026`, `2026-10-07`, `14:30` (phải thành ngày/giờ, căn phải); đổi định dạng ở "More formats"; kéo fill hai ô ngày liên tiếp; `=TODAY()`; thử `dateOrder="mdy"`; sort cột ngày. Gõ `'2026-10-07` để giữ là chữ.
+13. **Data validation**: chọn vài ô → nút "Data validation" (hoặc chuột phải) → danh sách `Open, Done` → gõ chữ khác phải bị từ chối kèm thông báo; click mũi tên ▾ trong ô hoặc Alt+↓ mở danh sách; thử số "giữa 1 và 10", chế độ "cảnh báo" (ô sai có góc đỏ); sort rồi kiểm tra luật đi theo ô; dán từ ô có luật sang ô khác (Dán định dạng).
 11. **Thanh công thức**: gõ tiếng Việt (Telex/VNI) trong ô nhập của thanh; gõ `=` rồi click ô trên lưới; sửa công thức dài rồi Enter/Tab/Esc; gõ `A1:C5`, `B:B` vào ô tên rồi Enter.
 
 ## Việc tiếp theo (ngoài MVP, chỉ làm khi bạn yêu cầu)
 
 - Chạy e2e trên Firefox/WebKit và sửa nếu có khác biệt.
 - Ngày tháng (đã làm): ngày là số serial (từ 1899-12-30) + định dạng ngày trong style, nên sort/filter/số học/fill chạy sẵn. Hạn chế: `TODAY`/`NOW` chỉ tính lại khi sửa hoặc nạp (không tự đổi khi để mở qua nửa đêm); tên tháng/thứ chỉ tiếng Anh; năm 2 chữ số, `DATEDIF`, `TIME`, `NETWORKDAYS`, múi giờ chưa có; fill: một ngày +1 ngày, nhiều ngày cùng ngày-trong-tháng cách đều N tháng thì chạy theo tháng/năm, còn lại theo xu hướng số. `COUNTIF`/`SUMIF` và phép cộng trừ hiểu chuỗi ngày.
+- Data validation (đã làm): luật nằm trong style của ô (đi theo sort/dán/chèn xóa/undo/snapshot). Chỉ kiểm tra khi gõ vào ô; dán, fill, nhập CSV, công thức không bị chặn (ô sai chỉ bị đánh dấu góc đỏ). Chưa có: luật theo độ dài chữ, công thức tùy ý, danh sách lấy từ một vùng ô, checkbox, thông báo tùy chỉnh. Danh sách tối đa 500 mục. Luật chỉ gắn vào ô đã tồn tại khi chọn vùng rất lớn (như định dạng).
 - Công thức theo vị trí hiển thị khi sort.
 - Tính toán trong Web Worker cho bảng rất lớn. Đã đo (Node, 200k dòng × 2 cột công thức nối chuỗi phụ thuộc + 1 SUM 200k ô): nạp + `recalculateAll` ~0,9s một lần; sửa ô gốc làm tính lại cả 400k ô ~350ms; sửa ô cuối ~18ms. Chưa đáng làm Worker; xem lại nếu có bảng nhiều công thức hơn mức này.

@@ -22,6 +22,10 @@ export class GridController {
   /** Set by the host to open its "filter by values" dialog for a column, anchored at viewport coordinates. */
   /** Set by the host to show the Find / Replace panel (Mod+F, Mod+H). */
   onOpenFind: ((replace: boolean) => void) | null = null;
+  /** Set by the host to show the choices of a list cell (clicking its arrow, Alt+Down). */
+  onOpenList: ((viewRow: number, viewCol: number) => void) | null = null;
+  /** Set by the host to show its data validation dialog for the selection. */
+  onOpenValidation: (() => void) | null = null;
   onOpenFilter: ((viewCol: number, x: number, y: number) => void) | null = null;
   private readonly unsubscribe: Array<() => void> = [];
 
@@ -31,11 +35,11 @@ export class GridController {
     textarea: HTMLTextAreaElement,
   ) {
     this.editor = new EditorController(textarea, sheet, surface);
-    this.mouse = new MouseController({ sheet, surface, editor: this.editor });
+    this.mouse = new MouseController({ sheet, surface, editor: this.editor, openList: (r, c) => this.onOpenList?.(r, c) });
     this.clipboard = new ClipboardController(sheet, this.editor);
     this.painter = new FormatPainter(sheet, surface);
     this.find = new FindSession(sheet, surface);
-    this.keyboard = new KeyboardController({ sheet, surface, editor: this.editor, clipboard: this.clipboard, showShortcuts: () => this.onShowShortcuts?.(), openFind: (replace) => this.onOpenFind?.(replace) });
+    this.keyboard = new KeyboardController({ sheet, surface, editor: this.editor, clipboard: this.clipboard, showShortcuts: () => this.onShowShortcuts?.(), openFind: (replace) => this.onOpenFind?.(replace), openList: () => this.onOpenList?.(sheet.selection.activeRow, sheet.selection.activeCol) });
 
     surface.renderer.highlight = {
       isRowSelected: (r) => sheet.selection.isRowSelected(r),

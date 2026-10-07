@@ -1,3 +1,4 @@
+import { type Validation, canonicalValidation } from './validation';
 import { type Borders, BORDER_SIDES, canonicalBorder } from './borders';
 
 export type HorizontalAlign = 'left' | 'center' | 'right';
@@ -22,6 +23,8 @@ export interface Style {
   readonly valign?: VerticalAlign;
   /** Lines around the cell. Each side stands on its own; adjacent cells can both draw the edge between them. */
   readonly borders?: Borders;
+  /** Which input the cell accepts. */
+  readonly validation?: Validation;
 }
 
 export const DEFAULT_STYLE_ID = 0;
@@ -38,6 +41,7 @@ const EMPTY_STYLE: Style = Object.freeze({});
 
 // Nested borders must have a fixed key order for the intern key to be a function of their content.
 function normalize(style: Style): Style {
+  if (style.validation !== undefined) style = { ...style, validation: canonicalValidation(style.validation) };
   const borders = style.borders;
   if (borders === undefined) return style;
   const next: { -readonly [K in keyof Borders]: Borders[K] } = {};

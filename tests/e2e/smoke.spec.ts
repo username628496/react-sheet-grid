@@ -173,6 +173,34 @@ test.describe('SheetGrid (the host-facing component)', () => {
     expect(await read()).toEqual({ value: 46302, text: '7 Oct 2026' });
   });
 
+  test('data validation: the dialog sets a list, bad input is rejected, the dropdown picks a value', async ({ page }) => {
+    await open(page);
+    const cell = (): Promise<unknown> => page.evaluate(() => (window as unknown as { __handle: Handle }).__handle.sheet.getCellByView(0, 0).value);
+    await page.evaluate(() => (window as unknown as { __handle: Handle }).__handle.sheet.selection.selectCell(0, 0));
+    await page.getByRole('button', { name: 'Data validation' }).click();
+    const dialog = page.getByTestId('validation-dialog');
+    await expect(dialog).toBeVisible();
+    await dialog.getByLabel('Items', { exact: true }).fill('Open, Done');
+    await dialog.getByRole('button', { name: 'Save' }).click();
+    await expect(dialog).toBeHidden();
+
+    // Typing something that is not on the list is refused with a message; the cell stays empty.
+    await page.getByTestId('grid').click({ position: { x: 80, y: 30 } });
+    await page.keyboard.type('Nope');
+    await page.keyboard.press('Enter');
+    await expect(page.getByRole('status').filter({ hasText: 'not allowed' })).toBeVisible();
+    expect(await cell()).toBeNull();
+
+    // Alt+Down opens the list; Enter picks the first entry.
+    await page.evaluate(() => (window as unknown as { __handle: Handle }).__handle.sheet.selection.selectCell(0, 0));
+    await page.getByTestId('grid').click({ position: { x: 80, y: 30 } });
+    await page.keyboard.press('Alt+ArrowDown');
+    const menu = page.getByTestId('list-menu');
+    await expect(menu).toBeVisible();
+    await menu.getByRole('menuitemradio', { name: 'Done' }).click();
+    expect(await cell()).toBe('Done');
+  });
+
   test('onChange is batched, carries a snapshot, ignores selection, and sees freezing', async ({ page }) => {
     await open(page);
     await page.evaluate(() => {

@@ -35,6 +35,7 @@ const PATHS: Record<string, string[]> = {
   valign: ['M4 4h16', 'M4 20h16', 'M12 8v8', 'm9 11 3-3 3 3', 'm9 13 3 3 3-3'],
   borders: ['M4 4h16v16H4z', 'M4 12h16', 'M12 4v16'],
   borderColor: ['M12 20h9', 'M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4Z'],
+  validation: ['M4 5h16v14H4z', 'M9 12l2.2 2.2L15.5 9.5'],
   sigma: ['M18 5H6l6.5 7L6 19h12'],
 };
 

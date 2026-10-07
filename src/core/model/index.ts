@@ -7,3 +7,4 @@ export * from './parseInput';
 export * from './font';
 export * from './borders';
 export * from './dates';
+export * from './validation';

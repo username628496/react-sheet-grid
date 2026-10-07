@@ -1,3 +1,5 @@
+import { formatDate } from '../core/model/dates';
+import type { Comparison, Validation } from '../core/model/validation';
 export type Locale = 'en' | 'vi';
 
 export interface ShortcutGroup {
@@ -94,6 +96,25 @@ export interface Messages {
   formatDate: (example: string) => string;
   formatTime: (example: string) => string;
   formatDateTime: (example: string) => string;
+  dataValidation: string;
+  validationCriteria: string;
+  validationList: string;
+  validationNumber: string;
+  validationDate: string;
+  validationItems: string;
+  validationItemsHint: string;
+  validationValue: string;
+  validationValueTo: string;
+  validationReject: string;
+  validationWarn: string;
+  validationRemove: string;
+  validationSave: string;
+  validationNoItems: string;
+  validationBadValue: string;
+  validationApplyTo: (range: string) => string;
+  validationRejected: (rule: string) => string;
+  validationComparison: Record<Comparison, string>;
+  describeValidation: (rule: Validation) => string;
   insert: string;
   delete: string;
   freeze: string;
@@ -193,6 +214,21 @@ export interface Messages {
 
 const plural = (n: number, one: string, many: string): string => `${n} ${n === 1 ? one : many}`;
 
+interface RuleWords {
+  list: string;
+  number: string;
+  date: string;
+  and: string;
+}
+
+/** One line saying what a rule allows, for the "input rejected" message. */
+function describeRule(rule: Validation, comparison: Record<Comparison, string>, words: RuleWords): string {
+  if (rule.kind === 'list') return `${words.list}: ${rule.items.join(', ')}.`;
+  const show = (n: number): string => (rule.kind === 'date' ? formatDate(n, 'yyyy-mm-dd') : String(n));
+  const bounds = rule.b === undefined ? show(rule.a) : `${show(rule.a)} ${words.and} ${show(rule.b)}`;
+  return `${rule.kind === 'date' ? words.date : words.number} ${comparison[rule.op]} ${bounds}.`;
+}
+
 const en: Messages = {
   a11yLabel: 'Spreadsheet',
   a11yRoleDescription: 'spreadsheet',
@@ -276,6 +312,34 @@ const en: Messages = {
   formatDate: (example) => `Date (${example})`,
   formatTime: (example) => `Time (${example})`,
   formatDateTime: (example) => `Date time (${example})`,
+  dataValidation: 'Data validation',
+  validationCriteria: 'Criteria',
+  validationList: 'List of items',
+  validationNumber: 'Number',
+  validationDate: 'Date',
+  validationItems: 'Items',
+  validationItemsHint: 'Separate items with commas or new lines',
+  validationValue: 'Value',
+  validationValueTo: 'and',
+  validationReject: 'Reject the input',
+  validationWarn: 'Show a warning (accept the input)',
+  validationRemove: 'Remove validation',
+  validationSave: 'Save',
+  validationNoItems: 'Enter at least one item.',
+  validationBadValue: 'Enter valid values.',
+  validationApplyTo: (range) => `Applies to ${range}`,
+  validationRejected: (rule) => `That input is not allowed here. ${rule}`,
+  validationComparison: {
+    between: 'is between',
+    notBetween: 'is not between',
+    eq: 'is equal to',
+    neq: 'is not equal to',
+    gt: 'is greater than',
+    gte: 'is greater than or equal to',
+    lt: 'is less than',
+    lte: 'is less than or equal to',
+  },
+  describeValidation: (rule) => describeRule(rule, en.validationComparison, { list: 'Allowed values', number: 'Number', date: 'Date', and: 'and' }),
   insert: 'Insert',
   delete: 'Delete',
   freeze: 'Freeze',
@@ -511,6 +575,34 @@ const vi: Messages = {
   formatDate: (example) => `Ngày (${example})`,
   formatTime: (example) => `Giờ (${example})`,
   formatDateTime: (example) => `Ngày giờ (${example})`,
+  dataValidation: 'Xác thực dữ liệu',
+  validationCriteria: 'Tiêu chí',
+  validationList: 'Danh sách mục',
+  validationNumber: 'Số',
+  validationDate: 'Ngày',
+  validationItems: 'Các mục',
+  validationItemsHint: 'Ngăn cách các mục bằng dấu phẩy hoặc xuống dòng',
+  validationValue: 'Giá trị',
+  validationValueTo: 'và',
+  validationReject: 'Từ chối dữ liệu nhập',
+  validationWarn: 'Hiện cảnh báo (vẫn nhận dữ liệu)',
+  validationRemove: 'Xóa xác thực',
+  validationSave: 'Lưu',
+  validationNoItems: 'Hãy nhập ít nhất một mục.',
+  validationBadValue: 'Hãy nhập giá trị hợp lệ.',
+  validationApplyTo: (range) => `Áp dụng cho ${range}`,
+  validationRejected: (rule) => `Dữ liệu này không được phép ở ô này. ${rule}`,
+  validationComparison: {
+    between: 'nằm giữa',
+    notBetween: 'không nằm giữa',
+    eq: 'bằng',
+    neq: 'khác',
+    gt: 'lớn hơn',
+    gte: 'lớn hơn hoặc bằng',
+    lt: 'nhỏ hơn',
+    lte: 'nhỏ hơn hoặc bằng',
+  },
+  describeValidation: (rule) => describeRule(rule, vi.validationComparison, { list: 'Giá trị cho phép', number: 'Số', date: 'Ngày', and: 'và' }),
   insert: 'Chèn',
   delete: 'Xóa',
   freeze: 'Cố định',
