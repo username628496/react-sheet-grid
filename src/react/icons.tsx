@@ -36,6 +36,7 @@ const PATHS: Record<string, string[]> = {
   borders: ['M4 4h16v16H4z', 'M4 12h16', 'M12 4v16'],
   borderColor: ['M12 20h9', 'M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4Z'],
   validation: ['M4 5h16v14H4z', 'M9 12l2.2 2.2L15.5 9.5'],
+  conditional: ['M4 4h7v7H4z', 'M13 13h7v7h-7z', 'M13 4h7v7h-7z', 'M4 13h7v7H4z'],
   sigma: ['M18 5H6l6.5 7L6 19h12'],
 };
 

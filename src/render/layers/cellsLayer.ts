@@ -3,6 +3,7 @@ import { wrapLines } from '../../core/layout/wrap';
 import { BORDER_SIDES, type Borders } from '../../core/model/borders';
 import { DEFAULT_STYLE_ID, type Style, type VerticalAlign } from '../../core/model/StyleTable';
 import type { CellValue } from '../../core/model/Cell';
+import { firstMatchingRule } from '../../core/model/conditional';
 import { type Validation, isValid } from '../../core/model/validation';
 import { defaultAlign, formatValue } from '../../core/model/format';
 import type { Spreadsheet } from '../../core/Spreadsheet';
@@ -43,15 +44,12 @@ export function drawCellBackgrounds(
       const w = cols.getSize(c);
       const cell = model.getCell(dataRow, mapping.toDataCol(c));
       if (cell.styleId !== DEFAULT_STYLE_ID) {
-        const bg = styles.get(cell.styleId).background;
+        const style = styles.get(cell.styleId);
+        const bg = style.conditional === undefined ? style.background : (firstMatchingRule(style.conditional, cell.value)?.background ?? style.background);
         if (bg !== undefined) {
           ctx.fillStyle = bg;
           ctx.fillRect(x, y, w, h);
         }
-      }
-      if (cell.styleId !== DEFAULT_STYLE_ID && w > 0 && h > 0) {
-        const rule = styles.get(cell.styleId).validation;
-        if (rule !== undefined) drawValidationMarks(ctx, rule, cell.value, x, y, w, h);
       }
       x += w;
     }
@@ -200,7 +198,8 @@ export function drawCellText(
         const available = w - pad * 2;
         const align = style.align ?? defaultAlign(cell.value);
         ctx.font = font;
-        ctx.fillStyle = style.color ?? theme.text;
+        const color = style.conditional === undefined ? style.color : (firstMatchingRule(style.conditional, cell.value)?.color ?? style.color);
+        ctx.fillStyle = color ?? theme.text;
 
         if (style.wrap === 'wrap' && typeof cell.value === 'string') {
           // Wrapped text: several lines inside the cell, clipped to it. Numbers never wrap.
@@ -244,13 +243,17 @@ export function drawCellText(
           if (textWidth > available && !spills) tx = x + pad;
           if (extra !== null && (extra.left > 0 || extra.right > 0)) {
             eraseSpillLines(ctx, sheet, dataRow, c, x, y, w, h, tx, tx + textWidth, extra);
-            ctx.fillStyle = style.color ?? theme.text;
+            ctx.fillStyle = color ?? theme.text;
           }
           const cy = lineCentre(y, h, lh, style.valign);
           ctx.fillText(text, tx, cy + 0.5);
           drawDecorations(ctx, style, tx, Math.round(cy), spills ? textWidth : Math.min(textWidth, available), size);
           if (clipped) ctx.restore();
         }
+      }
+      if (cell.styleId !== DEFAULT_STYLE_ID && w > 0 && h > 0) {
+        const rule = styles.get(cell.styleId).validation;
+        if (rule !== undefined) drawValidationMarks(ctx, rule, cell.value, x, y, w, h);
       }
       x += w;
     }
@@ -281,7 +284,9 @@ function eraseSpillLines(
   const height = Math.floor(y + h) - 1 - top; // the bottom pixel row is the horizontal grid line
   const hasBackground = (c: number): boolean => {
     const id = model.getCell(dataRow, mapping.toDataCol(c)).styleId;
-    return id !== DEFAULT_STYLE_ID && styles.get(id).background !== undefined;
+    if (id === DEFAULT_STYLE_ID) return false;
+    const st = styles.get(id);
+    return st.background !== undefined || (st.conditional !== undefined && firstMatchingRule(st.conditional, model.getCell(dataRow, mapping.toDataCol(c)).value)?.background !== undefined);
   };
   ctx.fillStyle = theme.background;
   if (hasBackground(viewCol)) return;

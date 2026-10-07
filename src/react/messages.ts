@@ -1,4 +1,5 @@
 import { formatDate } from '../core/model/dates';
+import type { TextOp } from '../core/model/conditional';
 import type { Comparison, Validation } from '../core/model/validation';
 export type Locale = 'en' | 'vi';
 
@@ -115,6 +116,15 @@ export interface Messages {
   validationRejected: (rule: string) => string;
   validationComparison: Record<Comparison, string>;
   describeValidation: (rule: Validation) => string;
+  conditionalFormatting: string;
+  cfAddRule: string;
+  cfRemoveRule: string;
+  cfTextColor: string;
+  cfBackground: string;
+  cfBlank: string;
+  cfNotBlank: string;
+  cfNoRules: string;
+  cfText: Record<TextOp, string>;
   insert: string;
   delete: string;
   freeze: string;
@@ -340,6 +350,15 @@ const en: Messages = {
     lte: 'is less than or equal to',
   },
   describeValidation: (rule) => describeRule(rule, en.validationComparison, { list: 'Allowed values', number: 'Number', date: 'Date', and: 'and' }),
+  conditionalFormatting: 'Conditional formatting',
+  cfAddRule: 'Add rule',
+  cfRemoveRule: 'Remove rule',
+  cfTextColor: 'Text color',
+  cfBackground: 'Fill',
+  cfBlank: 'Cell is empty',
+  cfNotBlank: 'Cell is not empty',
+  cfNoRules: 'No rules yet. The first matching rule wins.',
+  cfText: { contains: 'Text contains', notContains: 'Text does not contain', startsWith: 'Text starts with', endsWith: 'Text ends with', eq: 'Text is exactly' },
   insert: 'Insert',
   delete: 'Delete',
   freeze: 'Freeze',
@@ -603,6 +622,15 @@ const vi: Messages = {
     lte: 'nhỏ hơn hoặc bằng',
   },
   describeValidation: (rule) => describeRule(rule, vi.validationComparison, { list: 'Giá trị cho phép', number: 'Số', date: 'Ngày', and: 'và' }),
+  conditionalFormatting: 'Định dạng có điều kiện',
+  cfAddRule: 'Thêm luật',
+  cfRemoveRule: 'Xóa luật',
+  cfTextColor: 'Màu chữ',
+  cfBackground: 'Màu nền',
+  cfBlank: 'Ô trống',
+  cfNotBlank: 'Ô không trống',
+  cfNoRules: 'Chưa có luật nào. Luật khớp đầu tiên được áp dụng.',
+  cfText: { contains: 'Chữ chứa', notContains: 'Chữ không chứa', startsWith: 'Chữ bắt đầu bằng', endsWith: 'Chữ kết thúc bằng', eq: 'Chữ đúng bằng' },
   insert: 'Chèn',
   delete: 'Xóa',
   freeze: 'Cố định',

@@ -6,6 +6,7 @@ import { isCellError } from './model/Cell';
 import { MAX_COLS, MAX_ROWS } from './model/SheetModel';
 import { type Border, type Borders, BORDER_SIDES, isBorder } from './model/borders';
 import { clampFontSize } from './model/font';
+import { readConditionalRules } from './model/conditional';
 import { readValidation } from './model/validation';
 import type { HorizontalAlign, Style, TextWrap, VerticalAlign } from './model/StyleTable';
 
@@ -182,6 +183,8 @@ function readStyle(v: unknown): Style {
   if (typeof s.fontSize === 'number' && Number.isFinite(s.fontSize)) out.fontSize = clampFontSize(s.fontSize);
   if (typeof s.wrap === 'string' && WRAPS.has(s.wrap)) out.wrap = s.wrap as TextWrap;
   if (typeof s.valign === 'string' && VALIGNS.has(s.valign)) out.valign = s.valign as VerticalAlign;
+  const conditional = readConditionalRules(s.conditional);
+  if (conditional.length > 0) out.conditional = conditional;
   const validation = readValidation(s.validation);
   if (validation !== null) out.validation = validation;
   if (typeof s.borders === 'object' && s.borders !== null) {

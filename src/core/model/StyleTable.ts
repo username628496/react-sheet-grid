@@ -1,3 +1,4 @@
+import { type ConditionalRule, canonicalRules } from './conditional';
 import { type Validation, canonicalValidation } from './validation';
 import { type Borders, BORDER_SIDES, canonicalBorder } from './borders';
 
@@ -25,6 +26,8 @@ export interface Style {
   readonly borders?: Borders;
   /** Which input the cell accepts. */
   readonly validation?: Validation;
+  /** Colors that apply while a condition on the cell's value holds; the first matching rule wins. */
+  readonly conditional?: readonly ConditionalRule[];
 }
 
 export const DEFAULT_STYLE_ID = 0;
@@ -42,6 +45,7 @@ const EMPTY_STYLE: Style = Object.freeze({});
 // Nested borders must have a fixed key order for the intern key to be a function of their content.
 function normalize(style: Style): Style {
   if (style.validation !== undefined) style = { ...style, validation: canonicalValidation(style.validation) };
+  if (style.conditional !== undefined) style = { ...style, conditional: style.conditional.length === 0 ? undefined : canonicalRules(style.conditional) };
   const borders = style.borders;
   if (borders === undefined) return style;
   const next: { -readonly [K in keyof Borders]: Borders[K] } = {};

@@ -10,6 +10,7 @@ and the project follows [Semantic Versioning](https://semver.org/). Before 1.0.0
 - Date formats (`yyyy-mm-dd`, `dd/mm/yyyy`, `d mmm yyyy`, `hh:mm`, ...) in the "More formats" menu; `dateOrder` prop (`'dmy'` default, `'mdy'`) decides how `3/4/2026` reads.
 - Fill series for dates (daily, monthly, yearly); `COUNTIF`/`SUMIF` criteria and arithmetic accept date text.
 - Data validation: dropdown lists, number and date rules, reject or warn; dialog (toolbar, context menu), red corner on invalid cells, dropdown arrow and Alt+Down for lists; `sheet.setValidation`, `sheet.isInvalid`; `setCellInput` now returns whether the edit was accepted; new notice `validationRejected`. Rules live in the cell style, so they follow sort, copy/paste, insert/delete and snapshots.
+- Conditional formatting: rules on number/date/text/blank conditions set the text or fill color (first match wins, up to 8 per cell); dialog from toolbar and context menu; `sheet.setConditionalRules`. Rules live in the cell style like validation.
 - Functions: `TODAY`, `NOW`, `DATE`, `DATEVALUE`, `YEAR`, `MONTH`, `DAY`, `HOUR`, `MINUTE`, `SECOND`, `WEEKDAY`, `EDATE`, `EOMONTH`, `DAYS`.
 
 ## [0.2.0] - 2026-10-06

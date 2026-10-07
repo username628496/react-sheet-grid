@@ -26,6 +26,8 @@ export class GridController {
   onOpenList: ((viewRow: number, viewCol: number) => void) | null = null;
   /** Set by the host to show its data validation dialog for the selection. */
   onOpenValidation: (() => void) | null = null;
+  /** Set by the host to show its conditional formatting dialog for the selection. */
+  onOpenConditional: (() => void) | null = null;
   onOpenFilter: ((viewCol: number, x: number, y: number) => void) | null = null;
   private readonly unsubscribe: Array<() => void> = [];
 

@@ -35,6 +35,7 @@ import type { Cell, CellValue } from './model/Cell';
 import { CELL_HORIZONTAL_PADDING, CELL_VERTICAL_PADDING, DEFAULT_FONT_SIZE, fontString, lineHeightFor, stepFontSize } from './model/font';
 import { formatValue, shiftDecimals } from './model/format';
 import { wrapLines } from './layout/wrap';
+import { type ConditionalRule, MAX_CONDITIONAL_RULES } from './model/conditional';
 import { type Validation, isValid } from './model/validation';
 import { parseInput, parseTypedInput } from './model/parseInput';
 import { DATE_FORMAT, DATE_TIME_FORMAT, type DateOrder, dateEditText, isDateFormat, parseDateInput } from './model/dates';
@@ -393,6 +394,11 @@ export class Spreadsheet {
   /** Sets (or with null removes) the validation rule of the selected cells. */
   setValidation(rule: Validation | null): void {
     this.formatSelection({ validation: rule ?? undefined }, 'Data validation');
+  }
+
+  /** Sets (or with an empty list removes) the conditional formatting rules of the selected cells. */
+  setConditionalRules(rules: readonly ConditionalRule[]): void {
+    this.formatSelection({ conditional: rules.length === 0 ? undefined : rules.slice(0, MAX_CONDITIONAL_RULES) }, 'Conditional formatting');
   }
 
   /** Whether the cell's value breaks its own rule (what the red corner marks); false when it has no rule. */

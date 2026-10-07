@@ -2054,3 +2054,54 @@ test.describe('cell borders', () => {
     await expect(page.getByRole('button', { name: 'Border color' })).toBeDisabled();
   });
 });
+
+test.describe('conditional formatting', () => {
+  const center = (row: number, col: number): Promise<number[]> => page_pixel(row, col);
+  let page_pixel: (row: number, col: number) => Promise<number[]>;
+
+  test.beforeEach(async ({ page }) => {
+    await page.goto('/demo/');
+    await page.waitForFunction(() => window.__grid !== undefined);
+    // Near the cell's left edge, away from glyphs and the selection outline.
+    page_pixel = (row, col) =>
+      page.evaluate(
+        async ([r, c]) => {
+          await new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)));
+          const g = window.__grid!;
+          const vp = g.surface.viewport;
+          const canvas = document.querySelector('[data-testid=grid] canvas') as HTMLCanvasElement;
+          const dpr = window.devicePixelRatio || 1;
+          const x = Math.floor((vp.colLeft(c as number) + 6) * dpr);
+          const y = Math.floor((vp.rowTop(r as number) + 4) * dpr);
+          return Array.from(canvas.getContext('2d')!.getImageData(x, y, 1, 1).data);
+        },
+        [row, col],
+      );
+  });
+
+  test('the dialog adds a rule and cells recolor as their value changes', async ({ page }) => {
+    await page.evaluate(() => {
+      const s = window.__sheet!;
+      s.setCellInput(0, 0, '5');
+      s.setCellInput(1, 0, '-5');
+      s.selection.selectCell(5, 5);
+      s.selection.selectCell(0, 0);
+      s.selection.extendTo(1, 0);
+    });
+    await page.getByRole('button', { name: 'Conditional formatting' }).click();
+    const dialog = page.getByTestId('conditional-dialog');
+    await dialog.getByRole('button', { name: 'Add rule' }).click();
+    await dialog.getByLabel('Criteria', { exact: true }).selectOption('number:lt');
+    await dialog.getByLabel('Value', { exact: true }).fill('0');
+    await dialog.getByRole('button', { name: 'Save' }).click();
+    await expect(dialog).toBeHidden();
+    await page.evaluate(() => window.__sheet!.selection.selectCell(5, 5)); // the selection tint would blend into the sample
+
+    expect((await center(1, 0)).slice(0, 3)).toEqual([0xf4, 0xc7, 0xc3]);
+    expect((await center(0, 0)).slice(0, 3)).toEqual([255, 255, 255]);
+    await page.evaluate(() => window.__sheet!.setCellInput(0, 0, '-1'));
+    expect((await center(0, 0)).slice(0, 3)).toEqual([0xf4, 0xc7, 0xc3]);
+    await page.evaluate(() => window.__sheet!.setCellInput(1, 0, '9'));
+    expect((await center(1, 0)).slice(0, 3)).toEqual([255, 255, 255]);
+  });
+});

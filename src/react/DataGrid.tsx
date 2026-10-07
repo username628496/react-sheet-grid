@@ -11,6 +11,7 @@ import { useMessages, useTheme } from './GridProvider';
 import { ContextMenu } from './ContextMenu';
 import { FilterDialog } from './FilterDialog';
 import { Menu, type MenuEntry } from './Menu';
+import { ConditionalDialog } from './ConditionalDialog';
 import { ValidationDialog } from './ValidationDialog';
 import { FindDialog } from './FindDialog';
 import { ShortcutsDialog } from './ShortcutsDialog';
@@ -48,6 +49,7 @@ export function DataGrid({ sheet, frozenRows, frozenCols, className, style, zoom
   const [help, setHelp] = useState(false);
   const [list, setList] = useState<{ row: number; col: number; x: number; y: number } | null>(null);
   const [validation, setValidation] = useState(false);
+  const [conditional, setConditional] = useState(false);
   const [find, setFind] = useState<{ anchor: DOMRect; token: number } | null>(null);
   const closeHelp = useCallback(() => {
     setHelp(false);
@@ -111,6 +113,7 @@ export function DataGrid({ sheet, frozenRows, frozenCols, className, style, zoom
     ctrl.onShowShortcuts = () => setHelp(true);
     ctrl.onOpenFilter = (col, x, y) => setFilter({ col, x, y });
     ctrl.onOpenValidation = () => setValidation(true);
+    ctrl.onOpenConditional = () => setConditional(true);
     ctrl.onOpenList = (row, col) => {
       if (sheet.readOnly || sheet.styles.get(sheet.getCellByView(row, col).styleId).validation?.kind !== 'list') return;
       ctrl.editor.commit();
@@ -134,6 +137,7 @@ export function DataGrid({ sheet, frozenRows, frozenCols, className, style, zoom
       setFind(null);
       setList(null);
       setValidation(false);
+      setConditional(false);
     };
     // onReady is intentionally not a dependency: a new callback identity must not rebuild the grid.
   }, [sheet, frozenRows, frozenCols]);
@@ -197,6 +201,15 @@ export function DataGrid({ sheet, frozenRows, frozenCols, className, style, zoom
           sheet={sheet}
           onClose={() => {
             setValidation(false);
+            editorRef.current?.focus({ preventScroll: true });
+          }}
+        />
+      )}
+      {conditional && (
+        <ConditionalDialog
+          sheet={sheet}
+          onClose={() => {
+            setConditional(false);
             editorRef.current?.focus({ preventScroll: true });
           }}
         />
