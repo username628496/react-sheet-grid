@@ -1274,7 +1274,7 @@ export class Spreadsheet {
     const area = (source.endRow - source.startRow + 1) * (source.endCol - source.startCol + 1);
     if (area > MAX_TILED_CELLS || area * lines > 4 * MAX_TILED_CELLS) return null;
     const read = this.readCells(source).cells;
-    const filled = fillCells(read, direction, lines);
+    const filled = fillCells(read, direction, lines, (id) => isDateFormat(this.styles.get(id).numberFormat));
 
     const changes: CellChange[] = [];
     for (let k = 0; k < lines; k++) {

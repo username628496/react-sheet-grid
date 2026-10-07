@@ -8,6 +8,7 @@ and the project follows [Semantic Versioning](https://semver.org/). Before 1.0.0
 ### Added
 - Real dates and times: typed `2026-10-07`, `7/10/2026` or `14:30` become date serials (days since 1899-12-30, like Sheets/Excel) with a date format, so sorting, filtering, arithmetic and the fill series work on them.
 - Date formats (`yyyy-mm-dd`, `dd/mm/yyyy`, `d mmm yyyy`, `hh:mm`, ...) in the "More formats" menu; `dateOrder` prop (`'dmy'` default, `'mdy'`) decides how `3/4/2026` reads.
+- Fill series for dates (daily, monthly, yearly); `COUNTIF`/`SUMIF` criteria and arithmetic accept date text.
 - Functions: `TODAY`, `NOW`, `DATE`, `DATEVALUE`, `YEAR`, `MONTH`, `DAY`, `HOUR`, `MINUTE`, `SECOND`, `WEEKDAY`, `EDATE`, `EOMONTH`, `DAYS`.
 
 ## [0.2.0] - 2026-10-06

@@ -1,5 +1,6 @@
 import type { CellError, CellValue, ErrorCode } from '../../core/model/Cell';
 import { isCellError } from '../../core/model/Cell';
+import { parseDateInput } from '../../core/model/dates';
 import type { SheetModel } from '../../core/model/SheetModel';
 
 /** What a formula evaluates to. null is an empty cell. */
@@ -57,7 +58,10 @@ export function toNumber(v: Value): number | CellError {
   if (isCellError(v)) return v;
   // Sheets treats an empty string as 0 in arithmetic.
   if (v.trim() === '') return 0;
-  return NUMERIC_TEXT.test(v) ? Number(v) : err('#VALUE!');
+  if (NUMERIC_TEXT.test(v)) return Number(v);
+  // Text that reads as a date or time works in arithmetic, as in Sheets ("2026-01-01" + 1).
+  const date = parseDateInput(v);
+  return date === null ? err('#VALUE!') : date.serial;
 }
 
 export function toText(v: Value): string | CellError {

@@ -1,4 +1,5 @@
 import type { Cell } from './model/Cell';
+import { daysInMonth, fromSerial, inDateRange, toSerial } from './model/dates';
 
 export type FillDirection = 'down' | 'up' | 'left' | 'right';
 
@@ -42,6 +43,29 @@ function numberSeries(lane: readonly Cell[]): Series | null {
   return (j, styleId) => ({ value: clean(base + step * j), styleId });
 }
 
+/**
+ * Dates: one date steps a day; several dates that fall on the same day of the month, a whole number of months apart
+ * (1 Jan, 1 Feb; or yearly), continue by months, clamped to short months; otherwise the numeric trend applies.
+ */
+function dateSeries(lane: readonly Cell[], isDateStyle: (styleId: number) => boolean): Series | null {
+  if (!lane.every((c) => c.formula === undefined && typeof c.value === 'number' && isDateStyle(c.styleId) && inDateRange(c.value))) return null;
+  const serials = lane.map((c) => c.value as number);
+  if (serials.length === 1) return (j, styleId) => ({ value: (serials[0] as number) + j, styleId });
+  const parts = serials.map((s) => ({ ...fromSerial(s), time: s - Math.floor(s) }));
+  const first = parts[0] as (typeof parts)[number];
+  const index = (p: (typeof parts)[number]): number => p.year * 12 + p.month - 1;
+  const monthStep = index(parts[1] as (typeof parts)[number]) - index(first);
+  const monthly = monthStep !== 0 && parts.every((p, i) => p.day === first.day && p.time === first.time && index(p) - index(first) === monthStep * i);
+  if (!monthly) return null;
+  return (j, styleId) => {
+    const total = index(first) + monthStep * j;
+    const year = Math.floor(total / 12);
+    const month = (total % 12) + 1;
+    const serial = toSerial(year, month, Math.min(first.day, daysInMonth(year, month))) + first.time;
+    return inDateRange(serial) ? { value: serial, styleId } : null;
+  };
+}
+
 // "Item 1", "Item 2" -> "Item 3". Even a single such cell is incremented, as in Sheets.
 function textSeries(lane: readonly Cell[]): Series | null {
   const parts: Array<{ prefix: string; digits: string }> = [];
@@ -75,7 +99,12 @@ function textSeries(lane: readonly Cell[]): Series | null {
  * Formulas are copied as-is; because their references are relative they
  * adapt to the destination automatically.
  */
-export function fillCells(source: readonly (readonly Cell[])[], direction: FillDirection, count: number): Cell[][] {
+export function fillCells(
+  source: readonly (readonly Cell[])[],
+  direction: FillDirection,
+  count: number,
+  isDateStyle: (styleId: number) => boolean = () => false,
+): Cell[][] {
   const vertical = direction === 'down' || direction === 'up';
   const forward = direction === 'down' || direction === 'right';
   const lanes = vertical ? (source[0]?.length ?? 0) : source.length;
@@ -85,7 +114,7 @@ export function fillCells(source: readonly (readonly Cell[])[], direction: FillD
   for (let lane = 0; lane < lanes; lane++) {
     const cells: Cell[] = [];
     for (let i = 0; i < n; i++) cells.push((vertical ? source[i]?.[lane] : source[lane]?.[i]) as Cell);
-    const series = numberSeries(cells) ?? textSeries(cells);
+    const series = dateSeries(cells, isDateStyle) ?? numberSeries(cells) ?? textSeries(cells);
     for (let k = 0; k < count; k++) {
       // Position along the lane relative to the first source cell: after the end going forward, before the start going back.
       const j = forward ? n + k : -1 - k;

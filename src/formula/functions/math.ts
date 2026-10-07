@@ -1,5 +1,5 @@
 import { isCellError } from '../../core/model/Cell';
-import { parseInput } from '../../core/model/parseInput';
+import { parseTypedInput } from '../../core/model/parseInput';
 import {
   type Arg,
   collectNumbers,
@@ -114,7 +114,7 @@ export function makeCriterion(criterion: Value): Criterion {
     const m = /^(>=|<=|<>|>|<|=)?([\s\S]*)$/.exec(criterion) as RegExpExecArray;
     relation = (m[1] ?? '=') as Relation;
     const text = m[2] as string;
-    operand = text === '' ? '' : parseInput(text);
+    operand = text === '' ? '' : parseTypedInput(text).value;
   }
   const blankOperand = operand === '' || operand === null;
   const compare = (c: number): boolean => {

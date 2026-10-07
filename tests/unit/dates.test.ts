@@ -244,3 +244,51 @@ describe('date functions', () => {
     expect(s.getDisplayText(0, 2)).toBe('46303'); // only a leading date function is recognized
   });
 });
+
+describe('dates in fill, criteria and arithmetic', () => {
+  const isDate = (id: number): boolean => id === 1;
+  const d = (y: number, m: number, day: number) => ({ value: toSerial(y, m, day), styleId: 1 });
+  const col = (...cells: Array<{ value: number; styleId: number }>) => cells.map((c) => [c]);
+  const values = (m: Array<Array<{ value: unknown }> | undefined>): unknown[] => m.map((r) => r?.[0]?.value);
+
+  it('one date steps a day, going back as well', () => {
+    expect(values(fillCells(col(d(2026, 2, 27)), 'down', 3, isDate))).toEqual([toSerial(2026, 2, 28), toSerial(2026, 3, 1), toSerial(2026, 3, 2)]);
+    expect(values(fillCells(col(d(2026, 3, 1)), 'up', 2, isDate))).toEqual([toSerial(2026, 2, 28), toSerial(2026, 2, 27)]);
+  });
+
+  it('dates one month or one year apart continue by months and years', () => {
+    // Different days of the month (31 and 28) are not a month series: the plain 28-day trend continues.
+    expect(values(fillCells(col(d(2026, 1, 31), d(2026, 2, 28)), 'down', 2, isDate))).toEqual([toSerial(2026, 3, 28), toSerial(2026, 4, 25)]);
+    expect(values(fillCells(col(d(2026, 1, 15), d(2026, 2, 15)), 'down', 3, isDate))).toEqual([toSerial(2026, 3, 15), toSerial(2026, 4, 15), toSerial(2026, 5, 15)]);
+    expect(values(fillCells(col(d(2025, 6, 1), d(2026, 6, 1)), 'down', 2, isDate))).toEqual([toSerial(2027, 6, 1), toSerial(2028, 6, 1)]);
+    expect(values(fillCells(col(d(2026, 1, 15), d(2026, 2, 15)), 'up', 2, isDate))).toEqual([toSerial(2025, 12, 15), toSerial(2025, 11, 15)]);
+  });
+
+  it('month series clamps to short months using the first date', () => {
+    expect(values(fillCells(col(d(2026, 1, 31), d(2026, 2, 28)), 'down', 1, isDate))[0]).toBe(toSerial(2026, 3, 28));
+    expect(values(fillCells(col(d(2026, 1, 31), d(2026, 3, 31)), 'down', 2, isDate))).toEqual([toSerial(2026, 5, 31), toSerial(2026, 7, 31)]);
+  });
+
+  it('other date runs keep the numeric trend; non-date numbers are untouched', () => {
+    expect(values(fillCells(col(d(2026, 1, 1), d(2026, 1, 8)), 'down', 2, isDate))).toEqual([toSerial(2026, 1, 15), toSerial(2026, 1, 22)]);
+    expect(values(fillCells([[{ value: 5, styleId: 0 }]], 'down', 2, isDate))).toEqual([5, 5]);
+  });
+
+  it('the fill handle path applies it', () => {
+    const s = makeSheet({ A1: '2026-01-15', A2: '2026-02-15' });
+    s.fillRange({ startRow: 0, endRow: 1, startCol: 0, endCol: 0 }, 'down', 2);
+    expect([2, 3].map((r) => s.getDisplayText(r, 0))).toEqual(['2026-03-15', '2026-04-15']);
+  });
+
+  it('COUNTIF and SUMIF criteria understand dates', () => {
+    const cells = { A1: '2026-01-01', A2: '2026-06-01', A3: '2026-12-01', B1: 1, B2: 2, B3: 4 };
+    expect(calc('=COUNTIF(A1:A3,">2026-03-01")', cells)).toBe(2);
+    expect(calc('=COUNTIF(A1:A3,"2026-06-01")', cells)).toBe(1);
+    expect(calc('=SUMIF(A1:A3,"<=2026-06-01",B1:B3)', cells)).toBe(3);
+  });
+
+  it('text dates work in arithmetic', () => {
+    expect(calc('="2026-01-01"+1')).toBe(toSerial(2026, 1, 2));
+    expect(calc('=DAYS("2026-03-01","2026-01-01")')).toBe(59);
+  });
+});
