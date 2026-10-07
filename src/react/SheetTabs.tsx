@@ -1,8 +1,8 @@
 import { type KeyboardEvent, useEffect, useRef, useState, useSyncExternalStore } from 'react';
-import { createPortal } from 'react-dom';
 import type { Spreadsheet } from '../core/Spreadsheet';
 import type { Workbook } from '../core/Workbook';
 import { ChromeStyles } from './chrome';
+import { ConfirmDialog } from './ConfirmDialog';
 import { useMessages, useTheme } from './GridProvider';
 import { Icon } from './icons';
 import { Menu, type MenuEntry } from './Menu';
@@ -128,8 +128,11 @@ export function SheetTabs({ workbook, onAction }: SheetTabsProps) {
         />
       )}
       {deleting !== null && (
-        <ConfirmDelete
-          sheet={deleting}
+        <ConfirmDialog
+          testId="delete-sheet-dialog"
+          title={m.deleteSheetTitle(deleting.name)}
+          body={m.deleteSheetBody}
+          confirmLabel={m.deleteSheet}
           onCancel={() => setDeleting(null)}
           onConfirm={() => {
             workbook.deleteSheet(deleting);
@@ -177,26 +180,5 @@ function RenameField({ workbook, sheet, onDone }: { workbook: Workbook; sheet: S
         e.stopPropagation();
       }}
     />
-  );
-}
-
-function ConfirmDelete({ sheet, onCancel, onConfirm }: { sheet: Spreadsheet; onCancel: () => void; onConfirm: () => void }) {
-  const m = useMessages();
-  const theme = useTheme();
-  const cancelRef = useRef<HTMLButtonElement>(null);
-  useEffect(() => cancelRef.current?.focus(), []);
-  return createPortal(
-    <div className="rdg-chrome rdg-overlay" data-rdg-theme={theme} onKeyDown={(e) => e.key === 'Escape' && onCancel()}>
-      <ChromeStyles />
-      <div role="alertdialog" aria-label={m.deleteSheetTitle(sheet.name)} data-testid="delete-sheet-dialog" className="rdg-chrome rdg-popup" style={{ padding: 16, width: 340 }}>
-        <div style={{ fontWeight: 600, marginBottom: 6 }}>{m.deleteSheetTitle(sheet.name)}</div>
-        <div className="rdg-muted" style={{ marginBottom: 14 }}>{m.deleteSheetBody}</div>
-        <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8 }}>
-          <button ref={cancelRef} type="button" className="rdg-textbtn" onClick={onCancel}>{m.cancel}</button>
-          <button type="button" className="rdg-textbtn rdg-primary" onClick={onConfirm}>{m.deleteSheet}</button>
-        </div>
-      </div>
-    </div>,
-    document.body,
   );
 }

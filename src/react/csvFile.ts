@@ -30,3 +30,16 @@ export function downloadText(fileName: string, text: string, mime = 'text/csv;ch
   // Revoking right away can cancel the download in some browsers; give it a moment.
   setTimeout(() => URL.revokeObjectURL(url), 10_000);
 }
+
+/** Hands binary data to the browser as a download (an .xlsx file). */
+export function downloadBytes(fileName: string, bytes: Uint8Array, mime: string): void {
+  const url = URL.createObjectURL(new Blob([bytes.slice().buffer as ArrayBuffer], { type: mime }));
+  const link = document.createElement('a');
+  link.href = url;
+  link.download = fileName;
+  link.style.display = 'none';
+  document.body.append(link);
+  link.click();
+  link.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 10_000);
+}

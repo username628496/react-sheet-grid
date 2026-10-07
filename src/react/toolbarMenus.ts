@@ -133,7 +133,11 @@ export function zoomEntries(grid: GridController): MenuEntry[] {
   }));
 }
 
-export function fileEntries(sheet: Spreadsheet, m: Messages, actions: { chooseFile: () => void; download: (text: string) => void }): MenuEntry[] {
+export function fileEntries(
+  sheet: Spreadsheet,
+  m: Messages,
+  actions: { chooseFile: () => void; download: (text: string) => void; chooseXlsx?: () => void; downloadXlsx: () => void },
+): MenuEntry[] {
   const exportAs = (content: 'displayed' | 'raw') => () => {
     const text = sheet.exportCsv({ content });
     if (text !== null) actions.download(text);
@@ -143,6 +147,9 @@ export function fileEntries(sheet: Spreadsheet, m: Messages, actions: { chooseFi
     'separator',
     { label: m.exportCsvDisplayed, run: exportAs('displayed') },
     { label: m.exportCsvRaw, run: exportAs('raw') },
+    'separator',
+    ...(actions.chooseXlsx === undefined ? [] : [{ label: m.importXlsx, disabled: sheet.readOnly, run: actions.chooseXlsx }]),
+    { label: m.exportXlsx, run: actions.downloadXlsx },
   ];
 }
 

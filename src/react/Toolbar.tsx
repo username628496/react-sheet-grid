@@ -1,5 +1,6 @@
 import { type KeyboardEvent, type ReactNode, useEffect, useRef, useState, useSyncExternalStore } from 'react';
 import type { Spreadsheet } from '../core/Spreadsheet';
+import type { Workbook } from '../core/Workbook';
 import { type Border, DEFAULT_BORDER } from '../core/model/borders';
 import { DEFAULT_FONT_SIZE, MAX_FONT_SIZE, MIN_FONT_SIZE } from '../core/model/font';
 import { parseNumberFormat } from '../core/model/format';
@@ -7,7 +8,8 @@ import type { HorizontalAlign, Style } from '../core/model/StyleTable';
 import type { GridController } from '../input/GridController';
 import { ChromeStyles } from './chrome';
 import { useMessages, useTheme } from './GridProvider';
-import { downloadText, MAX_IMPORT_BYTES, readTextFile } from './csvFile';
+import { ConfirmDialog } from './ConfirmDialog';
+import { downloadBytes, downloadText, MAX_IMPORT_BYTES, readTextFile } from './csvFile';
 import { Icon, type IconName } from './icons';
 import { Menu, type MenuEntry } from './Menu';
 import {
@@ -37,6 +39,9 @@ function tip(label: string, shortcut?: string): string {
     .replace(/\+$/, '');
   return `${label} (${keys})`;
 }
+
+const XLSX_MIME = 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet';
+const MAX_XLSX_BYTES = 100 * 1024 * 1024;
 
 interface ToolbarState {
   canUndo: boolean;
@@ -80,6 +85,11 @@ interface ToolbarProps {
   grid?: GridController | null;
   /** Called after an action so the host can hand keyboard focus back to the grid. */
   onAction?: () => void;
+  /**
+   * Receives the workbook read from an .xlsx file the user opened. When it is not given the toolbar offers no
+   * "open .xlsx" (it cannot replace what is showing), only the download.
+   */
+  onImportWorkbook?: (workbook: Workbook) => void;
 }
 
 interface OpenMenu {
@@ -93,7 +103,7 @@ interface OpenMenu {
  * textarea keeps focus (and an in-progress edit is not committed by a blur).
  * Arrow keys, Home and End move between the controls (the WAI-ARIA toolbar pattern); Escape returns to the grid.
  */
-export function Toolbar({ sheet, grid = null, onAction }: ToolbarProps) {
+export function Toolbar({ sheet, grid = null, onAction, onImportWorkbook }: ToolbarProps) {
   const raw = useSyncExternalStore(
     (listener) => sheet.subscribe(listener),
     () => snapshot(sheet, grid),
@@ -108,6 +118,8 @@ export function Toolbar({ sheet, grid = null, onAction }: ToolbarProps) {
   const [borderChoice, setBorderChoice] = useState<Border>(DEFAULT_BORDER);
   const lastClosed = useRef<{ id: MenuId; at: number } | null>(null);
   const fileInput = useRef<HTMLInputElement>(null);
+  const xlsxInput = useRef<HTMLInputElement>(null);
+  const [xlsxPending, setXlsxPending] = useState<File | null>(null);
   // Things the sheet refused to do (an oversized paste) are announced in the same place as the size notice.
   useEffect(
     () => sheet.subscribeNotices((n) =>
@@ -227,7 +239,7 @@ export function Toolbar({ sheet, grid = null, onAction }: ToolbarProps) {
       case 'valign':
         return valignEntries(sheet, m);
       case 'file':
-        return fileEntries(sheet, m, { chooseFile: () => fileInput.current?.click(), download: (text) => downloadText('sheet.csv', text) });
+        return fileEntries(sheet, m, { chooseFile: () => fileInput.current?.click(), download: (text) => downloadText('sheet.csv', text), chooseXlsx: onImportWorkbook === undefined ? undefined : () => xlsxInput.current?.click(), downloadXlsx: () => void downloadXlsx() });
       case 'visibility':
         return visibilityEntries(sheet, m);
       case 'freeze':
@@ -249,6 +261,29 @@ export function Toolbar({ sheet, grid = null, onAction }: ToolbarProps) {
     borders: m.borders,
     wrap: m.textWrapping,
     valign: m.verticalAlign,
+  };
+
+  // The xlsx code is loaded on first use, so the grid's own bundle does not carry it.
+  const downloadXlsx = async (): Promise<void> => {
+    try {
+      const { exportXlsx } = await import('../xlsx');
+      const { data, warnings } = await exportXlsx(sheet.workbook ?? { sheets: [sheet], activeIndex: 0 });
+      downloadBytes('spreadsheet.xlsx', data, XLSX_MIME);
+      if (warnings.length > 0) setNotice(m.xlsxWarnings(warnings.length, warnings[0] as string));
+    } catch (e) {
+      setNotice(m.xlsxFailed(e instanceof Error ? e.message : String(e)));
+    }
+  };
+
+  const importXlsxFile = async (file: File): Promise<void> => {
+    try {
+      const { importXlsx } = await import('../xlsx');
+      const { workbook, warnings } = await importXlsx(await file.arrayBuffer());
+      onImportWorkbook?.(workbook);
+      if (warnings.length > 0) setNotice(m.xlsxWarnings(warnings.length, warnings[0] as string));
+    } catch (e) {
+      setNotice(m.xlsxFailed(e instanceof Error ? e.message : String(e)));
+    }
   };
 
   const importFile = async (file: File): Promise<void> => {
@@ -282,6 +317,23 @@ export function Toolbar({ sheet, grid = null, onAction }: ToolbarProps) {
         <div className="rdg-group" role="group" aria-label={m.file}>
           {menuButton('file', 'file', m.file, undefined)}
           {button('search', m.findAndReplace, 'Mod+F', undefined, () => grid?.onOpenFind?.(false), noGrid)}
+          <input
+            ref={xlsxInput}
+            type="file"
+            accept=".xlsx,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+            aria-hidden="true"
+            aria-label={m.importXlsx}
+            tabIndex={-1}
+            data-testid="import-xlsx"
+            style={{ display: 'none' }}
+            onChange={(e) => {
+              const file = e.target.files?.[0];
+              e.target.value = '';
+              if (file === undefined) return;
+              if (file.size > MAX_XLSX_BYTES) setNotice(m.importTooBig);
+              else setXlsxPending(file);
+            }}
+          />
           <input
             ref={fileInput}
             type="file"
@@ -433,6 +485,20 @@ export function Toolbar({ sheet, grid = null, onAction }: ToolbarProps) {
         <div className="rdg-notice" role="status">
           {notice}
         </div>
+      )}
+      {xlsxPending !== null && (
+        <ConfirmDialog
+          testId="import-xlsx-dialog"
+          title={m.importXlsxTitle}
+          body={m.importXlsxBody(xlsxPending.name)}
+          confirmLabel={m.importXlsxConfirm}
+          onCancel={() => setXlsxPending(null)}
+          onConfirm={() => {
+            const file = xlsxPending;
+            setXlsxPending(null);
+            void importXlsxFile(file).then(() => onAction?.());
+          }}
+        />
       )}
       {menu !== null && (
         <Menu

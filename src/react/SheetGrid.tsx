@@ -221,7 +221,7 @@ export const SheetGrid = forwardRef<SheetGridHandle, SheetGridProps>(function Sh
     <GridProvider locale={locale} messages={messages} theme={theme}>
       <div className={className} style={{ ...ROOT, ...style }}>
         <GridErrorBoundary onError={(e) => handlers.current.onError?.(e)}>
-          {toolbar && <Toolbar sheet={sheet} grid={controller} onAction={focus} />}
+          {toolbar && <Toolbar sheet={sheet} grid={controller} onAction={focus} onImportWorkbook={setWorkbook} />}
           {formulaBar && <FormulaBar sheet={sheet} grid={controller} />}
           <div style={{ flex: 1, minHeight: 0 }}>
             <DataGrid

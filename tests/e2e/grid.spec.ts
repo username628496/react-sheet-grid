@@ -2173,3 +2173,99 @@ test.describe('merged cells', () => {
     expect(await page.evaluate(() => window.__sheet!.merges.size)).toBe(1);
   });
 });
+
+test.describe('.xlsx files', () => {
+  type Page = import('@playwright/test').Page;
+  test.beforeEach(async ({ page }) => {
+    await page.goto('/demo/');
+    await page.waitForFunction(() => window.__grid !== undefined);
+  });
+
+  const fileMenu = async (page: Page, item: string | RegExp): Promise<void> => {
+    await page.getByRole('button', { name: 'File', exact: true }).click();
+    await page.getByRole('menuitem', { name: item }).click();
+  };
+
+  test('download then open: sheets, values, formulas across sheets, formats and merges come back', async ({ page }) => {
+    await page.evaluate(() => {
+      const wb = (window as unknown as { __workbook: import('../../src/index').Workbook }).__workbook;
+      const s = wb.active;
+      s.setCellInput(0, 0, 'Việt "Nam" <&>');
+      s.setCellInput(0, 1, '1234.5');
+      s.setCellInput(1, 1, '2026-10-07');
+      s.selection.selectCell(0, 1);
+      s.formatSelection({ numberFormat: '#,##0.00', bold: true, background: '#ffeb3b' });
+      s.selection.selectCell(3, 0);
+      s.selection.extendTo(4, 1);
+      s.mergeSelection();
+      wb.addSheet({ name: 'Totals' });
+      wb.active.setCellInput(0, 0, '=Sheet1!B1*2');
+    });
+    const download = page.waitForEvent('download');
+    await fileMenu(page, 'Download as .xlsx');
+    const file = await download;
+    expect(file.suggestedFilename()).toBe('spreadsheet.xlsx');
+    const stream = await file.createReadStream();
+    const chunks: Uint8Array[] = [];
+    for await (const chunk of stream) chunks.push(chunk as Uint8Array);
+    const bytes = new Uint8Array(chunks.reduce((n, c) => n + c.length, 0));
+    chunks.reduce((at, c) => (bytes.set(c, at), at + c.length), 0);
+    expect(Array.from(bytes.subarray(0, 2))).toEqual([0x50, 0x4b]); // "PK": a zip archive
+
+    // Start over with something else, then open the file: it asks first and can be cancelled.
+    await page.evaluate(() => window.__sheet!.setCellInput(9, 9, 'before'));
+    await page.getByRole('button', { name: 'File', exact: true }).click();
+    await page.getByRole('menuitem', { name: 'Open .xlsx file…' }).click();
+    await page.getByTestId('import-xlsx').setInputFiles({ name: 'saved.xlsx', mimeType: 'application/octet-stream', buffer: Buffer.from(Array.from(bytes)) });
+    const dialog = page.getByTestId('import-xlsx-dialog');
+    await expect(dialog).toBeVisible();
+    await expect(dialog).toContainText('saved.xlsx');
+    await dialog.getByRole('button', { name: 'Cancel' }).click();
+    await expect(dialog).toBeHidden();
+    expect(await page.evaluate(() => (window as unknown as { __workbook: import('../../src/index').Workbook }).__workbook.sheets.length)).toBe(2);
+
+    await page.getByRole('button', { name: 'File', exact: true }).click();
+    await page.getByRole('menuitem', { name: 'Open .xlsx file…' }).click();
+    await page.getByTestId('import-xlsx').setInputFiles({ name: 'saved.xlsx', mimeType: 'application/octet-stream', buffer: Buffer.from(Array.from(bytes)) });
+    await page.getByTestId('import-xlsx-dialog').getByRole('button', { name: 'Replace' }).click();
+    const tabs = page.getByRole('tablist', { name: 'Sheets' });
+    await expect(tabs.getByRole('tab')).toHaveText(['Sheet1', 'Totals']);
+    const state = await page.evaluate(() => {
+      const wb = (window as unknown as { __workbook: import('../../src/index').Workbook }).__workbook;
+      const s1 = wb.sheetByName('Sheet1')!;
+      const totals = wb.sheetByName('Totals')!;
+      return {
+        text: s1.getCellByView(0, 0).value,
+        shown: s1.getDisplayText(0, 1),
+        date: s1.getDisplayText(1, 1),
+        style: s1.styles.get(s1.getCellByView(0, 1).styleId),
+        merges: s1.merges.all,
+        before: s1.getCellByView(9, 9).value,
+        formula: totals.getEditText(0, 0),
+        total: totals.getCellByView(0, 0).value,
+        active: wb.active.name,
+      };
+    });
+    expect(state).toEqual({
+      text: 'Việt "Nam" <&>',
+      shown: '1,234.50',
+      date: '2026-10-07',
+      style: { bold: true, background: '#ffeb3b', numberFormat: '#,##0.00' },
+      merges: [{ row: 3, col: 0, rowSpan: 2, colSpan: 2 }],
+      before: null,
+      formula: '=Sheet1!B1*2',
+      total: 2469,
+      active: 'Totals',
+    });
+  });
+
+  test('a file that is not a workbook is refused with a reason and nothing is lost', async ({ page }) => {
+    await page.evaluate(() => window.__sheet!.setCellInput(0, 0, 'keep me'));
+    await page.getByRole('button', { name: 'File', exact: true }).click();
+    await page.getByRole('menuitem', { name: 'Open .xlsx file…' }).click();
+    await page.getByTestId('import-xlsx').setInputFiles({ name: 'notes.xlsx', mimeType: 'application/octet-stream', buffer: Buffer.from('this is not a zip file at all') });
+    await page.getByTestId('import-xlsx-dialog').getByRole('button', { name: 'Replace' }).click();
+    await expect(page.getByRole('status').filter({ hasText: /Cannot read this \.xlsx file/ })).toBeVisible();
+    expect(await page.evaluate(() => window.__sheet!.getCellByView(0, 0).value)).toBe('keep me');
+  });
+});

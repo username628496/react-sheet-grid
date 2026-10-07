@@ -119,7 +119,12 @@ const footerSelect: CSSProperties = {
   margin: '0 4px',
 };
 
-function App({ workbook, notice }: { workbook: Workbook; notice: string | null }) {
+function App({ workbook: initialWorkbook, notice }: { workbook: Workbook; notice: string | null }) {
+  // Opening an .xlsx file replaces the whole workbook.
+  const [workbook, setWorkbook] = useState(initialWorkbook);
+  useEffect(() => {
+    window.__workbook = workbook;
+  }, [workbook]);
   // The sheet that shows follows the workbook's active tab; the e2e tests reach it through window.__sheet.
   const sheet = useSyncExternalStore(
     (listener) => workbook.subscribe(listener),
@@ -138,6 +143,7 @@ function App({ workbook, notice }: { workbook: Workbook; notice: string | null }
     <GridProvider locale={locale} theme={theme}>
       <Page
         workbook={workbook}
+        onImportWorkbook={setWorkbook}
         sheet={sheet}
         grid={grid}
         notice={notice}
@@ -165,6 +171,7 @@ function App({ workbook, notice }: { workbook: Workbook; notice: string | null }
 
 interface PageProps {
   workbook: Workbook;
+  onImportWorkbook(workbook: Workbook): void;
   sheet: Spreadsheet;
   grid: GridController | null;
   notice: string | null;
@@ -178,7 +185,7 @@ interface PageProps {
   onTheme(t: ThemeSetting): void;
 }
 
-function Page({ workbook, sheet, grid, notice, saveStatus, locale, theme, zoom, onZoom, onGrid, onLocale, onTheme }: PageProps) {
+function Page({ workbook, onImportWorkbook, sheet, grid, notice, saveStatus, locale, theme, zoom, onZoom, onGrid, onLocale, onTheme }: PageProps) {
   const resolved = useResolvedTheme(theme);
   const reset = async (): Promise<void> => {
     if (!window.confirm(locale === 'vi' ? 'Xóa bảng đã lưu và bắt đầu bảng trống?' : 'Discard the saved sheet and start a blank one?')) return;
@@ -190,7 +197,7 @@ function Page({ workbook, sheet, grid, notice, saveStatus, locale, theme, zoom, 
     : { saving: 'Saving…', saved: 'Saved', error: 'Could not save', reset: 'Reset', sample: 'Load 1M × 100 sample', language: 'Language', theme: 'Theme', auto: 'Auto', light: 'Light', dark: 'Dark' };
   return (
     <div style={{ height: '100%', display: 'flex', flexDirection: 'column', background: resolved === 'dark' ? '#1b1d21' : '#fff' }}>
-      <Toolbar sheet={sheet} grid={grid} onAction={() => window.__grid?.editor.focus()} />
+      <Toolbar sheet={sheet} grid={grid} onAction={() => window.__grid?.editor.focus()} onImportWorkbook={onImportWorkbook} />
       <FormulaBar sheet={sheet} grid={grid} />
       <div style={{ flex: 1, minHeight: 0 }}>
         <DataGrid

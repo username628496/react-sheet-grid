@@ -4,7 +4,12 @@ import react from '@vitejs/plugin-react';
 export default defineConfig({
   plugins: [react()],
   build: {
-    lib: { entry: 'src/index.ts', formats: ['es', 'cjs'], fileName: (f) => (f === 'es' ? 'index.js' : 'index.cjs') },
+    // Two entry points: the grid, and `react-sheet-grid/xlsx` (also loaded on demand by the toolbar's .xlsx actions).
+    lib: {
+      entry: { index: 'src/index.ts', xlsx: 'src/xlsx/index.ts' },
+      formats: ['es', 'cjs'],
+      fileName: (format, name) => `${name}.${format === 'es' ? 'js' : 'cjs'}`,
+    },
     sourcemap: true,
     // Keep React out of the bundle: the host app provides it.
     rollupOptions: {

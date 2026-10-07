@@ -192,6 +192,14 @@ export interface Messages {
   exportCsvRaw: string;
   importEmpty: string;
   importTooBig: string;
+  importXlsx: string;
+  exportXlsx: string;
+  importXlsxTitle: string;
+  importXlsxBody: (fileName: string) => string;
+  importXlsxConfirm: string;
+  xlsxFailed: (reason: string) => string;
+  xlsxWarnings: (count: number, first: string) => string;
+
   errorTitle: string;
   errorRetry: string;
   // formula bar
@@ -445,6 +453,14 @@ const en: Messages = {
   exportCsvRaw: 'Download as CSV (plain values)',
   importEmpty: 'The file has no data to import.',
   importTooBig: 'That file is too large to import (over 50 MB).',
+  importXlsx: 'Open .xlsx file…',
+  exportXlsx: 'Download as .xlsx',
+  importXlsxTitle: 'Replace everything with this file?',
+  importXlsxBody: (fileName) => `Opening "${fileName}" replaces all the sheets here. This cannot be undone.`,
+  importXlsxConfirm: 'Replace',
+  xlsxFailed: (reason) => reason,
+  xlsxWarnings: (count, first) => (count === 1 ? first : `${first} (and ${count - 1} more notice${count === 2 ? '' : 's'})`),
+
   errorTitle: 'Something went wrong in the spreadsheet.',
   errorRetry: 'Try again',
   nameBox: 'Name box',
@@ -736,6 +752,14 @@ const vi: Messages = {
   exportCsvRaw: 'Tải xuống CSV (giá trị thô)',
   importEmpty: 'Tệp không có dữ liệu để nhập.',
   importTooBig: 'Tệp quá lớn để nhập (hơn 50 MB).',
+  importXlsx: 'Mở tệp .xlsx…',
+  exportXlsx: 'Tải xuống .xlsx',
+  importXlsxTitle: 'Thay toàn bộ bằng tệp này?',
+  importXlsxBody: (fileName) => `Mở "${fileName}" sẽ thay tất cả các trang tính hiện có. Không thể hoàn tác.`,
+  importXlsxConfirm: 'Thay thế',
+  xlsxFailed: (reason) => reason,
+  xlsxWarnings: (count, first) => (count === 1 ? first : `${first} (và ${count - 1} thông báo khác)`),
+
   errorTitle: 'Bảng tính gặp sự cố.',
   errorRetry: 'Thử lại',
   nameBox: 'Ô tên',
