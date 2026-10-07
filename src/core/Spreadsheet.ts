@@ -35,7 +35,8 @@ import type { Cell, CellValue } from './model/Cell';
 import { CELL_HORIZONTAL_PADDING, CELL_VERTICAL_PADDING, DEFAULT_FONT_SIZE, fontString, lineHeightFor, stepFontSize } from './model/font';
 import { formatValue, shiftDecimals } from './model/format';
 import { wrapLines } from './layout/wrap';
-import { parseInput } from './model/parseInput';
+import { parseInput, parseTypedInput } from './model/parseInput';
+import { DATE_FORMAT, DATE_TIME_FORMAT, type DateOrder, dateEditText, isDateFormat, parseDateInput } from './model/dates';
 import { cellKey, MAX_COLS, MAX_ROWS, SheetModel } from './model/SheetModel';
 import { type Style, StyleTable } from './model/StyleTable';
 import { SelectionModel, type ViewRange } from './selection/SelectionModel';
@@ -69,6 +70,8 @@ const FORMAT_FILL_LIMIT = 50_000;
 const MAX_SCATTERED_MOVE = 200_000; // cut-paste cells followed one by one in a sorted/filtered view
 const MAX_RANGE_CHECK = 10_000; // largest range inspected cell by cell for the same move
 const MAX_TILED_CELLS = 1_000_000;
+const DATE_FORMULA = /^=\s*(TODAY|NOW|DATE|EDATE|EOMONTH|DATEVALUE)\s*\(/i;
+
 /** Borders create a cell for every cell they touch, so a range this big is refused instead of filling memory. */
 export const MAX_BORDER_CELLS = 100_000;
 /** Fitting row heights measures every cell of each row, so a huge selection is left alone. */
@@ -136,6 +139,8 @@ export class Spreadsheet {
   measureText: ((font: string, text: string) => number) | null = null;
   /** Data keys written since the last recalculation. Only tracked while formulas exist (or one is being added). */
   private readonly dirty = new Set<number>();
+  /** Which way an ambiguous typed date such as 3/4/2026 reads: day first (the default, most of the world) or month first. */
+  dateOrder: DateOrder = 'dmy';
   private readOnlyFlag = false;
   /** Commands applied so far inside `transaction`, or null outside one. */
   private batch: Command[] | null = null;
@@ -231,9 +236,11 @@ export class Spreadsheet {
     const { value } = cell;
     if (value === null) return '';
     if (typeof value === 'string') {
-      // Text that would parse as something else needs the apostrophe to survive a round trip.
-      return parseInput(value) === value ? value : `'${value}`;
+      // Text that would parse as something else (a number, TRUE, a date) needs the apostrophe to survive a round trip.
+      return parseInput(value) === value && parseDateInput(value, this.dateOrder) === null ? value : `'${value}`;
     }
+    const format = this.styles.get(cell.styleId).numberFormat;
+    if (typeof value === 'number' && format !== undefined && isDateFormat(format)) return dateEditText(value, format);
     return formatValue(value);
   }
 
@@ -331,9 +338,16 @@ export class Spreadsheet {
   /** Turns what the user typed into a cell: `=...` becomes a formula (stored relative to its position), anything else a value. */
   cellFromInput(text: string, dataRow: number, dataCol: number, styleId: number): Cell {
     if (text.length > 1 && text.startsWith('=')) {
-      return { value: null, styleId, formula: parseFormulaSafe(text, dataRow, dataCol) };
+      // Like Sheets, a formula that yields a date shows as one without the user having to format the cell.
+      const kind = DATE_FORMULA.exec(text)?.[1]?.toUpperCase();
+      const format = kind === undefined ? undefined : kind === 'NOW' ? DATE_TIME_FORMAT : DATE_FORMAT;
+      const dated = format !== undefined && this.styles.get(styleId).numberFormat === undefined;
+      return { value: null, styleId: dated ? this.styles.derive(styleId, { numberFormat: format }) : styleId, formula: parseFormulaSafe(text, dataRow, dataCol) };
     }
-    return { value: parseInput(text), styleId };
+    const typed = parseTypedInput(text, this.dateOrder);
+    // A typed date gives the cell a date format, unless the user already chose a format for it.
+    const dated = typed.format !== undefined && this.styles.get(styleId).numberFormat === undefined;
+    return { value: typed.value, styleId: dated ? this.styles.derive(styleId, { numberFormat: typed.format }) : styleId };
   }
 
   /** Visits stored cells inside a view range, giving data coordinates. Cost scales with stored cells, never with range area. */

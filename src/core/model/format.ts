@@ -1,4 +1,5 @@
 import { type CellValue, isCellError } from './Cell';
+import { formatDate, isDateFormat } from './dates';
 import type { HorizontalAlign } from './StyleTable';
 
 /**
@@ -48,6 +49,7 @@ function intl(grouping: boolean, decimals: number): Intl.NumberFormat {
 
 export function formatNumber(n: number, numberFormat: string | undefined): string {
   if (!Number.isFinite(n)) return String(n);
+  if (numberFormat !== undefined && isDateFormat(numberFormat)) return formatDate(n, numberFormat);
   const pattern = numberFormat === undefined ? null : parseNumberFormat(numberFormat);
   if (pattern === null) {
     // 10 significant digits hides binary noise such as 0.1 + 0.2.

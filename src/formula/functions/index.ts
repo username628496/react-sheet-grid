@@ -1,3 +1,4 @@
+import { DATE_FUNCTIONS } from './date';
 import type { FunctionDef } from './helpers';
 import { LOGIC_FUNCTIONS } from './logic';
 import { LOOKUP_FUNCTIONS } from './lookup';
@@ -9,4 +10,5 @@ export const FUNCTIONS: Readonly<Record<string, FunctionDef>> = {
   ...LOGIC_FUNCTIONS,
   ...LOOKUP_FUNCTIONS,
   ...TEXT_FUNCTIONS,
+  ...DATE_FUNCTIONS,
 };

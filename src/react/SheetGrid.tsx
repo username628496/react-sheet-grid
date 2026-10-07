@@ -8,6 +8,7 @@ import {
   useRef,
   useState,
 } from 'react';
+import type { DateOrder } from '../core/model/dates';
 import { deserializeSheet, serializeSheet, type SheetSnapshot } from '../core/snapshot';
 import { Spreadsheet } from '../core/Spreadsheet';
 import type { GridController } from '../input/GridController';
@@ -44,6 +45,8 @@ export interface SheetGridProps {
   colCount?: number;
   /** Blocks every change to cells, formatting and structure; viewing options (sort, filter, zoom, freeze) still work. */
   readOnly?: boolean;
+  /** How an ambiguous typed date such as 3/4/2026 reads: `'dmy'` (3 April, default) or `'mdy'` (March 4). */
+  dateOrder?: DateOrder;
   locale?: Locale;
   /** Overrides single UI strings of the chosen locale. */
   messages?: Partial<Messages>;
@@ -94,6 +97,7 @@ function create(props: Pick<SheetGridProps, 'defaultValue' | 'rowCount' | 'colCo
 export const SheetGrid = forwardRef<SheetGridHandle, SheetGridProps>(function SheetGrid(props, ref) {
   const {
     readOnly = false,
+    dateOrder = 'dmy',
     locale,
     messages,
     theme,
@@ -124,6 +128,10 @@ export const SheetGrid = forwardRef<SheetGridHandle, SheetGridProps>(function Sh
   useLayoutEffect(() => {
     sheet.readOnly = readOnly;
   }, [sheet, readOnly]);
+
+  useLayoutEffect(() => {
+    sheet.dateOrder = dateOrder;
+  }, [sheet, dateOrder]);
 
   useEffect(() => {
     let timer: ReturnType<typeof setTimeout> | undefined;

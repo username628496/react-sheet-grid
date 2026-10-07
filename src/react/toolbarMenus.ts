@@ -30,6 +30,13 @@ export function numberFormatEntries(sheet: Spreadsheet, m: Messages): MenuEntry[
     item('$#,##0.00', m.formatCurrency('$1,234.57')),
     item('€#,##0.00', m.formatEuro('€1,234.57')),
     item('#,##0 ₫', m.formatDong('1,235 ₫')),
+    'separator',
+    item('yyyy-mm-dd', m.formatDate('2026-10-07')),
+    item('dd/mm/yyyy', m.formatDate('07/10/2026')),
+    item('mm/dd/yyyy', m.formatDate('10/07/2026')),
+    item('d mmm yyyy', m.formatDate('7 Oct 2026')),
+    item('hh:mm', m.formatTime('14:30')),
+    item('yyyy-mm-dd hh:mm', m.formatDateTime('2026-10-07 14:30')),
   ];
 }
 

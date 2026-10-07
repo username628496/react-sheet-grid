@@ -91,6 +91,9 @@ export interface Messages {
   moreFormats: string;
   formatEuro: (example: string) => string;
   formatDong: (example: string) => string;
+  formatDate: (example: string) => string;
+  formatTime: (example: string) => string;
+  formatDateTime: (example: string) => string;
   insert: string;
   delete: string;
   freeze: string;
@@ -270,6 +273,9 @@ const en: Messages = {
   moreFormats: 'More formats',
   formatEuro: (example) => `Euro (${example})`,
   formatDong: (example) => `Dong (${example})`,
+  formatDate: (example) => `Date (${example})`,
+  formatTime: (example) => `Time (${example})`,
+  formatDateTime: (example) => `Date time (${example})`,
   insert: 'Insert',
   delete: 'Delete',
   freeze: 'Freeze',
@@ -502,6 +508,9 @@ const vi: Messages = {
   moreFormats: 'Định dạng khác',
   formatEuro: (example) => `Euro (${example})`,
   formatDong: (example) => `Đồng (${example})`,
+  formatDate: (example) => `Ngày (${example})`,
+  formatTime: (example) => `Giờ (${example})`,
+  formatDateTime: (example) => `Ngày giờ (${example})`,
   insert: 'Chèn',
   delete: 'Xóa',
   freeze: 'Cố định',

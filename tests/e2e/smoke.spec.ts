@@ -156,6 +156,23 @@ test.describe('SheetGrid (the host-facing component)', () => {
     expect(value).toBe('hello');
   });
 
+  test('typing a date stores a date, and the date format menu restyles it', async ({ page }) => {
+    await open(page);
+    await page.getByTestId('grid').click({ position: { x: 120, y: 60 } });
+    await page.keyboard.type('7/10/2026');
+    await page.keyboard.press('Enter');
+    const read = (): Promise<{ value: unknown; text: string }> =>
+      page.evaluate(() => {
+        const s = (window as unknown as { __handle: Handle }).__handle.sheet;
+        return { value: s.getCellByView(1, 0).value, text: s.getDisplayText(1, 0) };
+      });
+    expect(await read()).toEqual({ value: 46302, text: '07/10/2026' });
+    await page.evaluate(() => (window as unknown as { __handle: Handle }).__handle.sheet.selection.selectCell(1, 0));
+    await page.getByRole('button', { name: 'More formats' }).click();
+    await page.getByRole('menuitemradio', { name: /7 Oct 2026/ }).click();
+    expect(await read()).toEqual({ value: 46302, text: '7 Oct 2026' });
+  });
+
   test('onChange is batched, carries a snapshot, ignores selection, and sees freezing', async ({ page }) => {
     await open(page);
     await page.evaluate(() => {

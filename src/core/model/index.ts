@@ -6,3 +6,4 @@ export * from './format';
 export * from './parseInput';
 export * from './font';
 export * from './borders';
+export * from './dates';

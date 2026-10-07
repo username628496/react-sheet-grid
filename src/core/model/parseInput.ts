@@ -1,4 +1,5 @@
 import type { CellValue } from './Cell';
+import { type DateOrder, parseDateInput } from './dates';
 
 const NUMBER_RE = /^[+-]?(\d+\.?\d*|\.\d+)(e[+-]?\d+)?$/i;
 
@@ -13,4 +14,18 @@ export function parseInput(text: string): CellValue | null {
   if (upper === 'TRUE') return true;
   if (upper === 'FALSE') return false;
   return text;
+}
+
+export interface TypedInput {
+  value: CellValue | null;
+  /** Set when the text was a date or time: the number format that makes the stored serial read like the typed text. */
+  format?: string;
+}
+
+/** `parseInput` plus date recognition (dates need the format too, which the plain value cannot carry). */
+export function parseTypedInput(text: string, order: DateOrder = 'dmy'): TypedInput {
+  const value = parseInput(text);
+  if (typeof value !== 'string' || text.startsWith("'")) return { value };
+  const date = parseDateInput(text, order);
+  return date === null ? { value } : { value: date.serial, format: date.format };
 }

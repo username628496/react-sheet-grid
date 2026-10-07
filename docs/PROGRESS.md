@@ -130,11 +130,12 @@ Chạy `pnpm dev` rồi mở http://localhost:5173/demo/ (mặc định là tran
 8. **Lưu dữ liệu**: sửa vài ô, đổi số dòng, sort, đổi cỡ cột rồi F5 (phải còn nguyên, chỉ mất lịch sử undo); thử mở hai tab cùng lúc (tab sau ghi đè tab trước, chưa có đồng bộ); nút Reset.
 9. **Trình đọc màn hình**: bật VoiceOver (Cmd+F5) trên Safari/Chrome, Tab vào lưới và dùng mũi tên: có đọc đúng "A1, nội dung" không; Ctrl+Option+Shift+↓ có thoát ra điều khiển kế tiếp không.
 10. **Tìm và thay thế**: Cmd+F trong lưới (không phải thanh tìm của trình duyệt); thử "bỏ qua dấu" với dữ liệu tiếng Việt; Thay tất cả rồi Cmd+Z; bấm nút rồi nhấn Esc trên Safari/Firefox.
+12. **Ngày tháng**: gõ `7/10/2026`, `2026-10-07`, `14:30` (phải thành ngày/giờ, căn phải); đổi định dạng ở "More formats"; kéo fill hai ô ngày liên tiếp; `=TODAY()`; thử `dateOrder="mdy"`; sort cột ngày. Gõ `'2026-10-07` để giữ là chữ.
 11. **Thanh công thức**: gõ tiếng Việt (Telex/VNI) trong ô nhập của thanh; gõ `=` rồi click ô trên lưới; sửa công thức dài rồi Enter/Tab/Esc; gõ `A1:C5`, `B:B` vào ô tên rồi Enter.
 
 ## Việc tiếp theo (ngoài MVP, chỉ làm khi bạn yêu cầu)
 
 - Chạy e2e trên Firefox/WebKit và sửa nếu có khác biệt.
-- Fill ngày tháng.
+- Ngày tháng (đã làm): ngày là số serial (từ 1899-12-30) + định dạng ngày trong style, nên sort/filter/số học/fill chạy sẵn. Hạn chế: `TODAY`/`NOW` chỉ tính lại khi sửa hoặc nạp (không tự đổi khi để mở qua nửa đêm); tên tháng/thứ chỉ tiếng Anh; năm 2 chữ số, `DATEDIF`, `TIME`, `NETWORKDAYS`, múi giờ chưa có; số học trên chuỗi ngày (`"2026-01-01"+1`) chưa hỗ trợ (dùng `DATEVALUE`); `COUNTIF` chưa so khớp tiêu chí dạng ngày; fill theo tháng/năm chưa có (fill luôn +1 ngày).
 - Công thức theo vị trí hiển thị khi sort.
 - Tính toán trong Web Worker cho bảng rất lớn. Đã đo (Node, 200k dòng × 2 cột công thức nối chuỗi phụ thuộc + 1 SUM 200k ô): nạp + `recalculateAll` ~0,9s một lần; sửa ô gốc làm tính lại cả 400k ô ~350ms; sửa ô cuối ~18ms. Chưa đáng làm Worker; xem lại nếu có bảng nhiều công thức hơn mức này.
