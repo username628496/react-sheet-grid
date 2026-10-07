@@ -2,6 +2,7 @@ import { sameSheetName } from '../formula/ast';
 import { type AxisMap } from '../formula/transform';
 import { remapFormula, renameSheetRefs } from '../formula/transform';
 import type { Cell } from './model/Cell';
+import type { DateOrder } from './model/dates';
 import { keyCol, keyRow } from './model/SheetModel';
 import { deserializeSheet, serializeSheet } from './snapshot';
 import { Spreadsheet, type SpreadsheetOptions } from './Spreadsheet';
@@ -39,6 +40,7 @@ export class Workbook {
   private readonly listeners = new Set<() => void>();
   private propagating = false;
   private readOnlyFlag = false;
+  private dateOrderValue: DateOrder = 'dmy';
   /** Bumps on every change to the list of sheets, their names or the active sheet. */
   revision = 0;
 
@@ -66,6 +68,16 @@ export class Workbook {
     this.readOnlyFlag = value;
     for (const sheet of this.list) sheet.readOnly = value;
     this.changed();
+  }
+
+  /** How ambiguous typed dates read in every sheet (see `Spreadsheet.dateOrder`). */
+  get dateOrder(): DateOrder {
+    return this.dateOrderValue;
+  }
+
+  set dateOrder(value: DateOrder) {
+    this.dateOrderValue = value;
+    for (const sheet of this.list) sheet.dateOrder = value;
   }
 
   subscribe(listener: () => void): () => void {
@@ -106,6 +118,7 @@ export class Workbook {
   private attach(sheet: Spreadsheet, index: number): void {
     sheet.workbook = this;
     sheet.readOnly = this.readOnlyFlag;
+    sheet.dateOrder = this.dateOrderValue;
     this.list.splice(index, 0, sheet);
   }
 

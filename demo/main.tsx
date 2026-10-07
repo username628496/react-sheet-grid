@@ -1,17 +1,19 @@
-import { type CSSProperties, useEffect, useState } from 'react';
+import { type CSSProperties, useEffect, useState, useSyncExternalStore } from 'react';
 import { createRoot } from 'react-dom/client';
 import {
   DataGrid,
-  deserializeSheet,
+  deserializeWorkbook,
   FormulaBar,
   GridProvider,
   type GridController,
   type Locale,
+  SheetTabs,
   SnapshotError,
   Spreadsheet,
   StatusBar,
   type ThemeSetting,
   Toolbar,
+  Workbook,
 } from '../src/index';
 import { autoSave, clearSnapshot, loadSnapshot, type SaveStatus } from './storage';
 
@@ -51,27 +53,29 @@ declare global {
   interface Window {
     __grid?: GridController;
     __sheet?: Spreadsheet;
+    __workbook?: Workbook;
   }
 }
 
-async function createSheet(): Promise<{ sheet: Spreadsheet; notice: string | null }> {
+async function createWorkbook(): Promise<{ workbook: Workbook; notice: string | null }> {
+  const single = (sheet: Spreadsheet): Workbook => new Workbook(sheet);
   if (sample) {
     const big = new Spreadsheet({ rowCount: ROWS, colCount: COLS });
     seed(big);
-    return { sheet: big, notice: null };
+    return { workbook: single(big), notice: null };
   }
-  if (empty) return { sheet: new Spreadsheet({ rowCount: 1000, colCount: 26 }), notice: null };
+  if (empty) return { workbook: single(new Spreadsheet({ rowCount: 1000, colCount: 26 })), notice: null };
   const stored = await loadSnapshot();
   if (stored !== undefined) {
     try {
-      return { sheet: deserializeSheet(stored), notice: null };
+      return { workbook: deserializeWorkbook(stored), notice: null };
     } catch (e) {
       // A corrupt or too-new save must not lock the user out: start blank and say why.
       const reason = e instanceof SnapshotError ? e.message : 'The saved sheet could not be read.';
-      return { sheet: new Spreadsheet({ rowCount: 50, colCount: 26 }), notice: `${reason} Started a blank sheet.` };
+      return { workbook: single(new Spreadsheet({ rowCount: 50, colCount: 26 })), notice: `${reason} Started a blank sheet.` };
     }
   }
-  return { sheet: new Spreadsheet({ rowCount: 50, colCount: 26 }), notice: null };
+  return { workbook: single(new Spreadsheet({ rowCount: 50, colCount: 26 })), notice: null };
 }
 
 function readPref<T extends string>(key: string, allowed: readonly T[], fallback: T): T {
@@ -115,16 +119,25 @@ const footerSelect: CSSProperties = {
   margin: '0 4px',
 };
 
-function App({ sheet, notice }: { sheet: Spreadsheet; notice: string | null }) {
+function App({ workbook, notice }: { workbook: Workbook; notice: string | null }) {
+  // The sheet that shows follows the workbook's active tab; the e2e tests reach it through window.__sheet.
+  const sheet = useSyncExternalStore(
+    (listener) => workbook.subscribe(listener),
+    () => workbook.active,
+  );
+  useEffect(() => {
+    window.__sheet = sheet;
+  }, [sheet]);
   const [grid, setGrid] = useState<GridController | null>(null);
   const [saveStatus, setSaveStatus] = useState<SaveStatus | null>(null);
   const [locale, setLocale] = useState<Locale>(() => readPref('rdg-locale', LOCALES, defaultLocale));
   const [theme, setTheme] = useState<ThemeSetting>(() => readPref('rdg-theme', THEMES, 'auto'));
   const [zoom, setZoom] = useState<number>(() => Number(readPref('rdg-zoom', ['0.5', '0.75', '0.9', '1', '1.25', '1.5', '1.75', '2'], '1')));
-  useEffect(() => (persistent ? autoSave(sheet, setSaveStatus) : undefined), [sheet]);
+  useEffect(() => (persistent ? autoSave(workbook, setSaveStatus) : undefined), [workbook]);
   return (
     <GridProvider locale={locale} theme={theme}>
       <Page
+        workbook={workbook}
         sheet={sheet}
         grid={grid}
         notice={notice}
@@ -151,6 +164,7 @@ function App({ sheet, notice }: { sheet: Spreadsheet; notice: string | null }) {
 }
 
 interface PageProps {
+  workbook: Workbook;
   sheet: Spreadsheet;
   grid: GridController | null;
   notice: string | null;
@@ -164,7 +178,7 @@ interface PageProps {
   onTheme(t: ThemeSetting): void;
 }
 
-function Page({ sheet, grid, notice, saveStatus, locale, theme, zoom, onZoom, onGrid, onLocale, onTheme }: PageProps) {
+function Page({ workbook, sheet, grid, notice, saveStatus, locale, theme, zoom, onZoom, onGrid, onLocale, onTheme }: PageProps) {
   const resolved = useResolvedTheme(theme);
   const reset = async (): Promise<void> => {
     if (!window.confirm(locale === 'vi' ? 'Xóa bảng đã lưu và bắt đầu bảng trống?' : 'Discard the saved sheet and start a blank one?')) return;
@@ -191,6 +205,7 @@ function Page({ sheet, grid, notice, saveStatus, locale, theme, zoom, onZoom, on
           }}
         />
       </div>
+      <SheetTabs workbook={workbook} onAction={() => window.__grid?.editor.focus()} />
       <div className="rdg-chrome" data-rdg-theme={resolved} style={{ display: 'flex', alignItems: 'stretch', borderTop: '1px solid var(--rdg-border)' }}>
         <div style={{ flex: 1, minWidth: 0 }}>
           <StatusBar sheet={sheet} />
@@ -240,7 +255,8 @@ function useResolvedTheme(setting: ThemeSetting): 'light' | 'dark' {
   return setting === 'auto' ? (dark ? 'dark' : 'light') : setting;
 }
 
-void createSheet().then(({ sheet, notice }) => {
-  window.__sheet = sheet;
-  createRoot(document.getElementById('root')!).render(<App sheet={sheet} notice={notice} />);
+void createWorkbook().then(({ workbook, notice }) => {
+  window.__sheet = workbook.active;
+  window.__workbook = workbook;
+  createRoot(document.getElementById('root')!).render(<App workbook={workbook} notice={notice} />);
 });

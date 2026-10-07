@@ -47,6 +47,20 @@ test.describe('the default demo keeps your work across reloads', () => {
     await expect(page.getByLabel('Row count')).toHaveValue('80');
   });
 
+  test('all sheets, their names and the active tab survive a reload', async ({ page }) => {
+    await page.goto('/demo/');
+    await page.waitForFunction(() => window.__grid !== undefined);
+    await page.getByRole('button', { name: 'Add sheet' }).click();
+    await page.evaluate(() => window.__sheet!.setCellInput(0, 0, '=Sheet1!B1*2'));
+    await page.evaluate(() => window.__workbook!.sheetByName('Sheet1')!.setCellInput(0, 1, '21'));
+    await expect(page.getByTestId('save-status')).toHaveText('Saved');
+    await page.reload();
+    await page.waitForFunction(() => window.__grid !== undefined);
+    await expect(page.getByRole('tablist', { name: 'Sheets' }).getByRole('tab')).toHaveText(['Sheet1', 'Sheet2']);
+    await expect(page.getByRole('tab', { name: 'Sheet2' })).toHaveAttribute('aria-selected', 'true');
+    expect(await page.evaluate(() => window.__sheet!.getCellByView(0, 0).value)).toBe(42);
+  });
+
   test('Reset discards the saved sheet', async ({ page }) => {
     await page.goto('/demo/');
     await page.waitForFunction(() => window.__grid !== undefined);
@@ -199,6 +213,76 @@ test.describe('SheetGrid (the host-facing component)', () => {
     await expect(menu).toBeVisible();
     await menu.getByRole('menuitemradio', { name: 'Done' }).click();
     expect(await cell()).toBe('Done');
+  });
+
+  test('sheet tabs: add, switch, a formula reading another sheet, rename, delete', async ({ page }) => {
+    await open(page);
+    const read = (a: string): Promise<unknown> =>
+      page.evaluate((cell) => {
+        const wb = (window as unknown as { __handle: Handle }).__handle.workbook;
+        const [name, ref] = cell.split('!') as [string, string];
+        const s = wb.sheetByName(name)!;
+        return s.getCellByView(Number(ref.slice(1)) - 1, ref.charCodeAt(0) - 65).value;
+      }, a);
+    const tabs = page.getByRole('tablist', { name: 'Sheets' });
+    await expect(tabs.getByRole('tab')).toHaveText(['Sheet1']);
+    await page.getByRole('button', { name: 'Add sheet' }).click();
+    await expect(tabs.getByRole('tab')).toHaveText(['Sheet1', 'Sheet2']);
+    await expect(tabs.getByRole('tab', { name: 'Sheet2' })).toHaveAttribute('aria-selected', 'true');
+
+    // Type into Sheet2, then into Sheet1 a formula that reads it.
+    await page.getByTestId('grid').click({ position: { x: 80, y: 34 } });
+    await page.keyboard.type('41');
+    await page.keyboard.press('Enter');
+    await tabs.getByRole('tab', { name: 'Sheet1' }).click();
+    await page.getByTestId('grid').click({ position: { x: 80, y: 34 } });
+    await page.keyboard.type('=Sheet2!A1+1');
+    await page.keyboard.press('Enter');
+    expect(await read('Sheet1!A1')).toBe(42);
+
+    // Renaming rewrites the formula; the new name works straight away.
+    await tabs.getByRole('tab', { name: 'Sheet2' }).dblclick();
+    const field = page.getByRole('textbox', { name: 'Sheet name' });
+    await field.fill('Data set');
+    await field.press('Enter');
+    await expect(tabs.getByRole('tab')).toHaveText(['Sheet1', 'Data set']);
+    expect(await page.evaluate(() => (window as unknown as { __handle: Handle }).__handle.workbook.sheetByName('Sheet1')!.getEditText(0, 0))).toBe("='Data set'!A1+1");
+    expect(await read('Sheet1!A1')).toBe(42);
+
+    // A name that is taken is refused: the field stays and says why.
+    await tabs.getByRole('tab', { name: 'Data set' }).dblclick();
+    await page.getByRole('textbox', { name: 'Sheet name' }).fill('sheet1');
+    await expect(page.getByRole('textbox', { name: 'Sheet name' })).toHaveAttribute('aria-invalid', 'true');
+    await page.getByRole('textbox', { name: 'Sheet name' }).press('Escape');
+    await expect(tabs.getByRole('tab')).toHaveText(['Sheet1', 'Data set']);
+
+    // Delete asks first; the formula then shows #REF!.
+    await tabs.getByRole('tab', { name: 'Data set' }).click({ button: 'right' });
+    await page.getByRole('menuitem', { name: 'Delete' }).click();
+    const dialog = page.getByTestId('delete-sheet-dialog');
+    await expect(dialog).toBeVisible();
+    await dialog.getByRole('button', { name: 'Cancel' }).click();
+    await expect(tabs.getByRole('tab')).toHaveCount(2);
+    await tabs.getByRole('tab', { name: 'Data set' }).click({ button: 'right' });
+    await page.getByRole('menuitem', { name: 'Delete' }).click();
+    await page.getByTestId('delete-sheet-dialog').getByRole('button', { name: 'Delete' }).click();
+    await expect(tabs.getByRole('tab')).toHaveText(['Sheet1']);
+    expect(await read('Sheet1!A1')).toEqual({ error: '#REF!' });
+  });
+
+  test('the whole workbook is saved and loaded, and onChange reports every sheet', async ({ page }) => {
+    await open(page);
+    await page.getByRole('button', { name: 'Add sheet' }).click();
+    await page.evaluate(() => {
+      const wb = (window as unknown as { __handle: Handle }).__handle.workbook;
+      wb.sheetByName('Sheet2')!.setCellInput(0, 0, '7');
+    });
+    await expect.poll(() => page.evaluate(() => (window as unknown as { __changes: unknown[] }).__changes.length)).toBeGreaterThan(0);
+    const snapshot = await page.evaluate(() => (window as unknown as { __handle: Handle }).__handle.getWorkbookSnapshot());
+    expect((snapshot as unknown as { sheets: Array<{ name: string }> }).sheets.map((s) => s.name)).toEqual(['Sheet1', 'Sheet2']);
+    await page.evaluate((snap) => (window as unknown as { __handle: Handle }).__handle.load(snap), snapshot);
+    await expect(page.getByRole('tablist', { name: 'Sheets' }).getByRole('tab')).toHaveText(['Sheet1', 'Sheet2']);
+    expect(await page.evaluate(() => (window as unknown as { __handle: Handle }).__handle.workbook.sheetByName('Sheet2')!.getCellByView(0, 0).value)).toBe(7);
   });
 
   test('onChange is batched, carries a snapshot, ignores selection, and sees freezing', async ({ page }) => {
@@ -541,8 +625,8 @@ test.describe('accessibility', () => {
     await page.getByTestId('grid').click({ position: { x: 80, y: 34 } });
     const mod = (await page.evaluate(() => /Mac|iPhone|iPad/.test(navigator.platform))) ? 'Meta' : 'Control';
     await page.keyboard.press(`${mod}+Alt+Shift+ArrowDown`);
-    // The toolbar, formula bar and status bar come before the grid in the page; "next" after it is the last button.
-    await expect(page.locator('#after-grid')).toBeFocused();
+    // The sheet tabs sit right below the grid, so the next control after it is their "Add sheet" button.
+    await expect(page.getByRole('button', { name: 'Add sheet' })).toBeFocused();
     await page.getByTestId('grid').click({ position: { x: 80, y: 34 } });
     await page.keyboard.press(`${mod}+Alt+Shift+ArrowUp`);
     const focused = await page.evaluate(() => document.activeElement?.closest('[data-testid=status-bar], [data-testid=formula-bar], [data-testid=toolbar]') !== null || document.activeElement?.id === 'before-grid');

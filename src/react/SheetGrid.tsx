@@ -7,38 +7,51 @@ import {
   useLayoutEffect,
   useRef,
   useState,
+  useSyncExternalStore,
 } from 'react';
 import type { DateOrder } from '../core/model/dates';
-import { deserializeSheet, serializeSheet, type SheetSnapshot } from '../core/snapshot';
+import { type SheetSnapshot, serializeSheet } from '../core/snapshot';
 import { Spreadsheet } from '../core/Spreadsheet';
+import { Workbook } from '../core/Workbook';
+import { deserializeWorkbook, serializeWorkbook, type WorkbookSnapshot } from '../core/workbookSnapshot';
 import type { GridController } from '../input/GridController';
 import { DataGrid } from './DataGrid';
 import { FormulaBar } from './FormulaBar';
 import { GridErrorBoundary } from './GridErrorBoundary';
 import { GridProvider, type ThemeSetting } from './GridProvider';
 import type { Locale, Messages } from './messages';
+import { SheetTabs } from './SheetTabs';
 import { StatusBar } from './StatusBar';
 import { Toolbar } from './Toolbar';
 
 export interface SheetChangeEvent {
+  /** The sheet that is showing. */
   sheet: Spreadsheet;
-  /** Serializes the sheet as it is now. Call it only when you actually save: it walks every filled cell. */
+  workbook: Workbook;
+  /** Serializes the showing sheet as it is now. Call it only when you actually save: it walks every filled cell. */
   getSnapshot: () => SheetSnapshot;
+  /** Serializes every sheet (and which one is active): what to save for a workbook. */
+  getWorkbookSnapshot: () => WorkbookSnapshot;
 }
 
 export interface SheetGridHandle {
-  /** The headless sheet behind the component: read cells, run commands, listen for changes. */
+  /** The sheet that is showing: read cells, run commands, listen for changes. */
   readonly sheet: Spreadsheet;
+  /** All the sheets. */
+  readonly workbook: Workbook;
   /** The input/rendering controller, or null before the grid has mounted. */
   readonly controller: GridController | null;
+  /** The showing sheet only. */
   getSnapshot(): SheetSnapshot;
-  /** Replaces the whole sheet (undo history included). Throws SnapshotError for data that is not a snapshot. */
+  /** Every sheet; load it back with `defaultValue` or `load`. */
+  getWorkbookSnapshot(): WorkbookSnapshot;
+  /** Replaces everything (undo history included) with a workbook or single-sheet snapshot. Throws SnapshotError for anything else. */
   load(snapshot: unknown): void;
   focus(): void;
 }
 
 export interface SheetGridProps {
-  /** A saved sheet (from `getSnapshot`/`serializeSheet`). Read once, when the component mounts; use `load` later. */
+  /** A saved workbook (`getWorkbookSnapshot`) or single sheet (`getSnapshot`). Read once, when the component mounts; use `load` later. */
   defaultValue?: unknown;
   /** Size of a new sheet when there is no `defaultValue`. */
   rowCount?: number;
@@ -55,6 +68,8 @@ export interface SheetGridProps {
   toolbar?: boolean;
   formulaBar?: boolean;
   statusBar?: boolean;
+  /** Show the sheet tabs (add, rename, duplicate, delete, reorder). On by default; a workbook of one sheet still shows its tab. */
+  sheetTabs?: boolean;
   /** Initial frozen panes. */
   frozenRows?: number;
   frozenCols?: number;
@@ -78,16 +93,17 @@ export interface SheetGridProps {
 
 const ROOT: CSSProperties = { display: 'flex', flexDirection: 'column', height: '100%', minHeight: 0 };
 
-function create(props: Pick<SheetGridProps, 'defaultValue' | 'rowCount' | 'colCount'>): { sheet: Spreadsheet; error: Error | null } {
+function create(props: Pick<SheetGridProps, 'defaultValue' | 'rowCount' | 'colCount'>): { workbook: Workbook; error: Error | null } {
+  const blank = (): Workbook => new Workbook(new Spreadsheet({ rowCount: props.rowCount, colCount: props.colCount }));
   if (props.defaultValue !== undefined) {
     try {
-      return { sheet: deserializeSheet(props.defaultValue), error: null };
+      return { workbook: deserializeWorkbook(props.defaultValue), error: null };
     } catch (e) {
       // A bad save must not leave the user with nothing on screen: start blank and report it.
-      return { sheet: new Spreadsheet({ rowCount: props.rowCount, colCount: props.colCount }), error: e instanceof Error ? e : new Error(String(e)) };
+      return { workbook: blank(), error: e instanceof Error ? e : new Error(String(e)) };
     }
   }
-  return { sheet: new Spreadsheet({ rowCount: props.rowCount, colCount: props.colCount }), error: null };
+  return { workbook: blank(), error: null };
 }
 
 /**
@@ -104,6 +120,7 @@ export const SheetGrid = forwardRef<SheetGridHandle, SheetGridProps>(function Sh
     toolbar = true,
     formulaBar = true,
     statusBar = true,
+    sheetTabs = true,
     frozenRows,
     frozenCols,
     zoom,
@@ -115,8 +132,16 @@ export const SheetGrid = forwardRef<SheetGridHandle, SheetGridProps>(function Sh
     style,
   } = props;
   const [initial] = useState(() => create(props));
-  const [sheet, setSheet] = useState(initial.sheet);
+  const [workbook, setWorkbook] = useState(initial.workbook);
+  // The sheet that shows is whichever the workbook says is active (its tabs change it).
+  const sheet = useSyncExternalStore(
+    (listener) => workbook.subscribe(listener),
+    () => workbook.active,
+    () => workbook.active,
+  );
   const [controller, setController] = useState<GridController | null>(null);
+  // Each sheet has its own grid surface; the zoom the user chose carries over when they switch sheets.
+  const [liveZoom, setLiveZoom] = useState<number | undefined>(undefined);
   const handlers = useRef({ onChange, onError });
   handlers.current = { onChange, onError };
 
@@ -126,33 +151,55 @@ export const SheetGrid = forwardRef<SheetGridHandle, SheetGridProps>(function Sh
 
   // Before paint, so a read-only sheet is never editable even for a frame.
   useLayoutEffect(() => {
-    sheet.readOnly = readOnly;
-  }, [sheet, readOnly]);
+    workbook.readOnly = readOnly;
+  }, [workbook, readOnly]);
 
   useLayoutEffect(() => {
-    sheet.dateOrder = dateOrder;
-  }, [sheet, dateOrder]);
+    workbook.dateOrder = dateOrder;
+  }, [workbook, dateOrder]);
 
   useEffect(() => {
     let timer: ReturnType<typeof setTimeout> | undefined;
     const fire = (): void => {
       timer = undefined;
-      handlers.current.onChange?.({ sheet, getSnapshot: () => serializeSheet(sheet) });
+      const current = workbook.active;
+      handlers.current.onChange?.({
+        sheet: current,
+        workbook,
+        getSnapshot: () => serializeSheet(current),
+        getWorkbookSnapshot: () => serializeWorkbook(workbook),
+      });
     };
-    const off = sheet.subscribeChanges(() => {
+    const trigger = (): void => {
       // Sorting, filtering or resizing a read-only sheet changes how it is viewed, not the document: nothing to save.
-      if (sheet.readOnly) return;
+      if (workbook.readOnly) return;
       clearTimeout(timer);
       timer = setTimeout(fire, changeDelay);
+    };
+    // Every sheet reports its own changes; sheets come and go, so the subscriptions follow the list.
+    const subscriptions = new Map<Spreadsheet, () => void>();
+    const follow = (): void => {
+      for (const s of workbook.sheets) if (!subscriptions.has(s)) subscriptions.set(s, s.subscribeChanges(trigger));
+      for (const [s, off] of subscriptions) {
+        if (workbook.sheets.includes(s)) continue;
+        off();
+        subscriptions.delete(s);
+      }
+    };
+    follow();
+    const offWorkbook = workbook.subscribe(() => {
+      follow();
+      trigger();
     });
     return () => {
-      off();
+      offWorkbook();
+      for (const off of subscriptions.values()) off();
       if (timer !== undefined) {
         clearTimeout(timer);
         fire(); // never lose the last edit because the component went away
       }
     };
-  }, [sheet, changeDelay]);
+  }, [workbook, changeDelay]);
 
   const focus = useCallback(() => controller?.editor.focus(), [controller]);
 
@@ -160,12 +207,14 @@ export const SheetGrid = forwardRef<SheetGridHandle, SheetGridProps>(function Sh
     ref,
     () => ({
       sheet,
+      workbook,
       controller,
       getSnapshot: () => serializeSheet(sheet),
-      load: (snapshot: unknown) => setSheet(deserializeSheet(snapshot)),
+      getWorkbookSnapshot: () => serializeWorkbook(workbook),
+      load: (snapshot: unknown) => setWorkbook(deserializeWorkbook(snapshot)),
       focus,
     }),
-    [sheet, controller, focus],
+    [sheet, workbook, controller, focus],
   );
 
   return (
@@ -179,11 +228,15 @@ export const SheetGrid = forwardRef<SheetGridHandle, SheetGridProps>(function Sh
               sheet={sheet}
               frozenRows={frozenRows}
               frozenCols={frozenCols}
-              zoom={zoom}
-              onZoomChange={onZoomChange}
+              zoom={zoom ?? liveZoom}
+              onZoomChange={(z) => {
+                setLiveZoom(z);
+                onZoomChange?.(z);
+              }}
               onReady={setController}
             />
           </div>
+          {sheetTabs && <SheetTabs workbook={workbook} onAction={focus} />}
           {statusBar && <StatusBar sheet={sheet} />}
         </GridErrorBoundary>
       </div>

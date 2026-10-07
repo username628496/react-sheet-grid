@@ -152,6 +152,19 @@ const CSS = `
   .rdg-swatch { forced-color-adjust: none; }
 }
 
+.rdg-tabs { display: flex; align-items: stretch; gap: 0; min-height: 32px; border-top: 1px solid var(--rdg-border); background: var(--rdg-surface); }
+.rdg-tablist { display: flex; align-items: stretch; flex: 1; min-width: 0; overflow-x: auto; scrollbar-width: thin; }
+.rdg-tab {
+  position: relative; display: inline-flex; align-items: center; flex: none; max-width: 220px; padding: 0 16px; margin: 0;
+  border: 0; border-right: 1px solid var(--rdg-border); background: transparent; color: var(--rdg-muted); font: inherit; cursor: pointer;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.rdg-tab:hover { background: var(--rdg-hover); }
+.rdg-tab[aria-selected='true'] { background: var(--rdg-field); color: var(--rdg-accent); font-weight: 600; box-shadow: inset 0 -2px 0 var(--rdg-accent); }
+.rdg-tab:focus-visible { outline: 2px solid var(--rdg-accent); outline-offset: -2px; }
+.rdg-tab-input { flex: none; width: 140px; margin: 4px 6px; padding: 2px 6px; border: 1px solid var(--rdg-accent); border-radius: 4px; background: var(--rdg-field); color: inherit; font: inherit; }
+.rdg-tab-input[aria-invalid='true'] { border-color: #d93025; }
+.rdg-tabs-add { align-self: center; margin: 0 6px; }
 .rdg-statusbar { display: flex; align-items: center; gap: 18px; min-height: 28px; padding: 0 14px; border-top: 1px solid var(--rdg-border); font-size: 12px; color: var(--rdg-muted); }
 .rdg-statusbar b { color: var(--rdg-text); font-weight: 600; font-variant-numeric: tabular-nums; }
 `;

@@ -120,6 +120,18 @@ export interface Messages {
   mergeCells: string;
   unmergeCells: string;
   mergeConflict: string;
+  sheetTabs: string;
+  addSheet: string;
+  renameSheet: string;
+  duplicateSheet: string;
+  deleteSheet: string;
+  moveSheetLeft: string;
+  moveSheetRight: string;
+  sheetName: string;
+  sheetNameProblem: Record<'empty' | 'tooLong' | 'invalid' | 'duplicate', string>;
+  deleteSheetTitle: (name: string) => string;
+  deleteSheetBody: string;
+
   cfAddRule: string;
   cfRemoveRule: string;
   cfTextColor: string;
@@ -357,6 +369,22 @@ const en: Messages = {
   mergeCells: 'Merge cells',
   unmergeCells: 'Unmerge cells',
   mergeConflict: 'Merged cells cannot be sorted or filtered. Unmerge them first.',
+  sheetTabs: 'Sheets',
+  addSheet: 'Add sheet',
+  renameSheet: 'Rename',
+  duplicateSheet: 'Duplicate',
+  deleteSheet: 'Delete',
+  moveSheetLeft: 'Move left',
+  moveSheetRight: 'Move right',
+  sheetName: 'Sheet name',
+  sheetNameProblem: {
+    empty: 'The name cannot be empty.',
+    tooLong: 'The name is too long (50 characters at most).',
+    invalid: 'The name cannot contain [ ] : * ? / \\ or start or end with an apostrophe.',
+    duplicate: 'Another sheet already has this name.',
+  },
+  deleteSheetTitle: (name) => `Delete the sheet "${name}"?`,
+  deleteSheetBody: 'This cannot be undone. Formulas in other sheets that read it will show #REF!.',
   cfAddRule: 'Add rule',
   cfRemoveRule: 'Remove rule',
   cfTextColor: 'Text color',
@@ -632,6 +660,22 @@ const vi: Messages = {
   mergeCells: 'Gộp ô',
   unmergeCells: 'Bỏ gộp ô',
   mergeConflict: 'Không thể sắp xếp hoặc lọc khi có ô đã gộp. Hãy bỏ gộp trước.',
+  sheetTabs: 'Các trang tính',
+  addSheet: 'Thêm trang tính',
+  renameSheet: 'Đổi tên',
+  duplicateSheet: 'Nhân bản',
+  deleteSheet: 'Xóa',
+  moveSheetLeft: 'Chuyển sang trái',
+  moveSheetRight: 'Chuyển sang phải',
+  sheetName: 'Tên trang tính',
+  sheetNameProblem: {
+    empty: 'Tên không được để trống.',
+    tooLong: 'Tên quá dài (tối đa 50 ký tự).',
+    invalid: 'Tên không được chứa [ ] : * ? / \\ hoặc bắt đầu/kết thúc bằng dấu nháy đơn.',
+    duplicate: 'Đã có trang tính khác dùng tên này.',
+  },
+  deleteSheetTitle: (name) => `Xóa trang tính "${name}"?`,
+  deleteSheetBody: 'Không thể hoàn tác. Công thức ở trang khác đang đọc trang này sẽ hiện #REF!.',
   cfAddRule: 'Thêm luật',
   cfRemoveRule: 'Xóa luật',
   cfTextColor: 'Màu chữ',
