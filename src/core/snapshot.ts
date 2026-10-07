@@ -20,6 +20,8 @@ export const SNAPSHOT_VERSION = 1;
  */
 export interface SheetSnapshot {
   version: typeof SNAPSHOT_VERSION;
+  /** The sheet's name inside a workbook. */
+  name?: string;
   /** Rows of underlying data (not the visible count, which a filter can reduce). */
   rowCount: number;
   colCount: number;
@@ -69,6 +71,7 @@ export function serializeSheet(sheet: Spreadsheet): SheetSnapshot {
 
   return {
     version: SNAPSHOT_VERSION,
+    name: sheet.name,
     rowCount: sheet.mapping.dataRowCount,
     colCount: sheet.colCount,
     defaultRowHeight: sheet.rows.defaultSize,
@@ -101,6 +104,8 @@ export function deserializeSheet(data: unknown, options: Omit<SpreadsheetOptions
     defaultRowHeight: options.defaultRowHeight ?? positive(d.defaultRowHeight, 'defaultRowHeight'),
     defaultColWidth: options.defaultColWidth ?? positive(d.defaultColWidth, 'defaultColWidth'),
   });
+
+  if (typeof d.name === 'string' && d.name.trim() !== '') sheet.name = d.name;
 
   // Interning in the saved order gives every style back the id the cells refer to.
   const styles = array(d.styles, 'styles');

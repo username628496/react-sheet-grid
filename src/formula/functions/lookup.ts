@@ -10,6 +10,7 @@ import {
   toBool,
   toNumber,
   type Value,
+  rangeModel,
 } from './helpers';
 
 // Order used by lookups: numbers < text < booleans, text compared case-insensitively.
@@ -59,12 +60,13 @@ function vlookup(args: Arg[], ctx: FnContext): Value {
   }
 
   // Whole-column ranges are cut at the last used row so lookups never walk a million empty rows.
-  const used = ctx.model.getUsedRange();
+  const model = rangeModel(range, ctx);
+  const used = model.getUsedRange();
   if (used === null) return err('#N/A');
   const lastRow = Math.min(range.r2, used.endRow);
   const firstCol = range.c1;
-  const result = (row: number): Value => ctx.model.getCell(row, firstCol + index - 1).value;
-  const keyAt = (row: number): Value => ctx.model.getCell(row, firstCol).value;
+  const result = (row: number): Value => model.getCell(row, firstCol + index - 1).value;
+  const keyAt = (row: number): Value => model.getCell(row, firstCol).value;
 
   if (!sorted) {
     const wild = typeof key === 'string' && /[*?]/.test(key) ? wildcardRegExp(key) : null;
@@ -121,7 +123,7 @@ function indexFn(args: Arg[], ctx: FnContext): Value {
   }
   if (row < 1 || col < 1) return err('#VALUE!');
   if (row > rows || col > cols) return err('#REF!');
-  return ctx.model.getCell(range.r1 + row - 1, range.c1 + col - 1).value;
+  return rangeModel(range, ctx).getCell(range.r1 + row - 1, range.c1 + col - 1).value;
 }
 
 function match(args: Arg[], ctx: FnContext): Value {
@@ -138,12 +140,13 @@ function match(args: Arg[], ctx: FnContext): Value {
     if (isCellError(t)) return t;
     type = Math.sign(t);
   }
-  const used = ctx.model.getUsedRange();
+  const model = rangeModel(range, ctx);
+  const used = model.getUsedRange();
   if (used === null || key === null) return err('#N/A');
   // Whole-column ranges are cut at the used area so the scan never walks empty rows.
   const length = cols === 1 ? Math.min(range.r2, used.endRow) - range.r1 + 1 : Math.min(range.c2, used.endCol) - range.c1 + 1;
   const at = (k: number): Value =>
-    cols === 1 ? ctx.model.getCell(range.r1 + k, range.c1).value : ctx.model.getCell(range.r1, range.c1 + k).value;
+    cols === 1 ? model.getCell(range.r1 + k, range.c1).value : model.getCell(range.r1, range.c1 + k).value;
 
   if (type === 0) {
     const wild = typeof key === 'string' && /[*?]/.test(key) ? wildcardRegExp(key) : null;

@@ -151,13 +151,31 @@ class Parser {
       }
       case 'ident':
         return this.identifier(t);
+      case 'qname':
+        if (this.peek().type !== 'bang') throw new FormulaSyntaxError('Expected ! after the sheet name', t.pos);
+        return this.qualified(t.text, t.pos);
       default:
         throw new FormulaSyntaxError(t.type === 'eof' ? 'Unexpected end of formula' : `Unexpected '${t.text}'`, t.pos);
     }
   }
 
+  /** `Sheet!A1`, `Sheet!A1:B2`, `Sheet!A:A`: the sheet name has been read and the next token is the `!`. */
+  private qualified(sheet: string, pos: number): Expr {
+    this.next(); // !
+    const t = this.next();
+    if (t.type !== 'ident') throw new FormulaSyntaxError('Expected a cell reference after !', t.pos);
+    const e = this.reference(t);
+    if (e.t !== 'ref' && e.t !== 'range') throw new FormulaSyntaxError('Expected a cell reference after !', pos);
+    return { ...e, sheet };
+  }
+
   private identifier(t: Token): Expr {
+    if (this.peek().type === 'bang') return this.qualified(t.text, t.pos);
     if (this.peek().type === 'lparen') return this.call(t);
+    return this.reference(t);
+  }
+
+  private reference(t: Token): Expr {
     const upper = t.text.toUpperCase();
     if (upper === 'TRUE') return { t: 'bool', v: true };
     if (upper === 'FALSE') return { t: 'bool', v: false };

@@ -31,6 +31,13 @@ export function resolveAxis(a: Axis, base: number): number {
   return a.abs ? a.n : base + a.n;
 }
 
+/** `Sheet2!`, or `'My sheet'!` when the name needs quotes; nothing for a reference to the formula's own sheet. */
+export function sheetPrefix(sheet: string | undefined): string {
+  if (sheet === undefined) return '';
+  return /^[A-Za-z_][A-Za-z0-9_]*$/.test(sheet) && !/^[A-Za-z]{1,3}\d+$/.test(sheet) ? `${sheet}!` : `'${sheet.replace(/'/g, "''")}'!`;
+}
+const prefix = sheetPrefix;
+
 function colText(a: Axis, base: number): string | null {
   const index = resolveAxis(a, base);
   if (index < 0 || index >= MAX_COLS) return null;
@@ -62,7 +69,7 @@ function print(e: Expr, row: number, col: number): string {
     case 'ref': {
       const c = colText(e.col, col);
       const r = rowText(e.row, row);
-      return c === null || r === null ? '#REF!' : `${c}${r}`;
+      return c === null || r === null ? '#REF!' : `${prefix(e.sheet)}${c}${r}`;
     }
     case 'range': {
       const wholeCols = e.r1.abs && e.r1.n === 0 && e.r2.abs && e.r2.n === MAX_ROWS - 1;
@@ -70,18 +77,18 @@ function print(e: Expr, row: number, col: number): string {
       if (wholeCols) {
         const a = colText(e.c1, col);
         const b = colText(e.c2, col);
-        return a === null || b === null ? '#REF!' : `${a}:${b}`;
+        return a === null || b === null ? '#REF!' : `${prefix(e.sheet)}${a}:${b}`;
       }
       if (wholeRows) {
         const a = rowText(e.r1, row);
         const b = rowText(e.r2, row);
-        return a === null || b === null ? '#REF!' : `${a}:${b}`;
+        return a === null || b === null ? '#REF!' : `${prefix(e.sheet)}${a}:${b}`;
       }
       const c1 = colText(e.c1, col);
       const r1 = rowText(e.r1, row);
       const c2 = colText(e.c2, col);
       const r2 = rowText(e.r2, row);
-      return c1 === null || r1 === null || c2 === null || r2 === null ? '#REF!' : `${c1}${r1}:${c2}${r2}`;
+      return c1 === null || r1 === null || c2 === null || r2 === null ? '#REF!' : `${prefix(e.sheet)}${c1}${r1}:${c2}${r2}`;
     }
     case 'un': {
       const inner = print(e.e, row, col);

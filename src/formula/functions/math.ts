@@ -9,6 +9,7 @@ import {
   type FunctionDef,
   isErr,
   isRange,
+  rangeModel,
   scalar,
   toNumber,
   type Value,
@@ -193,7 +194,7 @@ function sumIf(args: Arg[], ctx: FnContext): Value {
   forEachStored(range, ctx, (v, row, col) => {
     if (failure !== null || !criterion.matches(v)) return;
     // The sum range is aligned to the criteria range by offset from its top-left corner.
-    const target = sumArg === undefined ? v : ctx.model.getCell(sumArg.r1 + (row - range.r1), sumArg.c1 + (col - range.c1)).value;
+    const target = sumArg === undefined ? v : rangeModel(sumArg, ctx).getCell(sumArg.r1 + (row - range.r1), sumArg.c1 + (col - range.c1)).value;
     if (isErr(target)) failure = target;
     else if (typeof target === 'number') total += target;
   });
@@ -203,8 +204,8 @@ function sumIf(args: Arg[], ctx: FnContext): Value {
     if (area <= 100_000) {
       for (let r = range.r1; r <= range.r2; r++) {
         for (let c = range.c1; c <= range.c2; c++) {
-          if (ctx.model.hasCell(r, c)) continue; // stored cells were handled above
-          const t = ctx.model.getCell(sumArg.r1 + (r - range.r1), sumArg.c1 + (c - range.c1)).value;
+          if (rangeModel(range, ctx).hasCell(r, c)) continue; // stored cells were handled above
+          const t = rangeModel(sumArg, ctx).getCell(sumArg.r1 + (r - range.r1), sumArg.c1 + (c - range.c1)).value;
           if (typeof t === 'number') total += t;
         }
       }

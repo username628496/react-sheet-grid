@@ -18,8 +18,14 @@ export type Expr =
   | { readonly t: 'bool'; readonly v: boolean }
   /** `raw` keeps the source text of formulas that failed to parse so editing still shows what was typed. */
   | { readonly t: 'err'; readonly v: ErrorCode; readonly raw?: string }
-  | { readonly t: 'ref'; readonly row: Axis; readonly col: Axis }
-  | { readonly t: 'range'; readonly r1: Axis; readonly c1: Axis; readonly r2: Axis; readonly c2: Axis }
+  /** `sheet` names another sheet of the workbook (`Sheet2!A1`); absent means the sheet holding the formula. */
+  | { readonly t: 'ref'; readonly row: Axis; readonly col: Axis; readonly sheet?: string }
+  | { readonly t: 'range'; readonly r1: Axis; readonly c1: Axis; readonly r2: Axis; readonly c2: Axis; readonly sheet?: string }
   | { readonly t: 'un'; readonly op: '-' | '+' | '%'; readonly e: Expr }
   | { readonly t: 'bin'; readonly op: BinaryOp; readonly l: Expr; readonly r: Expr }
   | { readonly t: 'call'; readonly name: string; readonly args: readonly Expr[] };
+
+/** Sheet names compare ignoring case, as in Sheets and Excel. */
+export function sameSheetName(a: string, b: string): boolean {
+  return a.toLowerCase() === b.toLowerCase();
+}

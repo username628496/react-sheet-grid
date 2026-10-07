@@ -3,7 +3,9 @@ import { BatchCommand } from './commands/BatchCommand';
 import { SetMergesCommand } from './commands/SetMergesCommand';
 import type { Command } from './commands/Command';
 import { type CellChange, SetCellsCommand } from './commands/SetCellsCommand';
+import { sameSheetName } from '../formula/ast';
 import { FormulaEngine } from '../formula/engine';
+import type { Workbook } from './Workbook';
 import { parseFormulaSafe } from '../formula/parser';
 import {
   deleteMap,
@@ -135,6 +137,12 @@ export class Spreadsheet {
   readonly engine: FormulaEngine;
   readonly history = new History();
   readonly selection: SelectionModel;
+  /** The workbook this sheet belongs to, or null for a sheet on its own. Set by `Workbook`. */
+  workbook: Workbook | null = null;
+  /** The sheet's name, which other sheets use in formulas (`Sheet2!A1`). Changed through `Workbook.renameSheet`. */
+  name = 'Sheet1';
+  /** Cells changed since the workbook was last told (so sheets reading this one recompute). */
+  private touched = false;
   /** Merged blocks of cells (see MergeTable). */
   readonly merges = new MergeTable();
   private readonly listeners = new Set<Listener>();
@@ -165,23 +173,41 @@ export class Spreadsheet {
     this.rows = new AxisLayout(rowCount, options.defaultRowHeight ?? 21);
     this.cols = new AxisLayout(colCount, options.defaultColWidth ?? 100);
     this.selection = new SelectionModel(this, () => this.notify(), this.merges);
-    this.engine = new FormulaEngine(this.model);
+    this.engine = new FormulaEngine(this.model, {
+      ownName: () => this.name,
+      resolve: (name) => this.workbook?.sheetByName(name)?.model ?? null,
+    });
     this.model.onCellChange = (dataRow, dataCol, cell) => {
+      this.touched = true;
       if (cell.formula !== undefined || this.engine.hasFormulas) this.dirty.add(cellKey(dataRow, dataCol));
     };
   }
 
+  /** References without a qualifier or qualified with this sheet's own name: the ones that follow cells moved here. */
+  private readonly ownRefs = (sheet: string | undefined): boolean => sheet === undefined || sameSheetName(sheet, this.name);
+
   /** Recomputes formulas affected by writes since the last call. Commands run this after apply and invert. */
   private flushFormulas(): void {
-    if (this.dirty.size === 0) return;
-    this.engine.recalc(this.dirty);
-    this.dirty.clear();
+    if (this.dirty.size > 0) {
+      this.engine.recalc(this.dirty);
+      this.dirty.clear();
+    }
+    if (this.touched) {
+      this.touched = false;
+      this.workbook?.sheetChanged(this);
+    }
+  }
+
+  /** Called by the workbook after formulas here were recomputed because another sheet changed. */
+  externalRecalculated(): void {
+    this.notify();
   }
 
   /** Recomputes every formula; call after loading data straight into the model. */
   recalculateAll(): void {
     this.dirty.clear();
     this.engine.rebuildAll();
+    this.touched = false;
     this.notify();
   }
 
@@ -328,6 +354,7 @@ export class Spreadsheet {
     if (this.readOnlyFlag) return false;
     const done = this.history.undo(this);
     if (done) {
+      this.touched = true;
       this.selection.refit(false);
       this.flushFormulas();
       this.moveSelectionOffHidden();
@@ -340,6 +367,7 @@ export class Spreadsheet {
     if (this.readOnlyFlag) return false;
     const done = this.history.redo(this);
     if (done) {
+      this.touched = true;
       this.selection.refit(false);
       this.flushFormulas();
       this.moveSelectionOffHidden();
@@ -1217,7 +1245,7 @@ export class Spreadsheet {
       if (nr === null || nc === null) return null; // inside a deleted block
       if (cell.formula === undefined) return { row: nr, col: nc, cell };
       // The formula's own position changes too, so relative references are re-expressed from the new position.
-      return { row: nr, col: nc, cell: { ...cell, formula: remapFormula(cell.formula, row, col, nr, nc, rowMap, colMap) } };
+      return { row: nr, col: nc, cell: { ...cell, formula: remapFormula(cell.formula, row, col, nr, nc, rowMap, colMap, (s) => s === undefined || sameSheetName(s, this.name)) } };
     });
     const layout = axis === 'row' ? this.rows : this.cols;
     if (kind === 'insert') layout.insertAt(at, count);
@@ -1229,6 +1257,8 @@ export class Spreadsheet {
       nextOrder,
     );
     this.merges.shift(axis, kind, at, count);
+    this.workbook?.structureChanged(this, rowMap, colMap);
+    this.touched = true;
     this.dirty.clear();
     this.engine.rebuildAll();
     if (kind === 'insert') {
@@ -1430,12 +1460,12 @@ export class Spreadsheet {
       const insideTarget =
         change.dataRow >= toRow && change.dataRow <= toEndRow && change.dataCol >= toCol && change.dataCol <= toEndCol;
       if (f === undefined || !insideTarget) continue;
-      const moved = moveReferences(f, change.dataRow, change.dataCol, rect, dr, dc);
+      const moved = moveReferences(f, change.dataRow, change.dataCol, rect, dr, dc, this.ownRefs);
       if (moved !== f) changes[i] = { ...change, cell: { ...change.cell, formula: moved } };
     }
     this.model.forEachCell((row, col, cell) => {
       if (cell.formula === undefined || written.has(cellKey(row, col))) return;
-      const moved = moveReferences(cell.formula, row, col, rect, dr, dc);
+      const moved = moveReferences(cell.formula, row, col, rect, dr, dc, this.ownRefs);
       if (moved !== cell.formula) changes.push({ dataRow: row, dataCol: col, cell: { ...cell, formula: moved } });
     });
   }
@@ -1489,12 +1519,12 @@ export class Spreadsheet {
       const change = changes[i] as CellChange;
       const f = change.cell.formula;
       if (f === undefined || !targets.has(cellKey(change.dataRow, change.dataCol))) continue;
-      const moved = moveReferencesWith(f, change.dataRow, change.dataCol, cellShift, rangeShift);
+      const moved = moveReferencesWith(f, change.dataRow, change.dataCol, cellShift, rangeShift, this.ownRefs);
       if (moved !== f) changes[i] = { ...change, cell: { ...change.cell, formula: moved } };
     }
     this.model.forEachCell((row, col, cell) => {
       if (cell.formula === undefined || written.has(cellKey(row, col))) return;
-      const moved = moveReferencesWith(cell.formula, row, col, cellShift, rangeShift);
+      const moved = moveReferencesWith(cell.formula, row, col, cellShift, rangeShift, this.ownRefs);
       if (moved !== cell.formula) changes.push({ dataRow: row, dataCol: col, cell: { ...cell, formula: moved } });
     });
   }

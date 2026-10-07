@@ -1,4 +1,5 @@
 import type { Cell } from '../model/Cell';
+import type { ReaderSnapshot } from '../Workbook';
 import type { MergeRegion } from '../model/MergeTable';
 import type { AxisSnapshot } from '../layout/AxisLayout';
 import type { Spreadsheet } from '../Spreadsheet';
@@ -14,6 +15,7 @@ interface Before {
   colCount: number;
   order: Int32Array | null;
   merges: MergeRegion[];
+  readers: ReaderSnapshot | null;
 }
 
 /**
@@ -43,6 +45,7 @@ export class StructureCommand implements Command {
       colCount: sheet.mapping.colCount,
       order: sheet.mapping.getOrder(),
       merges: sheet.merges.snapshot(),
+      readers: sheet.workbook?.captureReaders(sheet) ?? null,
     };
     sheet.applyStructure(this.axis, this.kind, this.at, this.count);
   }
@@ -57,6 +60,7 @@ export class StructureCommand implements Command {
     sheet.merges.set(b.merges);
     sheet.selection.clamp();
     sheet.engine.rebuildAll();
+    if (b.readers !== null) sheet.workbook?.restoreReaders(b.readers);
   }
 }
 

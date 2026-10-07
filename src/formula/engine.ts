@@ -1,7 +1,7 @@
 import { err } from './functions/helpers';
 import { cellKey, keyCol, keyRow, type SheetModel } from '../core/model/SheetModel';
 import { collectPrecedents, DependencyGraph } from './dependency';
-import { Evaluator } from './evaluator';
+import { Evaluator, type SheetEnvironment } from './evaluator';
 
 /**
  * Keeps formula results in sync with the model. After a change it finds every
@@ -14,8 +14,47 @@ export class FormulaEngine {
   private readonly formulaKeys = new Set<number>();
   private readonly evaluator: Evaluator;
 
-  constructor(private readonly model: SheetModel) {
-    this.evaluator = new Evaluator(model);
+  /** Formula cells that read other sheets, with the (lower-cased) names of the sheets they read. */
+  private readonly externals = new Map<number, readonly string[]>();
+
+  constructor(
+    private readonly model: SheetModel,
+    private readonly env: SheetEnvironment | null = null,
+  ) {
+    this.evaluator = new Evaluator(model, env);
+  }
+
+  /** Number of formulas that read another sheet. */
+  get externalCount(): number {
+    return this.externals.size;
+  }
+
+  /** Whether any formula reads the (lower-cased) sheet name. */
+  readsSheet(lowerName: string): boolean {
+    for (const names of this.externals.values()) if (names.includes(lowerName)) return true;
+    return false;
+  }
+
+  /** Keys of the formulas that read the (lower-cased) sheet name. */
+  keysReading(lowerName: string): number[] {
+    const keys: number[] = [];
+    for (const [key, names] of this.externals) if (names.includes(lowerName)) keys.push(key);
+    return keys;
+  }
+
+  /** Recomputes every formula that reads any other sheet. */
+  recalcAllReaders(): void {
+    if (this.externals.size > 0) this.recalc([...this.externals.keys()]);
+  }
+
+  /** Recomputes the formulas that read `sheetName` (and whatever depends on them here). Returns whether any did. */
+  recalcReaders(sheetName: string): boolean {
+    const lower = sheetName.toLowerCase();
+    const keys: number[] = [];
+    for (const [key, names] of this.externals) if (names.includes(lower)) keys.push(key);
+    if (keys.length === 0) return false;
+    this.recalc(keys);
+    return true;
   }
 
   get hasFormulas(): boolean {
@@ -30,6 +69,7 @@ export class FormulaEngine {
   rebuildAll(): void {
     this.graph.clear();
     this.formulaKeys.clear();
+    this.externals.clear();
     const keys: number[] = [];
     this.model.forEachCell((row, col, cell) => {
       if (cell.formula !== undefined) keys.push(cellKey(row, col));
@@ -45,10 +85,15 @@ export class FormulaEngine {
       const col = keyCol(key);
       const cell = this.model.getCell(row, col);
       if (cell.formula !== undefined) {
-        this.graph.set(key, collectPrecedents(cell.formula, row, col));
+        const own = this.env?.ownName();
+        const precedents = collectPrecedents(cell.formula, row, col, (s) => s === undefined || (own !== undefined && s.toLowerCase() === own.toLowerCase()));
+        this.graph.set(key, precedents);
         this.formulaKeys.add(key);
+        if (precedents.sheets.length > 0) this.externals.set(key, precedents.sheets);
+        else this.externals.delete(key);
       } else if (this.formulaKeys.delete(key)) {
         this.graph.remove(key);
+        this.externals.delete(key);
       }
     }
     if (this.formulaKeys.size === 0) return;

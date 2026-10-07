@@ -12,21 +12,35 @@ export interface RangeBounds {
 export interface Precedents {
   cells: number[];
   ranges: RangeBounds[];
+  /** Lower-cased names of the other sheets the formula reads. Those cells are not tracked here: the workbook recomputes the formula when such a sheet changes. */
+  sheets?: string[];
 }
 
 /** Everything a formula at (row, col) reads, as absolute data coordinates. */
-export function collectPrecedents(expr: Expr, row: number, col: number): Precedents {
-  const out: Precedents = { cells: [], ranges: [] };
+export function collectPrecedents(expr: Expr, row: number, col: number, isLocal: (sheet: string | undefined) => boolean = (s) => s === undefined): Precedents & { sheets: string[] } {
+  const out: Precedents & { sheets: string[] } = { cells: [], ranges: [], sheets: [] };
+  const external = (sheet: string): void => {
+    const key = sheet.toLowerCase();
+    if (!out.sheets.includes(key)) out.sheets.push(key);
+  };
   const inBounds = (r: number, c: number): boolean => r >= 0 && c >= 0 && r < MAX_ROWS && c < MAX_COLS;
   const visit = (e: Expr): void => {
     switch (e.t) {
       case 'ref': {
+        if (e.sheet !== undefined && !isLocal(e.sheet)) {
+          external(e.sheet);
+          break;
+        }
         const r = resolveAxis(e.row, row);
         const c = resolveAxis(e.col, col);
         if (inBounds(r, c)) out.cells.push(cellKey(r, c));
         break;
       }
       case 'range': {
+        if (e.sheet !== undefined && !isLocal(e.sheet)) {
+          external(e.sheet);
+          break;
+        }
         const ra = resolveAxis(e.r1, row);
         const rb = resolveAxis(e.r2, row);
         const ca = resolveAxis(e.c1, col);

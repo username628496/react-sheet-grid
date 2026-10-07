@@ -1,4 +1,6 @@
 export * from './Spreadsheet';
+export * from './Workbook';
+export * from './workbookSnapshot';
 export * from './commands';
 export * from './history';
 export * from './layout';

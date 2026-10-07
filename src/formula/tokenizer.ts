@@ -1,4 +1,4 @@
-export type TokenType = 'num' | 'str' | 'ident' | 'op' | 'lparen' | 'rparen' | 'comma' | 'colon' | 'percent' | 'err' | 'eof';
+export type TokenType = 'num' | 'str' | 'ident' | 'op' | 'lparen' | 'rparen' | 'comma' | 'colon' | 'percent' | 'err' | 'bang' | 'qname' | 'eof';
 
 export interface Token {
   readonly type: TokenType;
@@ -54,6 +54,30 @@ export function tokenize(src: string): Token[] {
       i = j;
       continue;
     }
+    if (ch === "'") {
+      // A quoted sheet name: 'My sheet'!A1, with '' for a literal quote.
+      let text = '';
+      let j = i + 1;
+      let closed = false;
+      while (j < src.length) {
+        if (src[j] === "'") {
+          if (src[j + 1] === "'") {
+            text += "'";
+            j += 2;
+            continue;
+          }
+          closed = true;
+          j++;
+          break;
+        }
+        text += src[j];
+        j++;
+      }
+      if (!closed || text === '') throw new FormulaSyntaxError('Unterminated sheet name', i);
+      tokens.push({ type: 'qname', text, pos: i });
+      i = j;
+      continue;
+    }
     const num = NUMBER_RE.exec(rest);
     if (num !== null) {
       tokens.push({ type: 'num', text: num[0], pos: i });
@@ -86,6 +110,7 @@ export function tokenize(src: string): Token[] {
     else if (ch === ',' || ch === ';') tokens.push({ type: 'comma', text: ch, pos: i });
     else if (ch === ':') tokens.push({ type: 'colon', text: ch, pos: i });
     else if (ch === '%') tokens.push({ type: 'percent', text: ch, pos: i });
+    else if (ch === '!') tokens.push({ type: 'bang', text: ch, pos: i });
     else throw new FormulaSyntaxError(`Unexpected character '${ch}'`, i);
     i++;
   }

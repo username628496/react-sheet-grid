@@ -61,6 +61,9 @@ export function deleteSetMap(deleted: readonly number[]): AxisMap {
 
 const REF_ERROR: Expr = { t: 'err', v: '#REF!' };
 
+export type SheetFilter = (sheet: string | undefined) => boolean;
+const ALL_REFERENCES: SheetFilter = () => true;
+
 /**
  * Rewrites every reference in a formula that moves from (oldRow, oldCol) to
  * (newRow, newCol) while rows/columns shift according to the two maps. The
@@ -75,18 +78,24 @@ export function remapFormula(
   newCol: number,
   rowMap: AxisMap,
   colMap: AxisMap,
+  /** Which references the maps apply to, by their sheet qualifier. A reference they do not apply to is only re-based. */
+  applies: SheetFilter = ALL_REFERENCES,
 ): Expr {
+  const withSheet = <T extends Expr>(node: T, sheet: string | undefined): T => (sheet === undefined ? node : { ...node, sheet });
   const store = (a: Axis, abs: number, base: number): Axis => (a.abs ? { abs: true, n: abs } : { abs: false, n: abs - base });
 
   const visit = (e: Expr): Expr => {
     switch (e.t) {
       case 'ref': {
-        const r = rowMap.point(resolveAxis(e.row, oldRow));
-        const c = colMap.point(resolveAxis(e.col, oldCol));
+        const mapped = applies(e.sheet);
+        const r = (mapped ? rowMap : IDENTITY_MAP).point(resolveAxis(e.row, oldRow));
+        const c = (mapped ? colMap : IDENTITY_MAP).point(resolveAxis(e.col, oldCol));
         if (r === null || c === null || r < 0 || c < 0 || r >= MAX_ROWS || c >= MAX_COLS) return REF_ERROR;
-        return { t: 'ref', row: store(e.row, r, newRow), col: store(e.col, c, newCol) };
+        return withSheet({ t: 'ref', row: store(e.row, r, newRow), col: store(e.col, c, newCol) }, e.sheet);
       }
       case 'range': {
+        const rowMapHere = applies(e.sheet) ? rowMap : IDENTITY_MAP;
+        const colMapHere = applies(e.sheet) ? colMap : IDENTITY_MAP;
         const wholeCols = e.r1.abs && e.r1.n === 0 && e.r2.abs && e.r2.n === MAX_ROWS - 1;
         const wholeRows = e.c1.abs && e.c1.n === 0 && e.c2.abs && e.c2.n === MAX_COLS - 1;
         const r1o = resolveAxis(e.r1, oldRow);
@@ -96,19 +105,22 @@ export function remapFormula(
         // Orient first so "start" is always the smaller index, whatever order the user typed.
         const [rLo, rHi] = r1o <= r2o ? [e.r1, e.r2] : [e.r2, e.r1];
         const [cLo, cHi] = c1o <= c2o ? [e.c1, e.c2] : [e.c2, e.c1];
-        const rs = wholeCols ? 0 : rowMap.rangeStart(Math.min(r1o, r2o));
-        const re = wholeCols ? MAX_ROWS - 1 : rowMap.rangeEnd(Math.max(r1o, r2o));
-        const cs = wholeRows ? 0 : colMap.rangeStart(Math.min(c1o, c2o));
-        const ce = wholeRows ? MAX_COLS - 1 : colMap.rangeEnd(Math.max(c1o, c2o));
+        const rs = wholeCols ? 0 : rowMapHere.rangeStart(Math.min(r1o, r2o));
+        const re = wholeCols ? MAX_ROWS - 1 : rowMapHere.rangeEnd(Math.max(r1o, r2o));
+        const cs = wholeRows ? 0 : colMapHere.rangeStart(Math.min(c1o, c2o));
+        const ce = wholeRows ? MAX_COLS - 1 : colMapHere.rangeEnd(Math.max(c1o, c2o));
         if (rs === null || re === null || cs === null || ce === null || rs > re || cs > ce) return REF_ERROR;
         if (rs < 0 || cs < 0 || re >= MAX_ROWS || ce >= MAX_COLS) return REF_ERROR;
-        return {
-          t: 'range',
-          r1: store(rLo, rs, newRow),
-          r2: store(rHi, re, newRow),
-          c1: store(cLo, cs, newCol),
-          c2: store(cHi, ce, newCol),
-        };
+        return withSheet(
+          {
+            t: 'range',
+            r1: store(rLo, rs, newRow),
+            r2: store(rHi, re, newRow),
+            c1: store(cLo, cs, newCol),
+            c2: store(cHi, ce, newCol),
+          },
+          e.sheet,
+        );
       }
       case 'un':
         return { t: 'un', op: e.op, e: visit(e.e) };
@@ -140,7 +152,7 @@ export interface CellRect {
  * dr/dc). A range follows only when it lies entirely inside the block; a partially overlapping range stays,
  * like in Excel and Sheets. The formula itself stays where it is. Returns the same object when nothing changed.
  */
-export function moveReferences(expr: Expr, row: number, col: number, rect: CellRect, dr: number, dc: number): Expr {
+export function moveReferences(expr: Expr, row: number, col: number, rect: CellRect, dr: number, dc: number, applies: SheetFilter = ALL_REFERENCES): Expr {
   const inside = (r: number, c: number): boolean => r >= rect.r1 && r <= rect.r2 && c >= rect.c1 && c <= rect.c2;
   const shift: Shift = [dr, dc];
   return moveReferencesWith(
@@ -149,6 +161,7 @@ export function moveReferences(expr: Expr, row: number, col: number, rect: CellR
     col,
     (r, c) => (inside(r, c) ? shift : null),
     (r1, c1, r2, c2) => (inside(r1, c1) && inside(r2, c2) ? shift : null),
+    applies,
   );
 }
 
@@ -165,11 +178,15 @@ export function moveReferencesWith(
   col: number,
   cellShift: (r: number, c: number) => Shift | null,
   rangeShift: (r1: number, c1: number, r2: number, c2: number) => Shift | null,
+  /** Which references the shifts apply to (those pointing at the sheet the cells moved in). Default: all. */
+  applies: SheetFilter = ALL_REFERENCES,
 ): Expr {
+  const withSheet = <T extends Expr>(node: T, sheet: string | undefined): T => (sheet === undefined ? node : { ...node, sheet });
   const store = (a: Axis, abs: number, base: number): Axis => (a.abs ? { abs: true, n: abs } : { abs: false, n: abs - base });
   const visit = (e: Expr): Expr => {
     switch (e.t) {
       case 'ref': {
+        if (!applies(e.sheet)) return e;
         const r = resolveAxis(e.row, row);
         const c = resolveAxis(e.col, col);
         const shift = cellShift(r, c);
@@ -177,9 +194,10 @@ export function moveReferencesWith(
         const nr = r + shift[0];
         const nc = c + shift[1];
         if (nr < 0 || nc < 0 || nr >= MAX_ROWS || nc >= MAX_COLS) return REF_ERROR;
-        return { t: 'ref', row: store(e.row, nr, row), col: store(e.col, nc, col) };
+        return withSheet({ t: 'ref', row: store(e.row, nr, row), col: store(e.col, nc, col) }, e.sheet);
       }
       case 'range': {
+        if (!applies(e.sheet)) return e;
         const ra = resolveAxis(e.r1, row);
         const rb = resolveAxis(e.r2, row);
         const ca = resolveAxis(e.c1, col);
@@ -189,14 +207,46 @@ export function moveReferencesWith(
         const [dr, dc] = shift;
         const out = [ra + dr, rb + dr, ca + dc, cb + dc];
         if (out[0] as number < 0 || out[1] as number < 0 || out[2] as number < 0 || out[3] as number < 0) return REF_ERROR;
-        return {
-          t: 'range',
-          r1: store(e.r1, ra + dr, row),
-          r2: store(e.r2, rb + dr, row),
-          c1: store(e.c1, ca + dc, col),
-          c2: store(e.c2, cb + dc, col),
-        };
+        return withSheet(
+          {
+            t: 'range',
+            r1: store(e.r1, ra + dr, row),
+            r2: store(e.r2, rb + dr, row),
+            c1: store(e.c1, ca + dc, col),
+            c2: store(e.c2, cb + dc, col),
+          },
+          e.sheet,
+        );
       }
+      case 'un': {
+        const inner = visit(e.e);
+        return inner === e.e ? e : { t: 'un', op: e.op, e: inner };
+      }
+      case 'bin': {
+        const l = visit(e.l);
+        const r = visit(e.r);
+        return l === e.l && r === e.r ? e : { t: 'bin', op: e.op, l, r };
+      }
+      case 'call': {
+        const args = e.args.map(visit);
+        return args.every((a, i) => a === e.args[i]) ? e : { t: 'call', name: e.name, args };
+      }
+      default:
+        return e;
+    }
+  };
+  return visit(expr);
+}
+
+/** Rewrites the sheet qualifier of references: `from` becomes `to`, or `#REF!` when `to` is null (the sheet was deleted). */
+export function renameSheetRefs(expr: Expr, from: string, to: string | null): Expr {
+  const lower = from.toLowerCase();
+  const visit = (e: Expr): Expr => {
+    switch (e.t) {
+      case 'ref':
+      case 'range':
+        if (e.sheet === undefined || e.sheet.toLowerCase() !== lower) return e;
+        return to === null ? REF_ERROR : { ...e, sheet: to };
       case 'un': {
         const inner = visit(e.e);
         return inner === e.e ? e : { t: 'un', op: e.op, e: inner };

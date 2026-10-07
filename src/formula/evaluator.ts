@@ -1,6 +1,6 @@
 import { isCellError } from '../core/model/Cell';
 import { MAX_COLS, MAX_ROWS, type SheetModel } from '../core/model/SheetModel';
-import type { Axis, BinaryOp, Expr } from './ast';
+import { type Axis, type BinaryOp, type Expr, sameSheetName } from './ast';
 import { FUNCTIONS } from './functions';
 import {
   type Arg,
@@ -38,14 +38,31 @@ function finite(n: number): Value {
   return Number.isFinite(n) ? n : err('#NUM!');
 }
 
+/** How a formula finds the other sheets of its workbook. */
+export interface SheetEnvironment {
+  /** The name of the sheet whose formulas are being evaluated (`Sheet1!A1` inside Sheet1 is a local reference). */
+  ownName(): string;
+  /** The cells of the named sheet, or null when there is no such sheet (the reference is then #REF!). */
+  resolve(name: string): SheetModel | null;
+}
+
 /** Evaluates formula trees against a model. Stateless apart from the position of the cell being evaluated. */
 export class Evaluator {
   private row = 0;
   private col = 0;
   private readonly ctx: FnContext;
 
-  constructor(private readonly model: SheetModel) {
+  constructor(
+    private readonly model: SheetModel,
+    private readonly env: SheetEnvironment | null = null,
+  ) {
     this.ctx = { model };
+  }
+
+  /** The model a reference reads: this sheet's, another sheet's, or null for a sheet that does not exist. */
+  private modelFor(sheet: string | undefined): SheetModel | null {
+    if (sheet === undefined || this.env === null) return sheet === undefined ? this.model : null;
+    return sameSheetName(sheet, this.env.ownName()) ? this.model : this.env.resolve(sheet);
   }
 
   evaluate(expr: Expr, row: number, col: number): Value {
@@ -56,9 +73,6 @@ export class Evaluator {
     return isRange(v) ? err('#VALUE!') : v;
   }
 
-  private cellAt(r: number, c: number): Value {
-    return this.model.getCell(r, c).value;
-  }
 
   private position(rowAxis: Axis, colAxis: Axis): { r: number; c: number } | null {
     const r = resolveAxis(rowAxis, this.row);
@@ -77,7 +91,8 @@ export class Evaluator {
         return err(e.v);
       case 'ref': {
         const p = this.position(e.row, e.col);
-        return p === null ? err('#REF!') : this.cellAt(p.r, p.c);
+        const model = this.modelFor(e.sheet);
+        return p === null || model === null ? err('#REF!') : model.getCell(p.r, p.c).value;
       }
       case 'range':
         return this.rangeOf(e);
@@ -99,14 +114,16 @@ export class Evaluator {
   private rangeOf(e: Extract<Expr, { t: 'range' }>): RangeRef | Value {
     const a = this.position(e.r1, e.c1);
     const b = this.position(e.r2, e.c2);
-    if (a === null || b === null) return err('#REF!');
-    return {
+    const model = this.modelFor(e.sheet);
+    if (a === null || b === null || model === null) return err('#REF!');
+    const range: RangeRef = {
       kind: 'range',
       r1: Math.min(a.r, b.r),
       c1: Math.min(a.c, b.c),
       r2: Math.max(a.r, b.r),
       c2: Math.max(a.c, b.c),
     };
+    return model === this.model ? range : { ...range, model };
   }
 
   private unary(op: '-' | '+' | '%', v: Value): Value {
@@ -175,7 +192,10 @@ export class Evaluator {
   private arg(e: Expr): Arg {
     if (e.t === 'ref') {
       const p = this.position(e.row, e.col);
-      return p === null ? err('#REF!') : { kind: 'range', r1: p.r, c1: p.c, r2: p.r, c2: p.c };
+      const model = this.modelFor(e.sheet);
+      if (p === null || model === null) return err('#REF!');
+      const cell: RangeRef = { kind: 'range', r1: p.r, c1: p.c, r2: p.r, c2: p.c };
+      return model === this.model ? cell : { ...cell, model };
     }
     return this.eval(e);
   }

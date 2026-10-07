@@ -13,6 +13,8 @@ export interface RangeRef {
   readonly c1: number;
   readonly r2: number;
   readonly c2: number;
+  /** The sheet the range lives in when it is not the formula's own (`Sheet2!A1:B2`). */
+  readonly model?: SheetModel;
 }
 
 export type Arg = Value | RangeRef;
@@ -38,6 +40,11 @@ export function err(code: ErrorCode): CellError {
   return e;
 }
 
+/** The model a range reads from. */
+export function rangeModel(range: RangeRef, ctx: FnContext): SheetModel {
+  return range.model ?? ctx.model;
+}
+
 export function isRange(a: Arg): a is RangeRef {
   return typeof a === 'object' && a !== null && 'kind' in a;
 }
@@ -46,7 +53,7 @@ export function isRange(a: Arg): a is RangeRef {
 export function scalar(a: Arg, ctx: FnContext): Value {
   if (!isRange(a)) return a;
   if (a.r1 !== a.r2 || a.c1 !== a.c2) return err('#VALUE!');
-  return ctx.model.getCell(a.r1, a.c1).value;
+  return rangeModel(a, ctx).getCell(a.r1, a.c1).value;
 }
 
 const NUMERIC_TEXT = /^\s*[+-]?(\d+\.?\d*|\.\d+)(e[+-]?\d+)?\s*$/i;
@@ -94,7 +101,7 @@ export function forEachStored(
   ctx: FnContext,
   visit: (value: Value, row: number, col: number) => void,
 ): void {
-  ctx.model.forEachCellInRange(
+  rangeModel(range, ctx).forEachCellInRange(
     { startRow: range.r1, startCol: range.c1, endRow: range.r2, endCol: range.c2 },
     (row, col, cell) => visit(cell.value, row, col),
   );
