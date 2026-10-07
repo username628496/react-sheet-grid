@@ -1,5 +1,6 @@
 import { type Border, type BorderPreset, type BorderSide, DEFAULT_BORDER, OPPOSITE, presetSides, withBorder } from './model/borders';
 import { BatchCommand } from './commands/BatchCommand';
+import { SetMergesCommand } from './commands/SetMergesCommand';
 import type { Command } from './commands/Command';
 import { type CellChange, SetCellsCommand } from './commands/SetCellsCommand';
 import { FormulaEngine } from '../formula/engine';
@@ -35,12 +36,13 @@ import type { Cell, CellValue } from './model/Cell';
 import { CELL_HORIZONTAL_PADDING, CELL_VERTICAL_PADDING, DEFAULT_FONT_SIZE, fontString, lineHeightFor, stepFontSize } from './model/font';
 import { formatValue, shiftDecimals } from './model/format';
 import { wrapLines } from './layout/wrap';
+import { MergeTable, type MergeRegion, endColOf, endRowOf } from './model/MergeTable';
 import { type ConditionalRule, MAX_CONDITIONAL_RULES } from './model/conditional';
 import { type Validation, isValid } from './model/validation';
 import { parseInput, parseTypedInput } from './model/parseInput';
 import { DATE_FORMAT, DATE_TIME_FORMAT, type DateOrder, dateEditText, isDateFormat, parseDateInput } from './model/dates';
 import { cellKey, MAX_COLS, MAX_ROWS, SheetModel } from './model/SheetModel';
-import { type Style, StyleTable } from './model/StyleTable';
+import { DEFAULT_STYLE_ID, type Style, StyleTable } from './model/StyleTable';
 import { SelectionModel, type ViewRange } from './selection/SelectionModel';
 import {
   cellDisplayText,
@@ -72,6 +74,7 @@ const FORMAT_FILL_LIMIT = 50_000;
 const MAX_SCATTERED_MOVE = 200_000; // cut-paste cells followed one by one in a sorted/filtered view
 const MAX_RANGE_CHECK = 10_000; // largest range inspected cell by cell for the same move
 const MAX_TILED_CELLS = 1_000_000;
+const EMPTY_CELL: Cell = Object.freeze({ value: null, styleId: DEFAULT_STYLE_ID });
 const DATE_FORMULA = /^=\s*(TODAY|NOW|DATE|EDATE|EOMONTH|DATEVALUE)\s*\(/i;
 
 /** Borders create a cell for every cell they touch, so a range this big is refused instead of filling memory. */
@@ -95,7 +98,9 @@ export type SheetNotice =
   | { code: 'exportTooLarge'; cells: number; limit: number }
   | { code: 'formatTooLarge'; cells: number; limit: number }
   /** Typed input broke a strict validation rule and was discarded. */
-  | { code: 'validationRejected'; rule: Validation };
+  | { code: 'validationRejected'; rule: Validation }
+  /** Sorting or filtering was refused because the sheet has merged cells (or merging, because it is sorted or filtered). */
+  | { code: 'mergeConflict' };
 
 export interface FindOptions extends TextSearchOptions {
   query: string;
@@ -130,6 +135,8 @@ export class Spreadsheet {
   readonly engine: FormulaEngine;
   readonly history = new History();
   readonly selection: SelectionModel;
+  /** Merged blocks of cells (see MergeTable). */
+  readonly merges = new MergeTable();
   private readonly listeners = new Set<Listener>();
   private readonly noticeListeners = new Set<(notice: SheetNotice) => void>();
   private state: ViewState = EMPTY_VIEW_STATE;
@@ -157,7 +164,7 @@ export class Spreadsheet {
     this.mapping = new ViewMapping(rowCount, colCount);
     this.rows = new AxisLayout(rowCount, options.defaultRowHeight ?? 21);
     this.cols = new AxisLayout(colCount, options.defaultColWidth ?? 100);
-    this.selection = new SelectionModel(this, () => this.notify());
+    this.selection = new SelectionModel(this, () => this.notify(), this.merges);
     this.engine = new FormulaEngine(this.model);
     this.model.onCellChange = (dataRow, dataCol, cell) => {
       if (cell.formula !== undefined || this.engine.hasFormulas) this.dirty.add(cellKey(dataRow, dataCol));
@@ -321,6 +328,7 @@ export class Spreadsheet {
     if (this.readOnlyFlag) return false;
     const done = this.history.undo(this);
     if (done) {
+      this.selection.refit(false);
       this.flushFormulas();
       this.moveSelectionOffHidden();
       this.notify();
@@ -332,6 +340,7 @@ export class Spreadsheet {
     if (this.readOnlyFlag) return false;
     const done = this.history.redo(this);
     if (done) {
+      this.selection.refit(false);
       this.flushFormulas();
       this.moveSelectionOffHidden();
       this.notify();
@@ -384,11 +393,73 @@ export class Spreadsheet {
     const rule = this.styles.get(old.styleId).validation;
     // Formulas are not checked (their result can change later); a rejected edit leaves the cell as it was.
     if (rule !== undefined && rule.strict && cell.formula === undefined && !isValid(rule, cell.value)) {
-      for (const listener of this.noticeListeners) listener({ code: 'validationRejected', rule });
+      this.notifyNotice({ code: 'validationRejected', rule });
       return false;
     }
     this.execute(new SetCellsCommand('Edit cell', [{ dataRow, dataCol, cell }]));
     return true;
+  }
+
+  private notifyNotice(notice: SheetNotice): void {
+    for (const listener of this.noticeListeners) listener(notice);
+  }
+
+  /** Whether the primary selection can be merged: more than one cell, an editable sheet, and not sorted or filtered. */
+  canMerge(): boolean {
+    if (this.readOnlyFlag || !this.mapping.isIdentity) return false;
+    const p = this.selection.primary;
+    return p.startRow !== p.endRow || p.startCol !== p.endCol;
+  }
+
+  /** Whether the primary selection touches a merged block (what "Unmerge" would act on). */
+  hasMergeInSelection(): boolean {
+    const p = this.selection.primary;
+    return this.merges.intersecting(p.startRow, p.startCol, p.endRow, p.endCol).length > 0;
+  }
+
+  /**
+   * Merges the primary selection into one cell that keeps the top-left cell's content; the other cells are emptied
+   * (undo brings them back). Blocks it overlaps are absorbed. One undo step. Returns false when not allowed.
+   */
+  mergeSelection(): boolean {
+    if (this.readOnlyFlag) return false;
+    if (!this.mapping.isIdentity) {
+      this.notifyNotice({ code: 'mergeConflict' });
+      return false;
+    }
+    if (!this.canMerge()) return false;
+    const p = this.selection.primary;
+    const region: MergeRegion = { row: p.startRow, col: p.startCol, rowSpan: p.endRow - p.startRow + 1, colSpan: p.endCol - p.startCol + 1 };
+    const cleared: CellChange[] = [];
+    this.forEachStoredCellInViewRange(p, (dataRow, dataCol) => {
+      if (dataRow !== region.row || dataCol !== region.col) cleared.push({ dataRow, dataCol, cell: EMPTY_CELL });
+    });
+    this.transaction('Merge cells', () => {
+      if (cleared.length > 0) this.execute(new SetCellsCommand('Merge cells', cleared));
+      const absorbed = new Set(this.merges.intersecting(p.startRow, p.startCol, p.endRow, p.endCol));
+      this.execute(new SetMergesCommand([...this.merges.all.filter((m) => !absorbed.has(m)), region]));
+    });
+    this.selection.selectCell(region.row, region.col);
+    return true;
+  }
+
+  /** Splits every merged block the primary selection touches back into single cells. */
+  unmergeSelection(): boolean {
+    if (this.readOnlyFlag) return false;
+    const p = this.selection.primary;
+    const hit = new Set(this.merges.intersecting(p.startRow, p.startCol, p.endRow, p.endCol));
+    if (hit.size === 0) return false;
+    this.execute(new SetMergesCommand(this.merges.all.filter((m) => !hit.has(m))));
+    return true;
+  }
+
+  /** The block's size in pixels (sum of its rows and columns), or null when the cell is not merged. */
+  mergedExtent(viewRow: number, viewCol: number): { region: MergeRegion; x: number; y: number; width: number; height: number } | null {
+    const region = this.merges.regionAt(viewRow, viewCol);
+    if (region === undefined) return null;
+    const x = this.cols.offsetOf(region.col);
+    const y = this.rows.offsetOf(region.row);
+    return { region, x, y, width: this.cols.offsetOf(endColOf(region) + 1) - x, height: this.rows.offsetOf(endRowOf(region) + 1) - y };
   }
 
   /** Sets (or with null removes) the validation rule of the selected cells. */
@@ -949,6 +1020,11 @@ export class Spreadsheet {
   }
 
   private changeView(next: ViewState, label: string): void {
+    // Merged blocks are positions in the sheet, which sorting and filtering would tear apart (Sheets refuses too).
+    if (this.merges.size > 0 && (next.sort !== null || next.filters.size > 0)) {
+      this.notifyNotice({ code: 'mergeConflict' });
+      return;
+    }
     this.execute(new ViewStateCommand(label, next));
   }
 
@@ -1152,6 +1228,7 @@ export class Spreadsheet {
       this.colCount + (axis === 'col' ? delta : 0),
       nextOrder,
     );
+    this.merges.shift(axis, kind, at, count);
     this.dirty.clear();
     this.engine.rebuildAll();
     if (kind === 'insert') {

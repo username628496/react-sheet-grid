@@ -70,8 +70,16 @@ export function moveByArrow(
   opts: { extend: boolean; jump: boolean },
   ctx: NavContext,
 ): void {
-  const fromRow = opts.extend ? sel.focusRow : sel.activeRow;
-  const fromCol = opts.extend ? sel.focusCol : sel.activeCol;
+  let fromRow = opts.extend ? sel.focusRow : sel.activeRow;
+  let fromCol = opts.extend ? sel.focusCol : sel.activeCol;
+  // Leaving a merged block downwards or to the right starts from its far edge, so one step lands outside it.
+  const block = sel.regionAt(fromRow, fromCol);
+  if (block !== undefined) {
+    if (dir === 'down') fromRow = block.row + block.rowSpan - 1;
+    else if (dir === 'right') fromCol = block.col + block.colSpan - 1;
+    else if (dir === 'up') fromRow = block.row;
+    else fromCol = block.col;
+  }
   let target: { row: number; col: number };
   const [dr, dc] = DELTA[dir];
   if (opts.jump) {
@@ -132,7 +140,12 @@ export function moveToEdge(
 export function advanceActive(sel: SelectionModel, opts: { horizontal: boolean; backward: boolean }, ctx?: NavContext): void {
   const step = opts.backward ? -1 : 1;
   if (sel.isSingleCell()) {
-    const { activeRow: row, activeCol: col } = sel;
+    let { activeRow: row, activeCol: col } = sel;
+    const block = sel.regionAt(row, col);
+    if (block !== undefined) {
+      if (opts.horizontal) col = step > 0 ? block.col + block.colSpan - 1 : block.col;
+      else row = step > 0 ? block.row + block.rowSpan - 1 : block.row;
+    }
     // Without a context the selection clamps at the edge itself; with one, "nothing visible ahead" means stay.
     if (opts.horizontal) sel.selectCell(row, ctx === undefined ? col + step : (visibleStep(col, step, ctx.colCount, ctx.colHidden) ?? col));
     else sel.selectCell(ctx === undefined ? row + step : (visibleStep(row, step, ctx.rowCount, ctx.rowHidden) ?? row), col);

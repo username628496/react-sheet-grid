@@ -4,7 +4,7 @@ import { fileURLToPath, URL } from 'node:url';
 import process from 'node:process';
 import { gzipSync } from 'node:zlib';
 
-const BUDGET_KB = 80; // the ESM bundle is ~56 kB gzipped today
+const BUDGET_KB = 95; // the ESM bundle is ~80 kB gzipped today (two UI languages and the dialogs are most of it)
 const file = fileURLToPath(new URL('../dist/index.js', import.meta.url));
 const gzipped = gzipSync(readFileSync(file)).length / 1024;
 const line = `dist/index.js: ${gzipped.toFixed(1)} kB gzipped (budget ${BUDGET_KB} kB)`;

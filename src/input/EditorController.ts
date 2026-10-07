@@ -242,8 +242,10 @@ export class EditorController {
     const c = selection.activeCol;
     const left = vp.colLeft(c) * z;
     const top = vp.rowTop(r) * z;
-    const cellW = cols.getSize(c) * z;
-    const cellH = rows.getSize(r) * z;
+    // A merged block is edited as one big cell.
+    const block = this.sheet.mergedExtent(r, c);
+    const cellW = (block?.width ?? cols.getSize(c)) * z;
+    const cellH = (block?.height ?? rows.getSize(r)) * z;
     const style = styles.get(this.sheet.getCellByView(r, c).styleId);
     const font = fontFor(style, z);
     const t = this.textarea;

@@ -9,3 +9,4 @@ export * from './borders';
 export * from './dates';
 export * from './validation';
 export * from './conditional';
+export * from './MergeTable';

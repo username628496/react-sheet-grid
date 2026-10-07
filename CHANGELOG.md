@@ -11,6 +11,7 @@ and the project follows [Semantic Versioning](https://semver.org/). Before 1.0.0
 - Fill series for dates (daily, monthly, yearly); `COUNTIF`/`SUMIF` criteria and arithmetic accept date text.
 - Data validation: dropdown lists, number and date rules, reject or warn; dialog (toolbar, context menu), red corner on invalid cells, dropdown arrow and Alt+Down for lists; `sheet.setValidation`, `sheet.isInvalid`; `setCellInput` now returns whether the edit was accepted; new notice `validationRejected`. Rules live in the cell style, so they follow sort, copy/paste, insert/delete and snapshots.
 - Conditional formatting: rules on number/date/text/blank conditions set the text or fill color (first match wins, up to 8 per cell); dialog from toolbar and context menu; `sheet.setConditionalRules`. Rules live in the cell style like validation.
+- Merge cells: toolbar button and context menu, `sheet.mergeSelection` / `unmergeSelection` / `merges`. The block keeps the top-left content; selection, arrow keys, Tab/Enter, the editor and drawing treat it as one cell; blocks follow row/column insert and delete and are saved in snapshots (`merges`). Sorting or filtering a sheet with merged cells is refused (notice `mergeConflict`), as in Sheets.
 - Functions: `TODAY`, `NOW`, `DATE`, `DATEVALUE`, `YEAR`, `MONTH`, `DAY`, `HOUR`, `MINUTE`, `SECOND`, `WEEKDAY`, `EDATE`, `EOMONTH`, `DAYS`.
 
 ## [0.2.0] - 2026-10-06

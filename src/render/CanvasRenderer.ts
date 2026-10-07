@@ -1,5 +1,5 @@
 import type { Spreadsheet } from '../core/Spreadsheet';
-import { drawCellBackgrounds, drawCellText, FontCache } from './layers/cellsLayer';
+import { drawCellBackgrounds, drawCellText, drawMerges, FontCache } from './layers/cellsLayer';
 import { drawGridLines } from './layers/gridLayer';
 import { drawHeaders, type HeaderHighlight } from './layers/headersLayer';
 import { TextMeasurer } from './textMeasure';
@@ -94,6 +94,7 @@ export class CanvasRenderer {
         drawCellBackgrounds(ctx, sheet, rowSeg, colSeg);
         drawGridLines(ctx, sheet, rowSeg, colSeg);
         drawCellText(ctx, sheet, rowSeg, colSeg, this.measurer, this.fonts);
+        drawMerges(ctx, sheet, rowSeg, colSeg, this.measurer, this.fonts);
         this.overlay?.(ctx, rowSeg, colSeg);
         ctx.restore();
       }

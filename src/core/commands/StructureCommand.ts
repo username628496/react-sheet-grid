@@ -1,4 +1,5 @@
 import type { Cell } from '../model/Cell';
+import type { MergeRegion } from '../model/MergeTable';
 import type { AxisSnapshot } from '../layout/AxisLayout';
 import type { Spreadsheet } from '../Spreadsheet';
 import type { Command } from './Command';
@@ -12,6 +13,7 @@ interface Before {
   rowCount: number;
   colCount: number;
   order: Int32Array | null;
+  merges: MergeRegion[];
 }
 
 /**
@@ -40,6 +42,7 @@ export class StructureCommand implements Command {
       rowCount: sheet.mapping.dataRowCount,
       colCount: sheet.mapping.colCount,
       order: sheet.mapping.getOrder(),
+      merges: sheet.merges.snapshot(),
     };
     sheet.applyStructure(this.axis, this.kind, this.at, this.count);
   }
@@ -51,6 +54,7 @@ export class StructureCommand implements Command {
     sheet.rows.restore(b.rows);
     sheet.cols.restore(b.cols);
     sheet.mapping.reshape(b.rowCount, b.colCount, b.order);
+    sheet.merges.set(b.merges);
     sheet.selection.clamp();
     sheet.engine.rebuildAll();
   }

@@ -49,6 +49,8 @@ interface ToolbarState {
   columnFiltered: boolean;
   zoom: number;
   readOnly: boolean;
+  canMerge: boolean;
+  inMerge: boolean;
 }
 
 // Reading from the sheet through one string keeps useSyncExternalStore's snapshot comparison trivial and stable.
@@ -66,6 +68,8 @@ function snapshot(sheet: Spreadsheet, grid: GridController | null | undefined): 
     columnFiltered: sheet.isColumnFiltered(selection.activeCol),
     zoom: grid?.surface.zoom ?? 1,
     readOnly: sheet.readOnly,
+    canMerge: sheet.canMerge(),
+    inMerge: sheet.hasMergeInSelection(),
   };
   return JSON.stringify(state);
 }
@@ -97,7 +101,7 @@ export function Toolbar({ sheet, grid = null, onAction }: ToolbarProps) {
   );
   const m = useMessages();
   const theme = useTheme();
-  const { canUndo, canRedo, style, rows, cols, painting, viewActive, columnFiltered, zoom, readOnly } = JSON.parse(raw) as ToolbarState;
+  const { canUndo, canRedo, style, rows, cols, painting, viewActive, columnFiltered, zoom, readOnly, canMerge, inMerge } = JSON.parse(raw) as ToolbarState;
   const [notice, setNotice] = useState<string | null>(null);
   const [menu, setMenu] = useState<OpenMenu | null>(null);
   // What the Borders menu draws next: remembered between uses, like the pen in a paint program.
@@ -110,7 +114,9 @@ export function Toolbar({ sheet, grid = null, onAction }: ToolbarProps) {
         setNotice(
           n.code === 'validationRejected'
             ? m.validationRejected(m.describeValidation(n.rule))
-            : n.code === 'exportTooLarge'
+            : n.code === 'mergeConflict'
+              ? m.mergeConflict
+              : n.code === 'exportTooLarge'
               ? m.exportTooLarge(n.limit)
               : n.code === 'formatTooLarge'
                 ? m.formatTooLarge(n.limit)
@@ -151,7 +157,7 @@ export function Toolbar({ sheet, grid = null, onAction }: ToolbarProps) {
   // In a read-only sheet everything that would change the document is disabled; viewing controls stay usable.
   const mutating = new Set([
     m.undo, m.redo, m.paintFormat, m.clearFormatting, m.cut, m.formatCurrencyButton, m.formatPercentButton, m.decreaseDecimals,
-    m.increaseDecimals, m.dataValidation, m.conditionalFormatting, m.decreaseFontSize, m.increaseFontSize, m.bold, m.italic, m.underline, m.strike, m.alignLeft, m.alignCenter, m.alignRight,
+    m.increaseDecimals, m.dataValidation, m.conditionalFormatting, m.mergeCells, m.unmergeCells, m.decreaseFontSize, m.increaseFontSize, m.bold, m.italic, m.underline, m.strike, m.alignLeft, m.alignCenter, m.alignRight,
   ]);
   const mutatingMenus: ReadonlySet<MenuId> = new Set<MenuId>(['paste', 'numberFormat', 'insert', 'delete', 'functions', 'wrap', 'valign', 'borders']);
 
@@ -367,6 +373,7 @@ export function Toolbar({ sheet, grid = null, onAction }: ToolbarProps) {
             onClear={() => run(() => sheet.formatSelection({ background: undefined }, 'Fill color'))}
           />
           {menuButton('borders', 'borders', m.borders, undefined)}
+          {button('merge', inMerge ? m.unmergeCells : m.mergeCells, undefined, inMerge, () => (inMerge ? sheet.unmergeSelection() : sheet.mergeSelection()), noGrid || (!inMerge && !canMerge))}
           <ColorButton
             icon="borderColor"
             title={m.borderColor}

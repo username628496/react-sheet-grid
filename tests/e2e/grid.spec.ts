@@ -2105,3 +2105,71 @@ test.describe('conditional formatting', () => {
     expect((await center(1, 0)).slice(0, 3)).toEqual([255, 255, 255]);
   });
 });
+
+test.describe('merged cells', () => {
+  test.beforeEach(async ({ page }) => {
+    await page.goto('/demo/');
+    await page.waitForFunction(() => window.__grid !== undefined);
+  });
+
+  const pixel = (page: import('@playwright/test').Page, x: number, y: number): Promise<number[]> =>
+    page.evaluate(
+      async ([px, py]) => {
+        await new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)));
+        const canvas = document.querySelector('[data-testid=grid] canvas') as HTMLCanvasElement;
+        const dpr = window.devicePixelRatio || 1;
+        return Array.from(canvas.getContext('2d')!.getImageData(Math.floor((px as number) * dpr), Math.floor((py as number) * dpr), 1, 1).data);
+      },
+      [x, y],
+    );
+
+  test('the toolbar merges the selection: the inner grid lines disappear and one click selects the block', async ({ page }) => {
+    await page.evaluate(() => {
+      const s = window.__sheet!;
+      s.setCellInput(0, 0, 'Title');
+      s.setCellInput(1, 1, 'gone');
+      s.selection.selectCell(0, 0);
+      s.selection.extendTo(1, 1);
+    });
+    await page.getByRole('button', { name: 'Merge cells' }).click();
+    expect(await page.evaluate(() => window.__sheet!.merges.size)).toBe(1);
+    expect(await page.evaluate(() => window.__sheet!.getCellByView(1, 1).value)).toBeNull();
+
+    // The vertical line between A and B, halfway down the first row, is covered by the block.
+    const line = await page.evaluate(() => {
+      const g = window.__grid!;
+      const vp = g.surface.viewport;
+      return { x: vp.colLeft(0) + g.sheet.cols.getSize(0) - 1, y: vp.rowTop(0) + 3, belowX: vp.colLeft(0) + g.sheet.cols.getSize(0) - 1, belowY: vp.rowTop(3) + 3 };
+    });
+    await page.evaluate(() => window.__sheet!.selection.selectCell(8, 8));
+    expect((await pixel(page, line.x, line.y)).slice(0, 3)).toEqual([255, 255, 255]);
+    expect((await pixel(page, line.belowX, line.belowY)).slice(0, 3)).not.toEqual([255, 255, 255]); // an ordinary row keeps it
+
+    // Clicking a covered cell selects the whole block, with the top-left cell active.
+    await clickCell(page, 1, 1);
+    expect(await page.evaluate(() => ({ p: window.__sheet!.selection.primary, a: [window.__sheet!.selection.activeRow, window.__sheet!.selection.activeCol] }))).toEqual({
+      p: { startRow: 0, startCol: 0, endRow: 1, endCol: 1 },
+      a: [0, 0],
+    });
+    // Typing goes into the top-left cell, and Enter then steps out of the block instead of cycling inside it.
+    await page.keyboard.type('Heading');
+    await page.keyboard.press('Enter');
+    expect(await page.evaluate(() => window.__sheet!.getCellByView(0, 0).value)).toBe('Heading');
+    expect(await page.evaluate(() => [window.__sheet!.selection.activeRow, window.__sheet!.selection.activeCol])).toEqual([2, 0]);
+  });
+
+  test('the button turns into Unmerge, and sorting a merged sheet says why it cannot', async ({ page }) => {
+    await page.evaluate(() => {
+      const s = window.__sheet!;
+      s.selection.selectCell(0, 0);
+      s.selection.extendTo(0, 2);
+    });
+    await page.getByRole('button', { name: 'Merge cells' }).click();
+    await page.evaluate(() => window.__sheet!.sortByColumn(3, true));
+    await expect(page.getByRole('status').filter({ hasText: 'cannot be sorted' })).toBeVisible();
+    await page.getByRole('button', { name: 'Unmerge cells' }).click();
+    expect(await page.evaluate(() => window.__sheet!.merges.size)).toBe(0);
+    await page.keyboard.press(`${mod}+z`);
+    expect(await page.evaluate(() => window.__sheet!.merges.size)).toBe(1);
+  });
+});

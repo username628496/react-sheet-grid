@@ -117,6 +117,9 @@ export interface Messages {
   validationComparison: Record<Comparison, string>;
   describeValidation: (rule: Validation) => string;
   conditionalFormatting: string;
+  mergeCells: string;
+  unmergeCells: string;
+  mergeConflict: string;
   cfAddRule: string;
   cfRemoveRule: string;
   cfTextColor: string;
@@ -351,6 +354,9 @@ const en: Messages = {
   },
   describeValidation: (rule) => describeRule(rule, en.validationComparison, { list: 'Allowed values', number: 'Number', date: 'Date', and: 'and' }),
   conditionalFormatting: 'Conditional formatting',
+  mergeCells: 'Merge cells',
+  unmergeCells: 'Unmerge cells',
+  mergeConflict: 'Merged cells cannot be sorted or filtered. Unmerge them first.',
   cfAddRule: 'Add rule',
   cfRemoveRule: 'Remove rule',
   cfTextColor: 'Text color',
@@ -623,6 +629,9 @@ const vi: Messages = {
   },
   describeValidation: (rule) => describeRule(rule, vi.validationComparison, { list: 'Giá trị cho phép', number: 'Số', date: 'Ngày', and: 'và' }),
   conditionalFormatting: 'Định dạng có điều kiện',
+  mergeCells: 'Gộp ô',
+  unmergeCells: 'Bỏ gộp ô',
+  mergeConflict: 'Không thể sắp xếp hoặc lọc khi có ô đã gộp. Hãy bỏ gộp trước.',
   cfAddRule: 'Thêm luật',
   cfRemoveRule: 'Xóa luật',
   cfTextColor: 'Màu chữ',

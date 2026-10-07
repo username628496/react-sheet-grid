@@ -6,6 +6,7 @@ import { isCellError } from './model/Cell';
 import { MAX_COLS, MAX_ROWS } from './model/SheetModel';
 import { type Border, type Borders, BORDER_SIDES, isBorder } from './model/borders';
 import { clampFontSize } from './model/font';
+import { type MergeRegion, regionsOverlap } from './model/MergeTable';
 import { readConditionalRules } from './model/conditional';
 import { readValidation } from './model/validation';
 import type { HorizontalAlign, Style, TextWrap, VerticalAlign } from './model/StyleTable';
@@ -33,6 +34,8 @@ export interface SheetSnapshot {
   cells: Array<[number, number, number, CellValue | null] | [number, number, number, null, string]>;
   frozenRows?: number;
   frozenCols?: number;
+  /** Merged blocks as [row, col, rowSpan, colSpan]; only present when there are any. */
+  merges?: Array<[number, number, number, number]>;
   /** viewRow -> dataRow when sorted/filtered/restructured there, otherwise null (natural order). */
   order: number[] | null;
   sort: { col: number; asc: boolean } | null;
@@ -76,6 +79,7 @@ export function serializeSheet(sheet: Spreadsheet): SheetSnapshot {
     cells,
     frozenRows: sheet.frozenRows,
     frozenCols: sheet.frozenCols,
+    ...(sheet.merges.size > 0 ? { merges: sheet.merges.all.map((m): [number, number, number, number] => [m.row, m.col, m.rowSpan, m.colSpan]) } : {}),
     order: order === null ? null : Array.from(order),
     sort: sort === null ? null : { col: sort.col, asc: sort.asc },
     filters: [...filters].map(([col, allowed]): [number, string[]] => [col, [...allowed]]),
@@ -129,6 +133,9 @@ export function deserializeSheet(data: unknown, options: Omit<SpreadsheetOptions
   }
   sheet.restoreViewState({ sort, filters });
   sheet.mapping.setOrder(order);
+  const merges = readMerges(d.merges, rowCount, colCount);
+  if (merges.length > 0 && !sheet.mapping.isIdentity) throw new SnapshotError('merged cells cannot be combined with a sorted or filtered view');
+  sheet.merges.set(merges);
 
   const viewRows = order === null ? rowCount : order.length;
   sheet.rows.restore({ count: viewRows, ...readSizes(d.rowSizes, 'rowSizes', viewRows) });
@@ -136,6 +143,23 @@ export function deserializeSheet(data: unknown, options: Omit<SpreadsheetOptions
   sheet.setFrozen(int(d.frozenRows ?? 0, 'frozenRows', 0, rowCount), int(d.frozenCols ?? 0, 'frozenCols', 0, colCount));
   sheet.recalculateAll();
   return sheet;
+}
+
+function readMerges(v: unknown, rowCount: number, colCount: number): MergeRegion[] {
+  if (v === undefined || v === null) return [];
+  const regions: MergeRegion[] = [];
+  for (const item of array(v, 'merges')) {
+    const m = array(item, 'merge');
+    const row = int(m[0], 'merge row', 0, rowCount - 1);
+    const col = int(m[1], 'merge column', 0, colCount - 1);
+    const rowSpan = int(m[2], 'merge row span', 1, rowCount - row);
+    const colSpan = int(m[3], 'merge column span', 1, colCount - col);
+    if (rowSpan * colSpan < 2) throw new SnapshotError('a merge must cover more than one cell');
+    const region = { row, col, rowSpan, colSpan };
+    if (regions.some((other) => regionsOverlap(other, region))) throw new SnapshotError('merged blocks overlap');
+    regions.push(region);
+  }
+  return regions;
 }
 
 const ERROR_CODES: ReadonlySet<string> = new Set<ErrorCode>(['#DIV/0!', '#VALUE!', '#REF!', '#N/A', '#NAME?', '#NUM!', '#ERROR!']);

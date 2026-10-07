@@ -1,3 +1,5 @@
+import type { MergeRegion, MergeTable } from '../model/MergeTable';
+
 /** Inclusive, normalized (start <= end), in *view* coordinates. */
 export interface ViewRange {
   readonly startRow: number;
@@ -35,7 +37,43 @@ export class SelectionModel {
   constructor(
     private readonly bounds: Bounds,
     private readonly onChange: () => void = () => {},
+    /** When set, selections always cover whole merged regions and the active cell is a region's anchor. */
+    private readonly merges: MergeTable | null = null,
   ) {}
+
+  /** The merged region holding the cell, if any. */
+  regionAt(row: number, col: number): MergeRegion | undefined {
+    return this.merges?.regionAt(row, col);
+  }
+
+  /**
+   * Re-applies the merge rules after any change: ranges grow to cover the regions they touch and the active cell
+   * moves to its region's anchor. Free when the sheet has no merges.
+   */
+  private fit(): void {
+    const merges = this.merges;
+    if (merges === null || merges.size === 0) return;
+    this.ranges = this.ranges.map((r) => merges.expand(r) as ViewRange);
+    const region = merges.regionAt(this.activeRow, this.activeCol);
+    if (region !== undefined) {
+      this.activeRow = region.row;
+      this.activeCol = region.col;
+    }
+  }
+
+  /** Call after the merge table itself changed (merge, unmerge, undo, row edits). */
+  refit(notify = true): void {
+    this.fit();
+    if (notify) this.onChange();
+  }
+
+  /** One cell, or exactly one merged block (which behaves as a single cell). */
+  isSingleCell(): boolean {
+    const p = this.primary;
+    if (p.startRow === p.endRow && p.startCol === p.endCol) return true;
+    const block = this.merges?.regionAt(p.startRow, p.startCol);
+    return block !== undefined && block.row === p.startRow && block.col === p.startCol && block.rowSpan === p.endRow - p.startRow + 1 && block.colSpan === p.endCol - p.startCol + 1;
+  }
 
   get primary(): ViewRange {
     return this.ranges[this.ranges.length - 1] as ViewRange;
@@ -51,6 +89,7 @@ export class SelectionModel {
     this.activeRow = this.focusRow = r;
     this.activeCol = this.focusCol = c;
     this.ranges = [rect(r, c, r, c)];
+    this.fit();
     this.onChange();
   }
 
@@ -61,6 +100,7 @@ export class SelectionModel {
     this.activeRow = this.focusRow = r;
     this.activeCol = this.focusCol = c;
     this.ranges.push(rect(r, c, r, c));
+    this.fit();
     this.onChange();
   }
 
@@ -69,6 +109,7 @@ export class SelectionModel {
     this.focusRow = this.clampRow(row);
     this.focusCol = this.clampCol(col);
     this.ranges[this.ranges.length - 1] = rect(this.activeRow, this.activeCol, this.focusRow, this.focusCol);
+    this.fit();
     this.onChange();
   }
 
@@ -86,6 +127,7 @@ export class SelectionModel {
       const range = rect(r, 0, r, last);
       this.ranges = add ? [...this.ranges, range] : [range];
     }
+    this.fit();
     this.onChange();
   }
 
@@ -103,6 +145,7 @@ export class SelectionModel {
       const range = rect(0, c, last, c);
       this.ranges = add ? [...this.ranges, range] : [range];
     }
+    this.fit();
     this.onChange();
   }
 
@@ -112,6 +155,7 @@ export class SelectionModel {
     this.focusRow = this.bounds.rowCount - 1;
     this.focusCol = this.bounds.colCount - 1;
     this.ranges = [rect(0, 0, this.focusRow, this.focusCol)];
+    this.fit();
     this.onChange();
   }
 
@@ -119,6 +163,7 @@ export class SelectionModel {
   setActive(row: number, col: number): void {
     this.activeRow = this.clampRow(row);
     this.activeCol = this.clampCol(col);
+    this.fit();
     this.onChange();
   }
 
@@ -139,11 +184,6 @@ export class SelectionModel {
     return false;
   }
 
-  isSingleCell(): boolean {
-    const p = this.primary;
-    return p.startRow === p.endRow && p.startCol === p.endCol;
-  }
-
   /** Re-fits the selection after the grid shrank (filter, delete rows). */
   clamp(): void {
     this.activeRow = this.clampRow(this.activeRow);
@@ -153,6 +193,7 @@ export class SelectionModel {
     this.ranges = this.ranges.map((r) =>
       rect(this.clampRow(r.startRow), this.clampCol(r.startCol), this.clampRow(r.endRow), this.clampCol(r.endCol)),
     );
+    this.fit();
     this.onChange();
   }
 

@@ -58,6 +58,8 @@ export function buildMenuEntries(controller: GridController, openFilter: (viewCo
     entries.push(structure(m.hideRows(p.startRow + 1, p.endRow + 1), () => void sheet.hideLines('row', p.startRow, p.endRow), false));
     if (sheet.rows.hiddenIn(p.startRow, p.endRow).length > 0) entries.push(structure(m.showHiddenRows, () => void sheet.showLines('row', p.startRow, p.endRow), false));
   }
+  if (sheet.hasMergeInSelection()) entries.push({ label: m.unmergeCells, disabled: readOnly, run: () => void sheet.unmergeSelection() });
+  else if (sheet.canMerge()) entries.push({ label: m.mergeCells, run: () => void sheet.mergeSelection() });
   entries.push({ label: m.conditionalFormatting, disabled: readOnly, run: () => controller.onOpenConditional?.() });
   entries.push({ label: m.dataValidation, disabled: readOnly, run: () => controller.onOpenValidation?.() });
   entries.push({ label: m.clearContents, shortcut: 'Del', disabled: readOnly, run: () => sheet.clearSelection() }, 'separator');

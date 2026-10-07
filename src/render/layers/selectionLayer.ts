@@ -27,7 +27,11 @@ export function drawSelection(
     const y = rowSeg.origin + rows.offsetOf(range.startRow) - rowSeg.base;
     const w = cols.offsetOf(range.endCol + 1) - cols.offsetOf(range.startCol);
     const h = rows.offsetOf(range.endRow + 1) - rows.offsetOf(range.startRow);
-    const single = range.startRow === range.endRow && range.startCol === range.endCol;
+    const block = selection.regionAt(range.startRow, range.startCol);
+    // A lone merged block counts as one cell: no tint, just the active outline.
+    const single =
+      (range.startRow === range.endRow && range.startCol === range.endCol) ||
+      (block !== undefined && block.row === range.startRow && block.col === range.startCol && block.rowSpan === range.endRow - range.startRow + 1 && block.colSpan === range.endCol - range.startCol + 1);
     if (!single) {
       ctx.fillStyle = theme.selectionFill;
       ctx.beginPath();
@@ -36,7 +40,7 @@ export function drawSelection(
       if (range === selection.primary) {
         const ax = colSeg.origin + cols.offsetOf(selection.activeCol) - colSeg.base;
         const ay = rowSeg.origin + rows.offsetOf(selection.activeRow) - rowSeg.base;
-        ctx.rect(ax, ay, cols.getSize(selection.activeCol), rows.getSize(selection.activeRow));
+        ctx.rect(ax, ay, activeWidth(sheet, selection), activeHeight(sheet, selection));
         ctx.fill('evenodd');
       } else {
         ctx.fill();
@@ -52,7 +56,18 @@ export function drawSelection(
   const ay = rowSeg.origin + rows.offsetOf(selection.activeRow) - rowSeg.base;
   ctx.strokeStyle = theme.accent;
   ctx.lineWidth = 2;
-  ctx.strokeRect(ax, ay, cols.getSize(selection.activeCol), rows.getSize(selection.activeRow));
+  ctx.strokeRect(ax, ay, activeWidth(sheet, selection), activeHeight(sheet, selection));
+}
+
+/** The active cell's width/height, which for a merged block is the whole block. */
+function activeWidth(sheet: Spreadsheet, selection: SelectionModel): number {
+  const block = selection.regionAt(selection.activeRow, selection.activeCol);
+  return block === undefined ? sheet.cols.getSize(selection.activeCol) : sheet.cols.offsetOf(block.col + block.colSpan) - sheet.cols.offsetOf(block.col);
+}
+
+function activeHeight(sheet: Spreadsheet, selection: SelectionModel): number {
+  const block = selection.regionAt(selection.activeRow, selection.activeCol);
+  return block === undefined ? sheet.rows.getSize(selection.activeRow) : sheet.rows.offsetOf(block.row + block.rowSpan) - sheet.rows.offsetOf(block.row);
 }
 
 const DASH: number[] = [4, 3]; // module constant: the render loop must not allocate
