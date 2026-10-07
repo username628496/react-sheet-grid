@@ -7,6 +7,7 @@ rows by a hundred columns scrolls at 60 fps; editing, menus and the toolbar are 
 - Undo/redo, copy/cut/paste (Excel and Google Sheets compatible), fill handle, paint format, sort, filter, insert/delete, hide, freeze, zoom
 - Formatting: bold/italic/underline/strikethrough, font size, colors, borders, alignment, text wrapping, number formats
 - Find and replace (with accent-insensitive search), CSV import and export
+- Real dates and times (date formats, `DATE`/`TODAY`/… functions, date fill series), data validation (dropdown lists, number and date rules)
 - Accessible to screen readers and the keyboard
 - Vietnamese (Telex/VNI) and other IME input works while typing in a cell
 - Toolbar, formula bar and status bar included (and usable on their own)
